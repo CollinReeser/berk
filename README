@@ -1,8 +1,12 @@
 Build Prerequisites
 ===================
 
-- [`conan`](https://conan.io/) (ver >= 1.0)
 - [`cmake`](https://cmake.org/) (ver >= 3.2)
+- [`conan`](https://conan.io/) (ver >= 1.0)
+    - Note the `conan` configuration caveat [described here](https://docs.conan.io/en/latest/howtos/manage_gcc_abi.html).
+    - For quickstart, try:
+
+        `conan profile update settings.compiler.libcxx=libstdc++11 default`
 
 Build
 =====
