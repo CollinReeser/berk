@@ -1,0 +1,13 @@
+// Compile-time configuration.
+//
+// `cmake` will generate a `config.h` file which can then be included anywhere
+// these values are required.
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define berk_VERSION_MAJOR @berk_VERSION_MAJOR@
+#define berk_VERSION_MINOR @berk_VERSION_MINOR@
+#define berk_VERSION_PATCH @berk_VERSION_PATCH@
+
+#endif
