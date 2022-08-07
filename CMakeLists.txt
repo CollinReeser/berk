@@ -31,7 +31,7 @@ target_include_directories(
 )
 
 # Ensure individual commands are printed during build.
-set(CMAKE_VERBOSE_MAKEFILE ON)
+# set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Teach this invocation of `cmake` where to find required `conan` packages.
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
