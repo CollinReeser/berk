@@ -1,5 +1,10 @@
+# We use some cmake features not available below this version.
 cmake_minimum_required(VERSION 3.2)
 
+# Write generated executables into a `bin` dir under the build dir.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+# Define project name, and point to the `main` for that target.
 project(berk VERSION 0.0.1)
 add_executable(${PROJECT_NAME} src/berk.cpp)
 
@@ -14,15 +19,15 @@ target_include_directories(
     ${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/include
 )
 
-# Process "input" files to generate source during build. Generated files will
-# be placed in the build dir, so we need to teach cmake to also search the`
+# Process "input" files to generate source during build. Generated files will be
+# placed under the build dir, so we need to teach cmake to also search the`
 # build dir for header files.
-configure_file(config/config.h.cmake_in config.h)
+configure_file(config/config.h.cmake_in ${CMAKE_BINARY_DIR}/include/config.h)
 
-# Here, we teach cmake to search the build dir for any headers generated during
-# build time.
+# Here, we teach cmake to search under build dir for any headers generated
+# during build time.
 target_include_directories(
-    ${PROJECT_NAME} PUBLIC "${PROJECT_BINARY_DIR}"
+    ${PROJECT_NAME} PUBLIC "${CMAKE_BINARY_DIR}/include"
 )
 
 # Ensure individual commands are printed during build.
