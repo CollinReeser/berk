@@ -6,6 +6,9 @@
 #include <string>
 
 #include <tao/pegtl.hpp>
+#include <tao/pegtl/contrib/parse_tree.hpp>
+#include <tao/pegtl/contrib/parse_tree_to_dot.hpp>
+#include <tao/pegtl/contrib/trace.hpp>
 
 #include "config.h"
 
@@ -225,6 +228,7 @@ namespace hello {
       >
       {};
 
+   // Code to execute just after the named rule succeeds.
    template<>
    struct action<bin_num_abs>
    {
@@ -269,6 +273,29 @@ namespace hello {
          v = "ident: " + in.string();
       }
    };
+
+   // All rules other than these will be dropped from the AST.
+   template<typename Rule>
+   using selector = tao::pegtl::parse_tree::selector<
+      Rule,
+      tao::pegtl::parse_tree::store_content::on<
+         hex_num_abs,
+         bin_num_abs,
+         oct_num_abs,
+         dec_num_abs,
+         integer,
+         expr,
+         return_stmt,
+         ident_type_decl,
+         ident,
+         func_args,
+         type,
+         func_sig,
+         func_body,
+         file,
+         func_def
+      >
+   >;
 }
 
 int main(int argc, char** argv) {
@@ -313,6 +340,25 @@ int main(int argc, char** argv) {
       }
       else {
          std::cerr << "I dont understand." << std::endl;
+      }
+
+      if (
+         pegtl::argv_input in(argv, 1);
+         pegtl::standard_trace<hello::file, hello::action>(in, capture)
+      ) {
+         std::cout << "traced hello::file: " << capture << std::endl;
+      }
+      else {
+         std::cerr << "I dont understand." << std::endl;
+      }
+
+      {
+         pegtl::argv_input in(argv, 1);
+         const auto root {parse_tree::parse<hello::file, hello::selector>(in)};
+
+         if (root) {
+            parse_tree::print_dot(std::cout, *root);
+         }
       }
    }
    else {
