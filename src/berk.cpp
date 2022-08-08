@@ -47,41 +47,181 @@ namespace hello {
       }
    };
 
+   struct ws_opt :
+      star<space>
+      {};
+
+   struct ws_req :
+      plus<space>
+      {};
+
+   struct boundary :
+      sor<
+         ws_req,
+         not_at<
+            identifier_other
+         >
+      >
+      {};
+
    struct hex_num_abs :
       seq<
          one<'0'>,
          one<'x', 'X'>,
-         plus<
-            one<
-               '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-               'a', 'b', 'c', 'd', 'e', 'f',
-               'A', 'B', 'C', 'D', 'E', 'F'
-            >
-         >
-      > {};
+         plus<xdigit>
+      >
+      {};
 
    struct bin_num_abs :
       seq<
          one<'b'>,
          plus<one<'0', '1'>>
-      > {};
+      >
+      {};
 
    struct oct_num_abs :
       seq<
          one<'0'>,
-         plus<one<'0', '1', '2', '3', '4', '5', '6', '7'>>
-      > {};
+         plus<range<'0', '7'>>
+      >
+      {};
 
    struct dec_num_abs :
       seq<
-         one<'1', '2', '3', '4', '5', '6', '7', '8', '9'>,
+         range<'1', '9'>,
          star<digit>
-      > {};
+      >
+      {};
 
    struct integer :
       seq<
          opt<one<'+', '-'>>,
          sor<hex_num_abs, bin_num_abs, oct_num_abs, dec_num_abs>
+      >
+      {};
+
+   struct ident :
+      seq<
+         identifier_first,
+         star<identifier_other>
+      >
+      {};
+
+   struct expr :
+      sor<
+         integer
+      >
+      {};
+
+   struct stmt_terminal :
+      seq<
+         one<';'>,
+         ws_opt
+      >
+      {};
+
+   struct return_stmt :
+      seq<
+         keyword<'r', 'e', 't', 'u', 'r', 'n'>,
+         boundary,
+         expr,
+         boundary,
+         stmt_terminal
+      >
+      {};
+
+   struct stmt :
+      sor<
+         return_stmt
+      >
+      {};
+
+   struct type :
+      sor<
+         string<'i', '3', '2'>,
+         string<'u', '3', '2'>,
+         string<'i', '6', '4'>,
+         string<'u', '6', '4'>
+      >
+      {};
+
+   struct ident_type_decl :
+      seq<
+         ident,
+         boundary,
+         one<':'>,
+         ws_opt,
+         type
+      >
+      {};
+
+   struct func_args :
+      opt<
+         sor<
+            seq<
+               ident_type_decl,
+               boundary,
+               star<
+                  one<','>,
+                  ws_opt,
+                  ident_type_decl,
+                  boundary
+               >
+            >,
+            seq<
+               ident_type_decl,
+               boundary
+            >
+         >
+      >
+      {};
+
+   struct func_sig :
+      seq<
+         string<'f', 'n'>,
+         ws_req,
+         ident,
+         boundary,
+         one<'('>,
+         ws_opt,
+         func_args,
+         boundary,
+         one<')'>,
+         ws_opt,
+         opt<
+            one<':'>,
+            ws_opt,
+            type,
+            boundary
+         >
+      >
+      {};
+
+   struct func_body :
+      star<stmt>
+      {};
+
+   struct func_def :
+      seq<
+         func_sig,
+         one<'{'>,
+         ws_opt,
+         func_body,
+         boundary,
+         one<'}'>,
+         ws_opt
+      >
+      {};
+
+   struct file :
+      seq<
+         ws_opt,
+         star<
+            func_def,
+            ws_opt
+         >,
+         ws_opt,
+         eof
       >
       {};
 
@@ -120,6 +260,15 @@ namespace hello {
          v = "dec: " + in.string();
       }
    };
+
+   template<>
+   struct action<ident>
+   {
+      template<typename ActionInput>
+      static void apply(const ActionInput& in, std::string& v) {
+         v = "ident: " + in.string();
+      }
+   };
 }
 
 int main(int argc, char** argv) {
@@ -134,9 +283,33 @@ int main(int argc, char** argv) {
       }
       else if(
          pegtl::argv_input in(argv, 1);
+         pegtl::parse<hello::file, hello::action>(in, capture)
+      ) {
+         std::cout << "hello::file: " << capture << std::endl;
+      }
+      else if(
+         pegtl::argv_input in(argv, 1);
+         pegtl::parse<hello::func_def, hello::action>(in, capture)
+      ) {
+         std::cout << "hello::func_def: " << capture << std::endl;
+      }
+      else if(
+         pegtl::argv_input in(argv, 1);
+         pegtl::parse<hello::func_sig, hello::action>(in, capture)
+      ) {
+         std::cout << "hello::func_sig: " << capture << std::endl;
+      }
+      else if(
+         pegtl::argv_input in(argv, 1);
+         pegtl::parse<hello::stmt, hello::action>(in, capture)
+      ) {
+         std::cout << "hello::stmt: " << capture << std::endl;
+      }
+      else if(
+         pegtl::argv_input in(argv, 1);
          pegtl::parse<hello::integer, hello::action>(in, capture)
       ) {
-         std::cout << capture << std::endl;
+         std::cout << "hello::integer: " << capture << std::endl;
       }
       else {
          std::cerr << "I dont understand." << std::endl;
