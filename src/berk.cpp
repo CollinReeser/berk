@@ -2,6 +2,7 @@
 // Distributed under the Boost Software License, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
+#include <charconv>
 #include <iostream>
 #include <string>
 
@@ -298,6 +299,108 @@ namespace hello {
    >;
 }
 
+constexpr uint32_t type_hash(const std::string_view &data) noexcept {
+   uint32_t hash = 5381;
+
+   for(const auto c : data) {
+      hash = ((hash << 5) + hash) + c;
+   }
+
+   return hash;
+}
+
+template<typename Node>
+void generate_llvm(const Node &node) {
+   if (node->is_root()) {
+      std::cout << "Root is root!" << std::endl;
+
+      for (const auto &node : node->children) {
+         generate_llvm(node);
+      }
+
+      return;
+   }
+
+   std::cout << "Node: [" << node->type << "]" << std::endl;
+
+   switch (type_hash(node->type)) {
+   case type_hash("hello::file"): {
+      for (const auto &func_def : node->children) {
+         generate_llvm(func_def);
+      }
+
+      break;
+   }
+   case type_hash("hello::func_def"): {
+      const auto &func_sig {node->children[0]};
+
+      const std::string_view func_name {
+         func_sig->children[0]->string_view()
+      };
+
+      const auto &func_body {node->children[1]};
+
+      generate_llvm(func_body);
+
+      break;
+   }
+   case type_hash("hello::func_body"): {
+      for (const auto &stmt : node->children) {
+         generate_llvm(stmt);
+      }
+
+      break;
+   }
+   case type_hash("hello::return_stmt"): {
+      const auto &expr {node->children[0]};
+
+      generate_llvm(expr);
+
+      break;
+   }
+   case type_hash("hello::expr"): {
+      const auto &sub_expr {node->children[0]};
+
+      generate_llvm(sub_expr);
+
+      break;
+   }
+   case type_hash("hello::dec_num_abs"): {
+      const std::string_view int_str {node->string_view()};
+
+      int result {0};
+
+      const auto [ptr, ec] {
+         std::from_chars(
+            int_str.data(),
+            int_str.data() + int_str.size(),
+            result
+         )
+      };
+
+      if (ec == std::errc()) {
+         std::cout << "  Conversion: [" << result << "]" << std::endl;
+      }
+      else if (ec == std::errc::invalid_argument) {
+         std::cout
+            << "  Conversion failed, NaN [" << int_str << "]" << std::endl;
+      }
+      else if (ec == std::errc::result_out_of_range) {
+         std::cout
+            << "  Conversion failed, out-of-range [" << int_str << "]"
+            << std::endl;
+      }
+
+      break;
+   }
+   default:
+      std::cout << "Unknown case!" << std::endl;
+      break;
+   }
+
+   return;
+}
+
 int main(int argc, char** argv) {
    if(argc > 1) {
       std::string capture;
@@ -365,6 +468,8 @@ int main(int argc, char** argv) {
 
          if (root) {
             parse_tree::print_dot(std::cout, *root);
+
+            generate_llvm(root);
          }
       }
    }
