@@ -6,6 +6,7 @@
 #include <string>
 
 #include <tao/pegtl.hpp>
+#include <tao/pegtl/contrib/analyze.hpp>
 #include <tao/pegtl/contrib/parse_tree.hpp>
 #include <tao/pegtl/contrib/parse_tree_to_dot.hpp>
 #include <tao/pegtl/contrib/trace.hpp>
@@ -283,7 +284,6 @@ namespace hello {
          bin_num_abs,
          oct_num_abs,
          dec_num_abs,
-         integer,
          expr,
          return_stmt,
          ident_type_decl,
@@ -308,6 +308,11 @@ int main(int argc, char** argv) {
       ) {
          std::cout << "Good bye, " << capture << "!" << std::endl;
       }
+      // Detect issues with the grammar definition itself.
+      else if (pegtl::analyze<hello::file>(1) != 0) {
+         std::cout << "Grammar issues encountered, see above." << std::endl;
+      }
+      // Attempt to parse the input.
       else if(
          pegtl::argv_input in(argv, 1);
          pegtl::parse<hello::file, hello::action>(in, capture)
@@ -342,6 +347,7 @@ int main(int argc, char** argv) {
          std::cerr << "I dont understand." << std::endl;
       }
 
+      // Trace parse.
       if (
          pegtl::argv_input in(argv, 1);
          pegtl::standard_trace<hello::file, hello::action>(in, capture)
@@ -352,6 +358,7 @@ int main(int argc, char** argv) {
          std::cerr << "I dont understand." << std::endl;
       }
 
+      // Pretty-print parse tree with given filter.
       {
          pegtl::argv_input in(argv, 1);
          const auto root {parse_tree::parse<hello::file, hello::selector>(in)};
