@@ -12,10 +12,10 @@ type cond_block = {
   stmts: stmt list;
 }
 and expr =
+  | ValInt of int
   | Add of expr * expr
   | Sub of expr * expr
   | Mul of expr * expr
-  | ValInt of int
   | IfExpr of {
       if_block: cond_block;
       else_if_blocks: cond_block list;
@@ -41,6 +41,38 @@ type func_ast = {
   f_params: func_param list;
   f_stmts: stmt list;
 }
+
+let common_type_of lhs_type rhs_type =
+  match (lhs_type, rhs_type) with
+  | (Some(Int), Some(Int)) -> Some(Int)
+  | (None, _) -> None
+  | (_, None) -> None
+
+let rec type_check_expr exp =
+  match exp with
+  | ValInt(_) -> Some(Int)
+  | Add(lhs, rhs) ->
+      let lhs_type = type_check_expr lhs in
+      let rhs_type = type_check_expr rhs in
+      common_type_of lhs_type rhs_type
+  | Sub(lhs, rhs) ->
+      let lhs_type = type_check_expr lhs in
+      let rhs_type = type_check_expr rhs in
+      common_type_of lhs_type rhs_type
+  | Mul(lhs, rhs) ->
+      let lhs_type = type_check_expr lhs in
+      let rhs_type = type_check_expr rhs in
+      common_type_of lhs_type rhs_type
+
+  (* | IfExpr({
+      if_block = {cond = if_cond; stmts = if_stmts};
+      else_if_blocks;
+      else_block;
+    }) -> *)
+
+  | IfExpr(_) -> Some(Int)
+;;
+
 
 let build_example_ast =
   {
@@ -200,7 +232,14 @@ let print_func_ast {f_name; f_params; f_stmts} =
 ;;
 
 let main =
-  print_func_ast build_example_ast
+  print_func_ast build_example_ast;
+  let ex_to_check = Add(ValInt(5), ValInt(6)) in
+  Printf.printf "Expression [";
+  print_expr "" ex_to_check;
+  Printf.printf "] typechecks to: ";
+  match type_check_expr ex_to_check with
+  | None -> Printf.printf "<typecheck failed>"
+  | Some(t) -> print_berk_type t; Printf.printf "\n"
 ;;
 
 main;;
