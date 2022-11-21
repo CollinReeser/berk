@@ -1,5 +1,3 @@
-open Core;;
-
 (*
 AST for the berk language.
 *)
@@ -135,21 +133,21 @@ let rec print_expr ind ex =
       Printf.printf "if (";
       print_expr "" if_cond;
       Printf.printf ") {\n";
-      List.iter ~f:(print_stmt (ind ^ "  ")) if_stmts;
+      List.iter (print_stmt (ind ^ "  ")) if_stmts;
       Printf.printf "%s}" ind;
-      List.iter ~f:(
+      List.iter (
         fun ({cond = else_if_cond; stmts = else_if_stmts}) ->
           Printf.printf "\n%selse if (" ind;
           print_expr "" else_if_cond;
           Printf.printf ") {\n";
-          List.iter ~f:(print_stmt (ind ^ "  ")) else_if_stmts;
+          List.iter (print_stmt (ind ^ "  ")) else_if_stmts;
           Printf.printf "%s}" ind;
       ) else_if_blocks;
       match else_block with
       | None -> ()
       | Some (else_stmts) ->
         Printf.printf "\n%selse {\n" ind;
-        List.iter ~f:(print_stmt (ind ^ "  ")) else_stmts;
+        List.iter (print_stmt (ind ^ "  ")) else_stmts;
         Printf.printf "%s}" ind;
 
 and print_stmt ind stmt =
@@ -175,29 +173,29 @@ and print_stmt ind stmt =
       Printf.printf "%sif (" ind;
       print_expr "" if_cond;
       Printf.printf ") {\n";
-      List.iter ~f:(print_stmt (ind ^ "  ")) if_stmts;
+      List.iter (print_stmt (ind ^ "  ")) if_stmts;
       Printf.printf "%s}\n" ind;
-      List.iter ~f:(
+      List.iter (
         fun ({cond = else_if_cond; stmts = else_if_stmts}) ->
           Printf.printf "%selse if (" ind;
           print_expr "" else_if_cond;
           Printf.printf ") {\n";
-          List.iter ~f:(print_stmt (ind ^ "  ")) else_if_stmts;
+          List.iter (print_stmt (ind ^ "  ")) else_if_stmts;
           Printf.printf "%s}\n" ind;
       ) else_if_blocks;
       match else_block with
       | None -> ()
       | Some (else_stmts) ->
         Printf.printf "%selse {\n" ind;
-        List.iter ~f:(print_stmt (ind ^ "  ")) else_stmts;
+        List.iter (print_stmt (ind ^ "  ")) else_stmts;
         Printf.printf "%s}" ind;
 ;;
 
 let print_func_ast {f_name; f_params; f_stmts} =
   Printf.printf "fn %s(" f_name;
-  List.iter ~f:print_func_param f_params;
+  List.iter print_func_param f_params;
   Printf.printf ") {\n";
-  List.iter ~f:(print_stmt "  ") f_stmts;
+  List.iter (print_stmt "  ") f_stmts;
   Printf.printf "\n}\n"
 ;;
 

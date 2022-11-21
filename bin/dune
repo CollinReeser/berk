@@ -1,4 +1,4 @@
 (executable
  (public_name berk_ocaml)
  (name main)
- (libraries core berk_ocaml))
+ (libraries berk_ocaml))
