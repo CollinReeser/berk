@@ -300,74 +300,52 @@ let print_func_ast {f_name; f_params; f_stmts} =
   Printf.printf "\n}\n"
 ;;
 
-let main =
+let test_typecheck ast =
+  Printf.printf "Expression [";
+  print_expr "" ast;
+  Printf.printf "] typechecks to: ";
+  match type_check_expr ast with
+  | None -> Printf.printf "<typecheck failed>\n"
+  | Some(t) -> print_berk_type t; Printf.printf "\n"
+;;
+
+let main = (
   print_func_ast build_example_ast;
 
-  (
-    let ex_to_check = Add(ValInt(5), ValInt(6)) in
-    Printf.printf "Expression [";
-    print_expr "" ex_to_check;
-    Printf.printf "] typechecks to: ";
-    match type_check_expr ex_to_check with
-    | None -> Printf.printf "<typecheck failed>\n"
-    | Some(t) -> print_berk_type t; Printf.printf "\n";
+  test_typecheck (Add(ValInt(5), ValInt(6)));
+
+  test_typecheck (
+    IfExpr({
+      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValInt(31))]};
+      else_if_blocks = [
+        {cond = ValBool(true); stmts = [ResolveStmt(ValInt(33))]};
+        {cond = ValBool(true); stmts = [ResolveStmt(ValInt(35))]};
+      ];
+      else_block = Some([ResolveStmt(ValInt(35))])
+    })
   );
 
-  (
-    let if_ex_to_check =
-      IfExpr({
-        if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValInt(31))]};
-        else_if_blocks = [
-          {cond = ValBool(true); stmts = [ResolveStmt(ValInt(33))]};
-          {cond = ValBool(true); stmts = [ResolveStmt(ValInt(35))]};
-        ];
-        else_block = Some([ResolveStmt(ValInt(35))])
-      })
-    in
-    Printf.printf "Expression [";
-    print_expr "" if_ex_to_check;
-    Printf.printf "] typechecks to: ";
-    match type_check_expr if_ex_to_check with
-    | None -> Printf.printf "<typecheck failed>\n"
-    | Some(t) -> print_berk_type t; Printf.printf "\n";
+  test_typecheck (
+    IfExpr({
+      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValInt(31))]};
+      else_if_blocks = [
+        {cond = ValBool(true); stmts = [ResolveStmt(ValBool(true))]};
+        {cond = ValBool(true); stmts = [ResolveStmt(ValInt(35))]};
+      ];
+      else_block = Some([ResolveStmt(ValBool(false))])
+    })
   );
 
-  (
-    let if_ex_to_check_2 =
-      IfExpr({
-        if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValInt(31))]};
-        else_if_blocks = [
-          {cond = ValBool(true); stmts = [ResolveStmt(ValBool(true))]};
-          {cond = ValBool(true); stmts = [ResolveStmt(ValInt(35))]};
-        ];
-        else_block = Some([ResolveStmt(ValBool(false))])
-      })
-    in
-    Printf.printf "Expression [";
-    print_expr "" if_ex_to_check_2;
-    Printf.printf "] typechecks to: ";
-    match type_check_expr if_ex_to_check_2 with
-    | None -> Printf.printf "<typecheck failed>\n"
-    | Some(t) -> print_berk_type t; Printf.printf "\n";
+  test_typecheck (
+    IfExpr({
+      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValBool(true))]};
+      else_if_blocks = [
+        {cond = ValBool(true); stmts = [ResolveStmt(ValBool(false))]};
+      ];
+      else_block = Some([ResolveStmt(ValBool(false))])
+    })
   );
-
-  (
-    let if_ex_to_check_3 =
-      IfExpr({
-        if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValBool(true))]};
-        else_if_blocks = [
-          {cond = ValBool(true); stmts = [ResolveStmt(ValBool(false))]};
-        ];
-        else_block = Some([ResolveStmt(ValBool(false))])
-      })
-    in
-    Printf.printf "Expression [";
-    print_expr "" if_ex_to_check_3;
-    Printf.printf "] typechecks to: ";
-    match type_check_expr if_ex_to_check_3 with
-    | None -> Printf.printf "<typecheck failed>\n"
-    | Some(t) -> print_berk_type t; Printf.printf "\n";
-  );
+)
 ;;
 
 main;;
