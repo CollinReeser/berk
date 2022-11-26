@@ -70,7 +70,7 @@ let test_typecheck ast =
 ;;
 
 
-let dump_to_object filename the_fpm the_module =
+let dump_to_file file_type filename the_fpm the_module =
   Llvm_all_backends.initialize ();
   (* "x86_64-pc-linux-gnu" *)
   let target_triple = Llvm_target.Target.default_triple () in
@@ -82,10 +82,26 @@ let dump_to_object filename the_fpm the_module =
   Llvm.set_target_triple target_triple the_module;
   Llvm.set_data_layout data_layout the_module;
   Llvm_target.TargetMachine.add_analysis_passes the_fpm machine;
-  let file_type = Llvm_target.CodeGenFileType.ObjectFile in
   Llvm_target.TargetMachine.emit_to_file the_module file_type filename machine;
   Printf.printf "Wrote %s\n" filename;
   ()
+;;
+
+
+let initialize_fpm the_fpm =
+  (* Promote allocas to registers. *)
+  Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
+  (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
+  Llvm_scalar_opts.add_instruction_combination the_fpm ;
+  (* reassociate expressions. *)
+  Llvm_scalar_opts.add_reassociation the_fpm ;
+  (* Eliminate Common SubExpressions. *)
+  Llvm_scalar_opts.add_gvn the_fpm ;
+  (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
+  Llvm_scalar_opts.add_cfg_simplification the_fpm ;
+  (* Return value here only indicates whether internal state was modified *)
+  Llvm.PassManager.initialize the_fpm
+;;
 
 
 let main = begin
@@ -131,18 +147,7 @@ let main = begin
     let the_fpm = Llvm.PassManager.create_function the_module in
     let builder = Llvm.builder context in
     let _ = begin
-      (* Promote allocas to registers. *)
-      Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
-      (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
-      Llvm_scalar_opts.add_instruction_combination the_fpm ;
-      (* reassociate expressions. *)
-      Llvm_scalar_opts.add_reassociation the_fpm ;
-      (* Eliminate Common SubExpressions. *)
-      Llvm_scalar_opts.add_gvn the_fpm ;
-      (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
-      Llvm_scalar_opts.add_cfg_simplification the_fpm ;
-      (* Return value here only indicates whether internal state was modified *)
-      Llvm.PassManager.initialize the_fpm |> ignore ;
+      initialize_fpm the_fpm |> ignore ;
 
       let i64_t = Llvm.i64_type context in
       let doubles_empty = Array.make 0 i64_t in
@@ -176,7 +181,8 @@ let main = begin
       ()
     end in
     let filename = "output.o" in
-    let _ = dump_to_object filename the_fpm the_module in
+    let file_type = Llvm_target.CodeGenFileType.ObjectFile in
+    let _ = dump_to_file file_type filename the_fpm the_module in
     let _ = Sys.command "clang -o output output.o" in
     ()
   end
