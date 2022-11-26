@@ -88,6 +88,21 @@ let dump_to_file file_type filename the_fpm the_module =
 ;;
 
 
+let dump_llvm_ir filename the_module =
+  Llvm.print_module filename the_module ;
+  Printf.printf "Wrote %s\n" filename;
+  ()
+;;
+
+
+let generate_executable filename_exe filename_obj =
+  let cmd = Printf.sprintf "clang -o %s %s" filename_exe filename_obj in
+  begin match Sys.command cmd with
+    | 0 -> Printf.printf "Wrote %s\n" filename_exe
+    | n -> Printf.printf "clang failed with %d\n" n
+  end
+
+
 let initialize_fpm the_fpm =
   (* Promote allocas to registers. *)
   Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
@@ -158,8 +173,8 @@ let main = begin
       Llvm.position_at_end bb builder ;
 
       let return_val = begin
-        let lhs_val = Llvm.const_int i64_t 2 in
-        let rhs_val = Llvm.const_int i64_t 5 in
+        let lhs_val = Llvm.const_int i64_t 3 in
+        let rhs_val = Llvm.const_int i64_t 6 in
         Llvm.build_add lhs_val rhs_val "addtmp" builder
       end in
 
@@ -180,10 +195,21 @@ let main = begin
       let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
       ()
     end in
-    let filename = "output.o" in
+
+    let filename_ll = "output.ll" in
+    dump_llvm_ir filename_ll the_module ;
+
+    let filename_asm = "output.s" in
+    let file_type = Llvm_target.CodeGenFileType.AssemblyFile in
+    dump_to_file file_type filename_asm the_fpm the_module ;
+
+    let filename_obj = "output.o" in
     let file_type = Llvm_target.CodeGenFileType.ObjectFile in
-    let _ = dump_to_file file_type filename the_fpm the_module in
-    let _ = Sys.command "clang -o output output.o" in
+    dump_to_file file_type filename_obj the_fpm the_module ;
+
+    let filename_exe = "output" in
+    generate_executable filename_exe filename_obj ;
+
     ()
   end
 end
