@@ -3,7 +3,8 @@ AST for the berk language.
 *)
 
 type berk_type =
-  | Int
+  | I64
+  | I32
   | Bool
 
 type ident_t = string
@@ -13,7 +14,8 @@ type cond_block = {
   stmts: stmt list;
 }
 and expr =
-  | ValInt of int
+  | ValI64 of int
+  | ValI32 of int
   | ValBool of bool
   | Add of expr * expr
   | Sub of expr * expr
@@ -47,7 +49,7 @@ type func_ast = {
 
 let rec common_type_of_lr lhs rhs =
   match (lhs, rhs) with
-  | (Some(Int), Some(Int)) -> Some(Int)
+  | (Some(I64), Some(I64)) -> Some(I64)
   | (Some(Bool), Some(Bool)) -> Some(Bool)
   | _ -> None
 
@@ -73,7 +75,8 @@ let rec type_check_if_expr_stmts stmts =
   | x::xs -> List.fold_left common_type_of_lr x xs
 and type_check_expr exp =
   match exp with
-  | ValInt(_) -> Some(Int)
+  | ValI64(_) -> Some(I64)
+  | ValI32(_) -> Some(I32)
   | ValBool(_) -> Some(Bool)
   | Add(lhs, rhs) ->
       let lhs_type = type_check_expr lhs in
@@ -143,50 +146,50 @@ let build_example_ast =
     f_params = [
       {
         p_name = "arg_1";
-        p_type = Int;
+        p_type = I64;
       };
       {
         p_name = "arg_2";
-        p_type = Int;
+        p_type = I64;
       }
     ];
     f_stmts = [
       DeclDef(
-        "abc", Int,
-        Add(ValInt(5), Mul(Sub(ValInt(6), ValInt(7)), ValInt (8)))
+        "abc", I64,
+        Add(ValI64(5), Mul(Sub(ValI64(6), ValI64(7)), ValI64 (8)))
       );
       ExprStmt(
         IfExpr({
-          if_block = {cond = ValInt(30); stmts = [ResolveStmt(ValInt(31))]};
+          if_block = {cond = ValI64(30); stmts = [ResolveStmt(ValI64(31))]};
           else_if_blocks = [
-            {cond = ValInt(32); stmts = [ResolveStmt(ValInt(33))]};
-            {cond = ValInt(34); stmts = [ResolveStmt(ValInt(35))]};
+            {cond = ValI64(32); stmts = [ResolveStmt(ValI64(33))]};
+            {cond = ValI64(34); stmts = [ResolveStmt(ValI64(35))]};
           ];
-          else_block = Some([ResolveStmt(ValInt(35))])
+          else_block = Some([ResolveStmt(ValI64(35))])
         })
       );
       DeclDef(
-        "def", Int,
+        "def", I64,
         IfExpr({
-          if_block = {cond = ValInt(50); stmts = [ExprStmt(ValInt(51))]};
+          if_block = {cond = ValI64(50); stmts = [ExprStmt(ValI64(51))]};
           else_if_blocks = [];
-          else_block = Some([ExprStmt(ValInt(55))])
+          else_block = Some([ExprStmt(ValI64(55))])
         })
       );
       DeclDef(
-        "ghi", Int,
+        "ghi", I64,
         IfExpr({
-          if_block = {cond = ValInt(50); stmts = [ExprStmt(ValInt(51))]};
+          if_block = {cond = ValI64(50); stmts = [ExprStmt(ValI64(51))]};
           else_if_blocks = [];
           else_block = None;
         })
       );
       IfStmt({
-        if_block = {cond = ValInt(40); stmts = [ExprStmt(ValInt(41))]};
+        if_block = {cond = ValI64(40); stmts = [ExprStmt(ValI64(41))]};
         else_if_blocks = [
-          {cond = ValInt(42); stmts = [ExprStmt(ValInt(43))]};
+          {cond = ValI64(42); stmts = [ExprStmt(ValI64(43))]};
         ];
-        else_block = Some([ExprStmt(ValInt(45))])
+        else_block = Some([ExprStmt(ValI64(45))])
       })
     ];
   }
@@ -194,7 +197,8 @@ let build_example_ast =
 
 let print_berk_type berk_type =
   match berk_type with
-  | Int -> Printf.printf "int"
+  | I64 -> Printf.printf "i64"
+  | I32 -> Printf.printf "i32"
   | Bool -> Printf.printf "bool"
 ;;
 
@@ -218,7 +222,8 @@ let rec print_expr ind ex =
   | Add (lhs, rhs) -> print_expr "" lhs; Printf.printf " + "; print_expr "" rhs
   | Sub (lhs, rhs) -> print_expr "" lhs; Printf.printf " - "; print_expr "" rhs
   | Mul (lhs, rhs) -> print_expr "" lhs; Printf.printf " * "; print_expr "" rhs
-  | ValInt (value) -> Printf.printf "%d" value
+  | ValI64 (value) -> Printf.printf "%d" value
+  | ValI32 (value) -> Printf.printf "%d" value
   | ValBool (value) -> Printf.printf "%B" value
   | IfExpr ({
       if_block = {
@@ -312,25 +317,25 @@ let test_typecheck ast =
 let main = (
   print_func_ast build_example_ast;
 
-  test_typecheck (Add(ValInt(5), ValInt(6)));
+  test_typecheck (Add(ValI64(5), ValI64(6)));
 
   test_typecheck (
     IfExpr({
-      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValInt(31))]};
+      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValI32(31))]};
       else_if_blocks = [
-        {cond = ValBool(true); stmts = [ResolveStmt(ValInt(33))]};
-        {cond = ValBool(true); stmts = [ResolveStmt(ValInt(35))]};
+        {cond = ValBool(true); stmts = [ResolveStmt(ValI64(33))]};
+        {cond = ValBool(true); stmts = [ResolveStmt(ValI32(35))]};
       ];
-      else_block = Some([ResolveStmt(ValInt(35))])
+      else_block = Some([ResolveStmt(ValI64(35))])
     })
   );
 
   test_typecheck (
     IfExpr({
-      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValInt(31))]};
+      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValI64(31))]};
       else_if_blocks = [
         {cond = ValBool(true); stmts = [ResolveStmt(ValBool(true))]};
-        {cond = ValBool(true); stmts = [ResolveStmt(ValInt(35))]};
+        {cond = ValBool(true); stmts = [ResolveStmt(ValI64(35))]};
       ];
       else_block = Some([ResolveStmt(ValBool(false))])
     })
