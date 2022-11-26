@@ -2,6 +2,7 @@ open Ast
 open Pretty_print
 open Typing
 open Type_check
+open Codegen
 
 
 let build_example_ast =
@@ -172,11 +173,9 @@ let main = begin
       let bb = Llvm.append_block context "entry" new_func in
       Llvm.position_at_end bb builder ;
 
-      let return_val = begin
-        let lhs_val = Llvm.const_int i64_t 3 in
-        let rhs_val = Llvm.const_int i64_t 6 in
-        Llvm.build_add lhs_val rhs_val "addtmp" builder
-      end in
+      let return_val = codegen_expr context builder (
+        Add(ValI64(5), Mul(Sub(ValI64(10), ValI64(7)), ValI64 (8)))
+      ) in
 
       let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
       (* Validate the generated code, checking for consistency. *)
