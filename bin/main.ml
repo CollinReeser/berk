@@ -144,18 +144,18 @@ let main = begin
       (* Return value here only indicates whether internal state was modified *)
       Llvm.PassManager.initialize the_fpm |> ignore ;
 
-      let double_t = Llvm.double_type context in
-      let doubles_empty = Array.make 0 double_t in
-      let func_sig_t = Llvm.function_type double_t doubles_empty in
+      let i64_t = Llvm.i64_type context in
+      let doubles_empty = Array.make 0 i64_t in
+      let func_sig_t = Llvm.function_type i64_t doubles_empty in
       let func_name = "main" in
       let new_func = Llvm.declare_function func_name func_sig_t the_module in
       let bb = Llvm.append_block context "entry" new_func in
       Llvm.position_at_end bb builder ;
 
       let return_val = begin
-        let lhs_val = Llvm.const_float double_t 1.7 in
-        let rhs_val = Llvm.const_float double_t 2.4 in
-        Llvm.build_fadd lhs_val rhs_val "addtmp" builder
+        let lhs_val = Llvm.const_int i64_t 2 in
+        let rhs_val = Llvm.const_int i64_t 5 in
+        Llvm.build_add lhs_val rhs_val "addtmp" builder
       end in
 
       let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
