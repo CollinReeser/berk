@@ -1,4 +1,14 @@
 (executable
  (public_name berk_ocaml)
  (name main)
- (libraries berk_ocaml))
+ (libraries
+   berk_ocaml
+   ctypes.foreign
+   llvm
+   llvm.analysis
+   llvm.executionengine
+   llvm.target
+   llvm.scalar_opts
+   llvm.all_backends
+ )
+)
