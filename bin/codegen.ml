@@ -2,12 +2,12 @@ open Ast
 open Pretty_print
 
 
-let rec codegen_expr context builder expr =
-  let i64_t = Llvm.i64_type context in
-  let i32_t = Llvm.i32_type context in
-  let f32_t = Llvm.float_type context in
-  let bool_t = Llvm.i8_type context in
-  let _codegen_expr = codegen_expr context builder in
+let rec codegen_expr llvm_ctxt builder expr =
+  let i64_t = Llvm.i64_type llvm_ctxt in
+  let i32_t = Llvm.i32_type llvm_ctxt in
+  let f32_t = Llvm.float_type llvm_ctxt in
+  let bool_t = Llvm.i8_type llvm_ctxt in
+  let _codegen_expr = codegen_expr llvm_ctxt builder in
 
   match expr with
   | ValI64(n) -> Llvm.const_int i64_t n

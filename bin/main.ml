@@ -10,19 +10,19 @@ let main = begin
   test_suite;
 
   begin
-    let context = Llvm.global_context () in
-    let the_module = Llvm.create_module context "main" in
+    let llvm_ctxt = Llvm.global_context () in
+    let the_module = Llvm.create_module llvm_ctxt "main" in
     let the_fpm = Llvm.PassManager.create_function the_module in
-    let builder = Llvm.builder context in
+    let builder = Llvm.builder llvm_ctxt in
     let _ = begin
       initialize_fpm the_fpm |> ignore ;
 
-      let i64_t = Llvm.i64_type context in
+      let i64_t = Llvm.i64_type llvm_ctxt in
       let doubles_empty = Array.make 0 i64_t in
       let func_sig_t = Llvm.function_type i64_t doubles_empty in
       let func_name = "main" in
       let new_func = Llvm.declare_function func_name func_sig_t the_module in
-      let bb = Llvm.append_block context "entry" new_func in
+      let bb = Llvm.append_block llvm_ctxt "entry" new_func in
       Llvm.position_at_end bb builder ;
 
       let expr_raw = (
@@ -50,7 +50,7 @@ let main = begin
         print_expr "" (type_check_expr expr_raw);
         Printf.printf "\n";
       let expr_typechecked = type_check_expr expr_raw in
-      let return_val = codegen_expr context builder expr_typechecked in
+      let return_val = codegen_expr llvm_ctxt builder expr_typechecked in
 
       let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
       (* Validate the generated code, checking for consistency. *)
