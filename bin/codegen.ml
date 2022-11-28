@@ -1,8 +1,36 @@
 open Ast
 open Pretty_print
+open Type_check
 
+let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
+  let i64_t = Llvm.i64_type llvm_ctxt in
+  let ints_empty = Array.make 0 i64_t in
+  let func_sig_t = Llvm.function_type i64_t ints_empty in
+  let new_func = Llvm.declare_function f_name func_sig_t the_mod in
+  let bb = Llvm.append_block llvm_ctxt "entry" new_func in
+  Llvm.position_at_end bb builder ;
+  let f_stmts_typechecked = List.map type_check_stmt f_stmts in
+  List.iter (codegen_stmt llvm_ctxt builder) f_stmts_typechecked ;
 
-let rec codegen_stmt llvm_ctxt builder stmt =
+  (* Validate the generated code, checking for consistency. *)
+  let _ = begin
+    match Llvm_analysis.verify_function new_func with
+    | true -> ()
+    | false ->
+      begin
+        Printf.printf "invalid function generated\n%s\n"
+          (Llvm.string_of_llvalue new_func) ;
+        Llvm_analysis.assert_valid_function new_func ;
+        ()
+      end
+  end in
+
+  (* Optimize the function. *)
+  let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
+
+  ()
+
+and codegen_stmt llvm_ctxt builder stmt =
   match stmt with
   | ReturnStmt(expr) ->
       let return_val = codegen_expr llvm_ctxt builder expr in

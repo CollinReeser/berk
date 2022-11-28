@@ -17,14 +17,6 @@ let main = begin
     let _ = begin
       initialize_fpm the_fpm |> ignore ;
 
-      let i64_t = Llvm.i64_type llvm_ctxt in
-      let doubles_empty = Array.make 0 i64_t in
-      let func_sig_t = Llvm.function_type i64_t doubles_empty in
-      let func_name = "main" in
-      let new_func = Llvm.declare_function func_name func_sig_t the_module in
-      let bb = Llvm.append_block llvm_ctxt "entry" new_func in
-      Llvm.position_at_end bb builder ;
-
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -52,25 +44,14 @@ let main = begin
 
       let stmt_raw = ReturnStmt(expr_raw) in
 
-      let stmt_typechecked = type_check_stmt stmt_raw in
-      let _ = codegen_stmt llvm_ctxt builder stmt_typechecked in
-      (* let return_val = codegen_expr llvm_ctxt builder expr_typechecked in *)
+      let func_def = {
+        f_name = "main";
+        f_params = [];
+        f_stmts = [stmt_raw];
+      } in
 
-      (* let _ : Llvm.llvalue = Llvm.build_ret return_val builder in *)
-      (* Validate the generated code, checking for consistency. *)
-      let _ = begin
-        match Llvm_analysis.verify_function new_func with
-        | true -> ()
-        | false ->
-          begin
-            Printf.printf "invalid function generated\n%s\n"
-              (Llvm.string_of_llvalue new_func) ;
-            Llvm_analysis.assert_valid_function new_func ;
-            ()
-          end
-      end in
-      (* Optimize the function. *)
-      let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
+      codegen_func llvm_ctxt the_module the_fpm builder func_def ;
+
       ()
     end in
 
