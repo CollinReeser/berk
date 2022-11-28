@@ -68,8 +68,10 @@ and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
       let updated_vars = StrMap.add ident alloca gen_ctxt.vars in
-      (* {gen_ctxt with vars = updated_vars} *)
-      {vars = updated_vars}
+      (* let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in *)
+      let gen_ctxt_up = {vars = updated_vars} in
+
+      gen_ctxt_up
 
   | ReturnStmt(expr) ->
       let return_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
