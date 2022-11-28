@@ -22,7 +22,7 @@ and expr =
   | IfThenElseExpr of berk_t * expr * expr * expr
 
 and stmt =
-  | DeclDef of ident_t * berk_t * expr
+  | DeclStmt of ident_t * berk_t * expr
   | ExprStmt of expr
   | ResolveStmt of expr
   | ReturnStmt of expr

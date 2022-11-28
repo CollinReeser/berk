@@ -17,10 +17,13 @@ let get_resolve_type stmts =
   | x::xs -> List.fold_left (fun x y -> common_type_of_lr x y) x xs
 ;;
 
+let rec type_check_func {f_name; f_params; f_stmts} =
+  let f_stmts_typechecked = type_check_stmts f_stmts in
+  {f_name = f_name; f_params = f_params; f_stmts = f_stmts_typechecked}
 
-let rec type_check_stmt stmt =
+and type_check_stmt stmt =
   match stmt with
-  | DeclDef(id, decl_t, exp) ->
+  | DeclStmt(id, decl_t, exp) ->
       let exp_typechecked = type_check_expr exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
@@ -30,7 +33,7 @@ let rec type_check_stmt stmt =
         then decl_t
         else failwith "Explicitly declared type disagrees with expr"
       in
-      DeclDef(id, resolved_t, exp_typechecked)
+      DeclStmt(id, resolved_t, exp_typechecked)
   | ExprStmt(exp) -> ExprStmt(type_check_expr exp)
   | ResolveStmt(exp) -> ResolveStmt(type_check_expr exp)
   | ReturnStmt(exp) -> ReturnStmt(type_check_expr exp)

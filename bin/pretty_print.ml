@@ -18,15 +18,6 @@ let print_func_param {p_name; p_type} =
   Printf.printf "%s" (fmt_type p_type)
 ;;
 
-(* let rec print_interleaved_list delimiter func target_list =
-  match target_list with
-  | [] -> ()
-  | [x] -> func x
-  | x :: xs -> (
-    func x;
-    Printf.printf "%s" delimiter;
-    print_interleaved_list delimiter func xs
-  ) *)
 
 let print_bin_op op =
   match op with
@@ -59,7 +50,7 @@ let rec print_expr ind ex =
 
 and print_stmt ind stmt =
   match stmt with
-  | DeclDef (ident, btype, ex) -> (
+  | DeclStmt (ident, btype, ex) -> (
     Printf.printf "%slet %s: " ind ident;
     Printf.printf "%s" (fmt_type btype);
     Printf.printf " = ";

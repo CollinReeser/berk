@@ -11,6 +11,7 @@ let rec common_type_of_lr lhs rhs =
   match (lhs, rhs) with
   | (I64, I64) -> I64
   | (I32, I64) -> I64
+  | (I64, I32) -> I64
   | (I32, I32) -> I32
   | (F32, F32) -> F32
   | (Bool, Bool) -> Bool

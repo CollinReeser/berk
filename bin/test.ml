@@ -17,7 +17,7 @@ let build_example_ast =
       }
     ];
     f_stmts = [
-      DeclDef(
+      DeclStmt(
         "abc", Undecided,
         BinOp(
           Undecided, Add,
@@ -49,7 +49,7 @@ let build_example_ast =
           )
         )
       );
-      DeclDef(
+      DeclStmt(
         "def", I64,
         IfThenElseExpr(
           Undecided,
@@ -121,7 +121,7 @@ let test_suite =
       ValBool(false),
       BlockExpr(
         Undecided, [
-          DeclDef(
+          DeclStmt(
             "egh", I64,
             BinOp(
               Undecided, Add,
@@ -142,11 +142,13 @@ let test_suite =
       ),
       BlockExpr(
         Undecided, [
-          DeclDef("ijk", Undecided, ValBool(false));
+          DeclStmt("ijk", Undecided, ValBool(false));
           ResolveStmt(ValI64(24));
         ]
       )
     )
   );
+
+  Printf.printf "%!" ;
 
   ()

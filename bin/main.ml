@@ -1,3 +1,5 @@
+open Printexc
+
 open Ast
 open Pretty_print
 open Typing
@@ -7,6 +9,7 @@ open Test
 
 
 let main = begin
+  record_backtrace true;
   test_suite;
 
   begin
@@ -42,15 +45,38 @@ let main = begin
         print_expr "" (type_check_expr expr_raw);
         Printf.printf "\n";
 
-      let stmt_raw = ReturnStmt(expr_raw) in
+      let decl_stmt_raw = (
+        DeclStmt(
+          "my_var", Undecided,
+          BinOp(
+            Undecided, Add,
+            ValI64(5),
+            BinOp(
+              Undecided, Mul,
+              BinOp(
+                Undecided, Sub,
+                (* Note: Reversing these types -> LLVM type-mismatch crash *)
+                ValI64(11),
+                ValI32(7)
+              ),
+              ValI64 (8)
+            )
+          )
+        )
+      ) in
+      let return_stmt_raw = ReturnStmt(expr_raw) in
 
       let func_def = {
         f_name = "main";
         f_params = [];
-        f_stmts = [stmt_raw];
+        f_stmts = [
+          decl_stmt_raw;
+          return_stmt_raw;
+        ];
       } in
+      let func_def_typechecked = type_check_func func_def in
 
-      codegen_func llvm_ctxt the_module the_fpm builder func_def ;
+      codegen_func llvm_ctxt the_module the_fpm builder func_def_typechecked ;
 
       ()
     end in

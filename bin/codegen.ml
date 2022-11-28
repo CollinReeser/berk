@@ -1,6 +1,17 @@
 open Ast
 open Pretty_print
+open Typing
 open Type_check
+
+
+let berk_t_to_llvm_t llvm_ctxt typ =
+  match typ with
+  | I64 -> Llvm.i64_type llvm_ctxt
+  | I32 -> Llvm.i32_type llvm_ctxt
+  | F32 -> Llvm.float_type llvm_ctxt
+  | Bool -> Llvm.i8_type llvm_ctxt
+  | Nil -> failwith "Should not need to determine type for nil"
+  | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
 let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
   let i64_t = Llvm.i64_type llvm_ctxt in
@@ -9,8 +20,7 @@ let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
   Llvm.position_at_end bb builder ;
-  let f_stmts_typechecked = List.map type_check_stmt f_stmts in
-  List.iter (codegen_stmt llvm_ctxt builder) f_stmts_typechecked ;
+  List.iter (codegen_stmt llvm_ctxt builder) f_stmts ;
 
   (* Validate the generated code, checking for consistency. *)
   let _ = begin
@@ -32,6 +42,18 @@ let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
 
 and codegen_stmt llvm_ctxt builder stmt =
   match stmt with
+  | DeclStmt (ident, typ, expr) ->
+      Printf.printf "DeclStmt type: [%s]\n%!" (fmt_type typ) ;
+      let expr_typechecked = type_check_expr expr in
+      let expr_t = expr_type expr_typechecked in
+      Printf.printf "Expr type: [%s]\n%!" (fmt_type expr_t) ;
+      print_expr "" expr_typechecked ;
+      Printf.printf "\n%!" ;
+      let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+      let alloca = Llvm.build_alloca alloca_typ ident builder in
+      let expr_val = codegen_expr llvm_ctxt builder expr in
+      let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
+      ()
   | ReturnStmt(expr) ->
       let return_val = codegen_expr llvm_ctxt builder expr in
       let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
@@ -79,6 +101,7 @@ and codegen_expr llvm_ctxt builder expr =
 
 
 let initialize_fpm the_fpm =
+  (*
   (* Promote allocas to registers. *)
   Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
   (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
@@ -89,6 +112,7 @@ let initialize_fpm the_fpm =
   Llvm_scalar_opts.add_gvn the_fpm ;
   (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
   Llvm_scalar_opts.add_cfg_simplification the_fpm ;
+  *)
   (* Return value here only indicates whether internal state was modified *)
   Llvm.PassManager.initialize the_fpm
 ;;
