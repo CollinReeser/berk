@@ -1,16 +1,21 @@
 open Ast
 open Typing
 
-let print_berk_type berk_type =
+
+let fmt_type berk_type =
   match berk_type with
-  | I64 -> Printf.printf "i64"
-  | I32 -> Printf.printf "i32"
-  | Bool -> Printf.printf "bool"
+  | I64 -> "i64"
+  | I32 -> "i32"
+  | F32 -> "f32"
+  | Bool -> "bool"
+  | Nil -> "()"
+  | Undecided -> "<?undecided?>"
 ;;
+
 
 let print_func_param {p_name; p_type} =
   Printf.printf "%s: " p_name;
-  print_berk_type p_type
+  Printf.printf "%s" (fmt_type p_type)
 ;;
 
 (* let rec print_interleaved_list delimiter func target_list =
@@ -23,46 +28,40 @@ let print_func_param {p_name; p_type} =
     print_interleaved_list delimiter func xs
   ) *)
 
+let print_bin_op op =
+  match op with
+  | Add -> Printf.printf " + "
+  | Sub -> Printf.printf " - "
+  | Mul -> Printf.printf " * "
+
 let rec print_expr ind ex =
   match ex with
-  | Add (lhs, rhs) -> print_expr "" lhs; Printf.printf " + "; print_expr "" rhs
-  | Sub (lhs, rhs) -> print_expr "" lhs; Printf.printf " - "; print_expr "" rhs
-  | Mul (lhs, rhs) -> print_expr "" lhs; Printf.printf " * "; print_expr "" rhs
-  | ValI64 (value) -> Printf.printf "%d" value
-  | ValI32 (value) -> Printf.printf "%d" value
-  | ValBool (value) -> Printf.printf "%B" value
-  | IfExpr ({
-      if_block = {
-        cond = if_cond; stmts = if_stmts
-      };
-      else_if_blocks;
-      else_block
-    }) ->
-      Printf.printf "if (";
+  | ValI64 (value) -> Printf.printf "%d:%s" value (expr_type ex |> fmt_type)
+  | ValI32 (value) -> Printf.printf "%d:%s" value (expr_type ex |> fmt_type)
+  | ValF32 (value) -> Printf.printf "%f:%s" value (expr_type ex |> fmt_type)
+  | ValBool (value) -> Printf.printf "%B:%s" value (expr_type ex |> fmt_type)
+  | BinOp (typ, op, lh, rh) ->
+      Printf.printf "(";
+      print_expr "" lh; print_bin_op op; print_expr "" rh;
+      Printf.printf "):%s" (fmt_type typ)
+  | BlockExpr (_, stmts) ->
+      Printf.printf "%s{\n" ind;
+      List.iter (print_stmt (ind ^ "  ")) stmts;
+      Printf.printf "%s}\n" ind
+  | IfThenElseExpr (_, if_cond, then_expr, else_expr) ->
+      Printf.printf "%sif (" ind;
       print_expr "" if_cond;
       Printf.printf ") {\n";
-      List.iter (print_stmt (ind ^ "  ")) if_stmts;
-      Printf.printf "%s}" ind;
-      List.iter (
-        fun ({cond = else_if_cond; stmts = else_if_stmts}) ->
-          Printf.printf "\n%selse if (" ind;
-          print_expr "" else_if_cond;
-          Printf.printf ") {\n";
-          List.iter (print_stmt (ind ^ "  ")) else_if_stmts;
-          Printf.printf "%s}" ind;
-      ) else_if_blocks;
-      match else_block with
-      | None -> ()
-      | Some (else_stmts) ->
-        Printf.printf "\n%selse {\n" ind;
-        List.iter (print_stmt (ind ^ "  ")) else_stmts;
-        Printf.printf "%s}" ind;
+      print_expr (ind ^ "  ") then_expr;
+      Printf.printf "%s} else {\n" ind;
+      print_expr (ind ^ "  ") else_expr;
+      Printf.printf "%s}\n" ind
 
 and print_stmt ind stmt =
   match stmt with
   | DeclDef (ident, btype, ex) -> (
     Printf.printf "%slet %s: " ind ident;
-    print_berk_type btype;
+    Printf.printf "%s" (fmt_type btype);
     Printf.printf " = ";
     print_expr ind ex;
     Printf.printf ";\n"
@@ -75,32 +74,6 @@ and print_stmt ind stmt =
       Printf.printf "%sresolve " ind;
       print_expr ind ex;
       Printf.printf ";\n";
-  | IfStmt ({
-      if_block = {
-        cond = if_cond; stmts = if_stmts
-      };
-      else_if_blocks;
-      else_block
-    }) ->
-      Printf.printf "%sif (" ind;
-      print_expr "" if_cond;
-      Printf.printf ") {\n";
-      List.iter (print_stmt (ind ^ "  ")) if_stmts;
-      Printf.printf "%s}\n" ind;
-      List.iter (
-        fun ({cond = else_if_cond; stmts = else_if_stmts}) ->
-          Printf.printf "%selse if (" ind;
-          print_expr "" else_if_cond;
-          Printf.printf ") {\n";
-          List.iter (print_stmt (ind ^ "  ")) else_if_stmts;
-          Printf.printf "%s}\n" ind;
-      ) else_if_blocks;
-      match else_block with
-      | None -> ()
-      | Some (else_stmts) ->
-        Printf.printf "%selse {\n" ind;
-        List.iter (print_stmt (ind ^ "  ")) else_stmts;
-        Printf.printf "%s}" ind;
 ;;
 
 let print_func_ast {f_name; f_params; f_stmts} =

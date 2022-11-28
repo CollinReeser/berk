@@ -7,38 +7,40 @@ AST for the berk language.
 
 type ident_t = string
 
-type cond_block = {
-  cond: expr;
-  stmts: stmt list;
-}
+and bin_op =
+  | Add
+  | Sub
+  | Mul
 
 and expr =
   | ValI64 of int
   | ValI32 of int
+  | ValF32 of float
   | ValBool of bool
-  | Add of expr * expr
-  | Sub of expr * expr
-  | Mul of expr * expr
-  | IfExpr of {
-      if_block: cond_block;
-      else_if_blocks: cond_block list;
-      else_block: (stmt list) option;
-    }
+  | BinOp of berk_t * bin_op * expr * expr
+  | BlockExpr of berk_t * stmt list
+  | IfThenElseExpr of berk_t * expr * expr * expr
 
 and stmt =
-  | DeclDef of ident_t * berk_type * expr
+  | DeclDef of ident_t * berk_t * expr
   | ExprStmt of expr
-  | IfStmt of {
-      if_block: cond_block;
-      else_if_blocks: cond_block list;
-      else_block: (stmt list) option;
-    }
   | ResolveStmt of expr
 ;;
 
+let expr_type = function
+  | ValI64(_) -> I64
+  | ValI32(_) -> I32
+  | ValF32(_) -> F32
+  | ValBool(_) -> Bool
+  | BinOp(typ, _, _, _) -> typ
+  | BlockExpr(typ, _) -> typ
+  | IfThenElseExpr(typ, _, _, _) -> typ
+;;
+
+
 type func_param = {
   p_name: string;
-  p_type: berk_type;
+  p_type: berk_t;
 }
 
 type func_ast = {

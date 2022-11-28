@@ -20,42 +20,54 @@ let build_example_ast =
     ];
     f_stmts = [
       DeclDef(
-        "abc", I64,
-        Add(ValI64(5), Mul(Sub(ValI64(6), ValI64(7)), ValI64 (8)))
+        "abc", Undecided,
+        BinOp(
+          Undecided, Add,
+          ValI32(5),
+          BinOp(
+            Undecided, Mul,
+            BinOp(
+              Undecided, Sub,
+              ValI32(6),
+              ValI32(7)
+            ),
+            ValI32(8)
+          )
+        )
       );
       ExprStmt(
-        IfExpr({
-          if_block = {cond = ValI64(30); stmts = [ResolveStmt(ValI64(31))]};
-          else_if_blocks = [
-            {cond = ValI64(32); stmts = [ResolveStmt(ValI64(33))]};
-            {cond = ValI64(34); stmts = [ResolveStmt(ValI64(35))]};
-          ];
-          else_block = Some([ResolveStmt(ValI64(35))])
-        })
+        IfThenElseExpr(
+          Undecided,
+          ValBool(true),
+          BlockExpr(
+            Undecided, [
+              ResolveStmt(ValI64(31));
+            ]
+          ),
+          BlockExpr(
+            Undecided, [
+              ResolveStmt(ValI64(32));
+            ]
+          )
+        )
       );
       DeclDef(
         "def", I64,
-        IfExpr({
-          if_block = {cond = ValI64(50); stmts = [ExprStmt(ValI64(51))]};
-          else_if_blocks = [];
-          else_block = Some([ExprStmt(ValI64(55))])
-        })
+        IfThenElseExpr(
+          Undecided,
+          ValBool(false),
+          BlockExpr(
+            Undecided, [
+              ResolveStmt(ValI64(33));
+            ]
+          ),
+          BlockExpr(
+            Undecided, [
+              ResolveStmt(ValI64(34));
+            ]
+          )
+        )
       );
-      DeclDef(
-        "ghi", I64,
-        IfExpr({
-          if_block = {cond = ValI64(50); stmts = [ExprStmt(ValI64(51))]};
-          else_if_blocks = [];
-          else_block = None;
-        })
-      );
-      IfStmt({
-        if_block = {cond = ValI64(40); stmts = [ExprStmt(ValI64(41))]};
-        else_if_blocks = [
-          {cond = ValI64(42); stmts = [ExprStmt(ValI64(43))]};
-        ];
-        else_block = Some([ExprStmt(ValI64(45))])
-      })
     ];
   }
 ;;
@@ -65,9 +77,10 @@ let test_typecheck ast =
   Printf.printf "Expression [";
   print_expr "" ast;
   Printf.printf "] typechecks to: ";
-  match type_check_expr ast with
-  | None -> Printf.printf "<typecheck failed>\n"
-  | Some(t) -> print_berk_type t; Printf.printf "\n"
+  let expr_typechecked = type_check_expr ast in
+  let expr_t = expr_type expr_typechecked in
+  Printf.printf "%s" (fmt_type expr_t);
+  Printf.printf "\n"
 ;;
 
 
@@ -123,38 +136,68 @@ let initialize_fpm the_fpm =
 let main = begin
   print_func_ast build_example_ast;
 
-  test_typecheck (Add(ValI64(5), ValI64(6)));
+  test_typecheck (BinOp(Undecided, Add, ValI32(1), ValI32(2)));
+  test_typecheck (BinOp(Undecided, Add, ValI32(1), ValI64(2)));
+  test_typecheck (BinOp(Undecided, Add, ValI64(1), ValI64(2)));
 
   test_typecheck (
-    IfExpr({
-      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValI32(31))]};
-      else_if_blocks = [
-        {cond = ValBool(true); stmts = [ResolveStmt(ValI64(33))]};
-        {cond = ValBool(true); stmts = [ResolveStmt(ValI32(35))]};
-      ];
-      else_block = Some([ResolveStmt(ValI64(35))])
-    })
+    IfThenElseExpr(
+      Undecided,
+      ValBool(true),
+      BlockExpr(Undecided, []),
+      BlockExpr(Undecided, [])
+    )
   );
 
   test_typecheck (
-    IfExpr({
-      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValI64(31))]};
-      else_if_blocks = [
-        {cond = ValBool(true); stmts = [ResolveStmt(ValBool(true))]};
-        {cond = ValBool(true); stmts = [ResolveStmt(ValI64(35))]};
-      ];
-      else_block = Some([ResolveStmt(ValBool(false))])
-    })
+    IfThenElseExpr(
+      Undecided,
+      ValBool(true),
+      BlockExpr(
+        Undecided, [
+          ResolveStmt(ValI32(11));
+        ]
+      ),
+      BlockExpr(
+        Undecided, [
+          ResolveStmt(ValI64(12));
+        ]
+      )
+    )
   );
 
   test_typecheck (
-    IfExpr({
-      if_block = {cond = ValBool(true); stmts = [ResolveStmt(ValBool(true))]};
-      else_if_blocks = [
-        {cond = ValBool(true); stmts = [ResolveStmt(ValBool(false))]};
-      ];
-      else_block = Some([ResolveStmt(ValBool(false))])
-    })
+    IfThenElseExpr(
+      Undecided,
+      ValBool(false),
+      BlockExpr(
+        Undecided, [
+          DeclDef(
+            "egh", I64,
+            BinOp(
+              Undecided, Add,
+              ValI64(5),
+              BinOp(
+                Undecided, Mul,
+                BinOp(
+                  Undecided, Sub,
+                  ValI64(6),
+                  ValI64(7)
+                ),
+                ValI64 (8)
+              )
+            )
+          );
+          ResolveStmt(ValI64(22));
+        ]
+      ),
+      BlockExpr(
+        Undecided, [
+          DeclDef("ijk", Undecided, ValBool(false));
+          ResolveStmt(ValI64(24));
+        ]
+      )
+    )
   );
 
   begin
@@ -173,9 +216,32 @@ let main = begin
       let bb = Llvm.append_block context "entry" new_func in
       Llvm.position_at_end bb builder ;
 
-      let return_val = codegen_expr context builder (
-        Add(ValI64(5), Mul(Sub(ValI64(10), ValI64(7)), ValI64 (8)))
-      ) in
+      let expr_raw = (
+        BinOp(
+          Undecided, Add,
+          ValI64(5),
+          BinOp(
+            Undecided, Mul,
+            BinOp(
+              Undecided, Sub,
+              ValI64(10),
+              ValI64(7)
+            ),
+            ValI64 (8)
+          )
+        )
+      )
+      in
+        test_typecheck expr_raw;
+        Printf.printf "Expr type: %s\n" (
+          type_check_expr expr_raw |> expr_type |> fmt_type
+        );
+        print_expr "" expr_raw;
+        Printf.printf "\n";
+        print_expr "" (type_check_expr expr_raw);
+        Printf.printf "\n";
+      let expr_typechecked = type_check_expr expr_raw in
+      let return_val = codegen_expr context builder expr_typechecked in
 
       let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
       (* Validate the generated code, checking for consistency. *)
