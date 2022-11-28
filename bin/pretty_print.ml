@@ -31,6 +31,7 @@ let rec print_expr ind ex =
   | ValI32 (value) -> Printf.printf "%d:%s" value (expr_type ex |> fmt_type)
   | ValF32 (value) -> Printf.printf "%f:%s" value (expr_type ex |> fmt_type)
   | ValBool (value) -> Printf.printf "%B:%s" value (expr_type ex |> fmt_type)
+  | ValVar (typ, id) -> Printf.printf "%s:%s" id (fmt_type typ)
   | BinOp (typ, op, lh, rh) ->
       Printf.printf "(";
       print_expr "" lh; print_bin_op op; print_expr "" rh;

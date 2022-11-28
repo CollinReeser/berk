@@ -1,8 +1,13 @@
 open Ast
 open Pretty_print
 open Typing
-open Type_check
+(* open Type_check *)
 
+module StrMap = Map.Make(String)
+
+type codegen_ctxt = {
+  vars: Llvm.llvalue StrMap.t;
+}
 
 let berk_t_to_llvm_t llvm_ctxt typ =
   match typ with
@@ -19,8 +24,9 @@ let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
   let func_sig_t = Llvm.function_type i64_t ints_empty in
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
+  let gen_ctxt = {vars = StrMap.empty} in
   Llvm.position_at_end bb builder ;
-  List.iter (codegen_stmt llvm_ctxt builder) f_stmts ;
+  codegen_stmts llvm_ctxt builder gen_ctxt f_stmts |> ignore ;
 
   (* Validate the generated code, checking for consistency. *)
   let _ = begin
@@ -40,32 +46,45 @@ let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
 
   ()
 
-and codegen_stmt llvm_ctxt builder stmt =
+and codegen_stmts llvm_ctxt builder gen_ctxt stmts =
+  match stmts with
+  | [] -> gen_ctxt
+  | x::xs ->
+      let gen_ctxt_updated = codegen_stmt llvm_ctxt builder gen_ctxt x in
+      codegen_stmts llvm_ctxt builder gen_ctxt_updated xs
+
+and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
   match stmt with
   | DeclStmt (ident, typ, expr) ->
-      Printf.printf "DeclStmt type: [%s]\n%!" (fmt_type typ) ;
+      (* Printf.printf "DeclStmt type: [%s]\n%!" (fmt_type typ) ;
       let expr_typechecked = type_check_expr expr in
       let expr_t = expr_type expr_typechecked in
       Printf.printf "Expr type: [%s]\n%!" (fmt_type expr_t) ;
       print_expr "" expr_typechecked ;
-      Printf.printf "\n%!" ;
+      Printf.printf "\n%!" ; *)
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ ident builder in
-      let expr_val = codegen_expr llvm_ctxt builder expr in
+      let expr_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
-      ()
+
+      let updated_vars = StrMap.add ident alloca gen_ctxt.vars in
+      (* {gen_ctxt with vars = updated_vars} *)
+      {vars = updated_vars}
+
   | ReturnStmt(expr) ->
-      let return_val = codegen_expr llvm_ctxt builder expr in
+      let return_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
-      ()
+
+      gen_ctxt
+
   | _ -> failwith "Unimplemented"
 
-and codegen_expr llvm_ctxt builder expr =
+and codegen_expr llvm_ctxt builder gen_ctxt expr =
   let i64_t = Llvm.i64_type llvm_ctxt in
   let i32_t = Llvm.i32_type llvm_ctxt in
   let f32_t = Llvm.float_type llvm_ctxt in
   let bool_t = Llvm.i8_type llvm_ctxt in
-  let _codegen_expr = codegen_expr llvm_ctxt builder in
+  let _codegen_expr = codegen_expr llvm_ctxt builder gen_ctxt in
 
   match expr with
   | ValI64(n) -> Llvm.const_int i64_t n
@@ -73,6 +92,10 @@ and codegen_expr llvm_ctxt builder expr =
   | ValF32(n) -> Llvm.const_float f32_t n
   | ValBool(false) -> Llvm.const_int bool_t 0
   | ValBool(true)  -> Llvm.const_int bool_t 1
+  | ValVar(_, ident) ->
+      let alloca = StrMap.find ident gen_ctxt.vars in
+      let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in
+      loaded
   | BinOp(typ, op, lhs, rhs) ->
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in

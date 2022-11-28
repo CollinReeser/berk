@@ -1,6 +1,11 @@
 open Typing
 open Ast
 
+module StrMap = Map.Make(String)
+
+type typecheck_ctxt = {
+  vars: berk_t StrMap.t
+}
 
 let get_resolve_type stmts =
   let resolve_expr_types =
@@ -18,13 +23,14 @@ let get_resolve_type stmts =
 ;;
 
 let rec type_check_func {f_name; f_params; f_stmts} =
-  let f_stmts_typechecked = type_check_stmts f_stmts in
+  let tc_ctxt = {vars = StrMap.empty} in
+  let (_, f_stmts_typechecked) = type_check_stmts tc_ctxt f_stmts in
   {f_name = f_name; f_params = f_params; f_stmts = f_stmts_typechecked}
 
-and type_check_stmt stmt =
+and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
   match stmt with
   | DeclStmt(id, decl_t, exp) ->
-      let exp_typechecked = type_check_expr exp in
+      let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
       | Undecided -> exp_t
@@ -33,39 +39,49 @@ and type_check_stmt stmt =
         then decl_t
         else failwith "Explicitly declared type disagrees with expr"
       in
-      DeclStmt(id, resolved_t, exp_typechecked)
-  | ExprStmt(exp) -> ExprStmt(type_check_expr exp)
-  | ResolveStmt(exp) -> ResolveStmt(type_check_expr exp)
-  | ReturnStmt(exp) -> ReturnStmt(type_check_expr exp)
+      let vars_up = StrMap.add id resolved_t tc_ctxt.vars in
+      let tc_ctxt_up = {vars = vars_up} in
+      (tc_ctxt_up, DeclStmt(id, resolved_t, exp_typechecked))
+  | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt exp))
+  | ResolveStmt(exp) -> (tc_ctxt, ResolveStmt(type_check_expr tc_ctxt exp))
+  | ReturnStmt(exp) -> (tc_ctxt, ReturnStmt(type_check_expr tc_ctxt exp))
 
-and type_check_stmts stmts =
-  List.map (fun stmt -> type_check_stmt stmt) stmts
+and type_check_stmts tc_ctxt stmts =
+  match stmts with
+  | [] -> (tc_ctxt, [])
+  | x::xs ->
+      let (tc_ctxt_updated, stmt_tced) = type_check_stmt tc_ctxt x in
+      let (tc_ctxt_final, stmts_tced) = type_check_stmts tc_ctxt_updated xs in
+      (tc_ctxt_final, stmt_tced :: stmts_tced)
 
-and type_check_expr exp =
+and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
   match exp with
   | ValI64(i)  -> ValI64(i)
   | ValI32(i)  -> ValI32(i)
   | ValF32(i)  -> ValF32(i)
   | ValBool(b) -> ValBool(b)
+  | ValVar(_, id) ->
+      let var_t = StrMap.find id tc_ctxt.vars in
+      ValVar(var_t, id)
   | BinOp(_, op, lhs, rhs) ->
-      let lhs_typechecked = type_check_expr lhs in
-      let rhs_typechecked = type_check_expr rhs in
+      let lhs_typechecked = type_check_expr tc_ctxt lhs in
+      let rhs_typechecked = type_check_expr tc_ctxt rhs in
       let lhs_t = expr_type lhs_typechecked in
       let rhs_t = expr_type rhs_typechecked in
       let common_t = common_type_of_lr lhs_t rhs_t in
       BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
   | BlockExpr(_, stmts) ->
-      let stmts_typechecked = type_check_stmts stmts in
+      let (_, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
       let stmts_resolve_t = get_resolve_type stmts_typechecked in
       BlockExpr(stmts_resolve_t, stmts_typechecked)
   | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
-      let if_cond_typechecked = type_check_expr if_cond in
+      let if_cond_typechecked = type_check_expr tc_ctxt if_cond in
       let if_cond_t = expr_type if_cond_typechecked in
 
-      let then_expr_typechecked = type_check_expr then_expr in
+      let then_expr_typechecked = type_check_expr tc_ctxt then_expr in
       let then_expr_t = expr_type then_expr_typechecked in
 
-      let else_expr_typechecked = type_check_expr else_expr in
+      let else_expr_typechecked = type_check_expr tc_ctxt else_expr in
       let else_expr_t = expr_type else_expr_typechecked in
 
       let _ = match if_cond_t with

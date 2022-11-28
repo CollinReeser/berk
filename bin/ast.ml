@@ -17,6 +17,7 @@ and expr =
   | ValI32 of int
   | ValF32 of float
   | ValBool of bool
+  | ValVar of berk_t * ident_t
   | BinOp of berk_t * bin_op * expr * expr
   | BlockExpr of berk_t * stmt list
   | IfThenElseExpr of berk_t * expr * expr * expr
@@ -33,6 +34,7 @@ let expr_type = function
   | ValI32(_) -> I32
   | ValF32(_) -> F32
   | ValBool(_) -> Bool
+  | ValVar(typ, _) -> typ
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ

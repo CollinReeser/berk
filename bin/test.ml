@@ -71,11 +71,11 @@ let build_example_ast =
 ;;
 
 
-let test_typecheck ast =
+let test_typecheck ?(tc_ctxt : typecheck_ctxt = {vars = StrMap.empty}) ast =
   Printf.printf "Expression [";
   print_expr "" ast;
   Printf.printf "] typechecks to: ";
-  let expr_typechecked = type_check_expr ast in
+  let expr_typechecked = type_check_expr tc_ctxt ast in
   let expr_t = expr_type expr_typechecked in
   Printf.printf "%s" (fmt_type expr_t);
   Printf.printf "\n"

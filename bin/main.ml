@@ -20,31 +20,6 @@ let main = begin
     let _ = begin
       initialize_fpm the_fpm |> ignore ;
 
-      let expr_raw = (
-        BinOp(
-          Undecided, Add,
-          ValI64(5),
-          BinOp(
-            Undecided, Mul,
-            BinOp(
-              Undecided, Sub,
-              ValI64(11),
-              ValI64(7)
-            ),
-            ValI64 (8)
-          )
-        )
-      )
-      in
-        test_typecheck expr_raw;
-        Printf.printf "Expr type: %s\n" (
-          type_check_expr expr_raw |> expr_type |> fmt_type
-        );
-        print_expr "" expr_raw;
-        Printf.printf "\n";
-        print_expr "" (type_check_expr expr_raw);
-        Printf.printf "\n";
-
       let decl_stmt_raw = (
         DeclStmt(
           "my_var", Undecided,
@@ -64,6 +39,24 @@ let main = begin
           )
         )
       ) in
+      let expr_raw = (
+        BinOp(
+          Undecided, Add,
+          ValI64(5),
+          ValVar(Undecided, "my_var")
+        )
+      )
+      in
+      let tc_ctxt : typecheck_ctxt = {vars = StrMap.empty} in
+      let (tc_ctxt_up, _) = type_check_stmt tc_ctxt decl_stmt_raw in
+        test_typecheck ~tc_ctxt:tc_ctxt_up expr_raw;
+        Printf.printf "Expr type: %s\n" (
+          type_check_expr tc_ctxt_up expr_raw |> expr_type |> fmt_type
+        );
+        print_expr "" expr_raw;
+        Printf.printf "\n";
+        print_expr "" (type_check_expr tc_ctxt_up expr_raw);
+        Printf.printf "\n";
       let return_stmt_raw = ReturnStmt(expr_raw) in
 
       let func_def = {
