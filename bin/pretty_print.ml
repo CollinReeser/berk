@@ -74,6 +74,10 @@ and print_stmt ind stmt =
       Printf.printf "%sresolve " ind;
       print_expr ind ex;
       Printf.printf ";\n";
+  | ReturnStmt (ex) ->
+      Printf.printf "%sreturn " ind;
+      print_expr ind ex;
+      Printf.printf ";\n";
 ;;
 
 let print_func_ast {f_name; f_params; f_stmts} =

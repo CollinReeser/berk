@@ -25,6 +25,7 @@ and stmt =
   | DeclDef of ident_t * berk_t * expr
   | ExprStmt of expr
   | ResolveStmt of expr
+  | ReturnStmt of expr
 ;;
 
 let expr_type = function

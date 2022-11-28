@@ -33,6 +33,7 @@ let rec type_check_stmt stmt =
       DeclDef(id, resolved_t, exp_typechecked)
   | ExprStmt(exp) -> ExprStmt(type_check_expr exp)
   | ResolveStmt(exp) -> ResolveStmt(type_check_expr exp)
+  | ReturnStmt(exp) -> ReturnStmt(type_check_expr exp)
 
 and type_check_stmts stmts =
   List.map (fun stmt -> type_check_stmt stmt) stmts

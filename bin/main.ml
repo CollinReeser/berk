@@ -33,7 +33,7 @@ let main = begin
             Undecided, Mul,
             BinOp(
               Undecided, Sub,
-              ValI64(10),
+              ValI64(11),
               ValI64(7)
             ),
             ValI64 (8)
@@ -49,10 +49,14 @@ let main = begin
         Printf.printf "\n";
         print_expr "" (type_check_expr expr_raw);
         Printf.printf "\n";
-      let expr_typechecked = type_check_expr expr_raw in
-      let return_val = codegen_expr llvm_ctxt builder expr_typechecked in
 
-      let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
+      let stmt_raw = ReturnStmt(expr_raw) in
+
+      let stmt_typechecked = type_check_stmt stmt_raw in
+      let _ = codegen_stmt llvm_ctxt builder stmt_typechecked in
+      (* let return_val = codegen_expr llvm_ctxt builder expr_typechecked in *)
+
+      (* let _ : Llvm.llvalue = Llvm.build_ret return_val builder in *)
       (* Validate the generated code, checking for consistency. *)
       let _ = begin
         match Llvm_analysis.verify_function new_func with

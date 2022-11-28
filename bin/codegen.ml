@@ -2,7 +2,15 @@ open Ast
 open Pretty_print
 
 
-let rec codegen_expr llvm_ctxt builder expr =
+let rec codegen_stmt llvm_ctxt builder stmt =
+  match stmt with
+  | ReturnStmt(expr) ->
+      let return_val = codegen_expr llvm_ctxt builder expr in
+      let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
+      ()
+  | _ -> failwith "Unimplemented"
+
+and codegen_expr llvm_ctxt builder expr =
   let i64_t = Llvm.i64_type llvm_ctxt in
   let i32_t = Llvm.i32_type llvm_ctxt in
   let f32_t = Llvm.float_type llvm_ctxt in
