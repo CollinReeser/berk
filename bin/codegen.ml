@@ -6,6 +6,7 @@ open Typing
 module StrMap = Map.Make(String)
 
 type codegen_ctxt = {
+  cur_func: Llvm.llvalue;
   vars: Llvm.llvalue StrMap.t;
 }
 
@@ -14,12 +15,13 @@ let berk_t_to_llvm_t llvm_ctxt typ =
   | I64 -> Llvm.i64_type llvm_ctxt
   | I32 -> Llvm.i32_type llvm_ctxt
   | F32 -> Llvm.float_type llvm_ctxt
-  | Bool -> Llvm.i8_type llvm_ctxt
+  | Bool -> Llvm.i1_type llvm_ctxt
   | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
 
-let resolve_alloca_name = "__RESOLVE_ALLOCA"
+let resolve_alloca_name = "___RESOLVE_ALLOCA"
+let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 ;;
 
 
@@ -29,7 +31,7 @@ let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
   let func_sig_t = Llvm.function_type i64_t ints_empty in
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
-  let gen_ctxt = {vars = StrMap.empty} in
+  let gen_ctxt = {cur_func = new_func; vars = StrMap.empty} in
   Llvm.position_at_end bb builder ;
   codegen_stmts llvm_ctxt builder gen_ctxt f_stmts |> ignore ;
 
@@ -74,7 +76,7 @@ and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
 
       let updated_vars = StrMap.add ident alloca gen_ctxt.vars in
       (* let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in *)
-      let gen_ctxt_up = {vars = updated_vars} in
+      let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in
 
       gen_ctxt_up
 
@@ -100,7 +102,7 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
   let i64_t = Llvm.i64_type llvm_ctxt in
   let i32_t = Llvm.i32_type llvm_ctxt in
   let f32_t = Llvm.float_type llvm_ctxt in
-  let bool_t = Llvm.i8_type llvm_ctxt in
+  let bool_t = Llvm.i1_type llvm_ctxt in
   let _codegen_expr = codegen_expr llvm_ctxt builder gen_ctxt in
 
   match expr with
@@ -139,7 +141,7 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ resolve_alloca_name builder in
       let updated_vars = StrMap.add resolve_alloca_name alloca gen_ctxt.vars in
-      let gen_ctxt_up = {vars = updated_vars} in
+      let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in
 
       let _ = codegen_stmts llvm_ctxt builder gen_ctxt_up stmts in
 
@@ -147,7 +149,33 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
 
       loaded
 
-  | IfThenElseExpr(_) -> failwith "not implemented"
+  | IfThenElseExpr(typ, cond_expr, then_expr, else_expr) ->
+      let bb_then = Llvm.append_block llvm_ctxt "if_then" gen_ctxt.cur_func in
+      let bb_else = Llvm.append_block llvm_ctxt "if_else" gen_ctxt.cur_func in
+      let bb_if_end = Llvm.append_block llvm_ctxt "if_end" gen_ctxt.cur_func in
+
+      let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+      let alloca = Llvm.build_alloca alloca_typ if_expr_alloca_name builder in
+
+      let cond_val = _codegen_expr cond_expr in
+
+      let _ = Llvm.build_cond_br cond_val bb_then bb_else builder in
+
+      let _ = Llvm.position_at_end bb_then builder in
+      let then_val = _codegen_expr then_expr in
+      let _ : Llvm.llvalue = Llvm.build_store then_val alloca builder in
+      let _ = Llvm.build_br bb_if_end builder in
+
+      let _ = Llvm.position_at_end bb_else builder in
+      let else_val = _codegen_expr else_expr in
+      let _ : Llvm.llvalue = Llvm.build_store else_val alloca builder in
+      let _ = Llvm.build_br bb_if_end builder in
+
+      let _ = Llvm.position_at_end bb_if_end builder in
+
+      let loaded = Llvm.build_load alloca if_expr_alloca_name builder in
+
+      loaded
 ;;
 
 

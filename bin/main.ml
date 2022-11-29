@@ -30,6 +30,15 @@ let main = begin
                 "my_inner_var_2", Undecided,
                 ValVar(Undecided, "my_inner_var_1")
               );
+              DeclStmt(
+                "my_inner_var_3", Undecided,
+                IfThenElseExpr(
+                  Undecided,
+                  ValBool(true),
+                  ValI64(6),
+                  ValI64(8)
+                )
+              );
               ResolveStmt(
                 BinOp(
                   Undecided, Add,
@@ -42,7 +51,7 @@ let main = begin
                       ValI64(11),
                       ValI32(7)
                     ),
-                    ValI64 (8)
+                    ValVar(Undecided, "my_inner_var_3")
                   )
                 )
               );
