@@ -18,6 +18,11 @@ let berk_t_to_llvm_t llvm_ctxt typ =
   | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
+
+let resolve_alloca_name = "__RESOLVE_ALLOCA"
+;;
+
+
 let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
   let i64_t = Llvm.i64_type llvm_ctxt in
   let ints_empty = Array.make 0 i64_t in
@@ -79,7 +84,17 @@ and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
 
       gen_ctxt
 
-  | _ -> failwith "Unimplemented"
+  | ExprStmt (expr) ->
+      let _ = codegen_expr llvm_ctxt builder gen_ctxt expr in
+
+      gen_ctxt
+
+  | ResolveStmt (expr) ->
+      let expr_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
+      let resolve_alloca = StrMap.find resolve_alloca_name gen_ctxt.vars in
+      let _ : Llvm.llvalue = Llvm.build_store expr_val resolve_alloca builder in
+
+      gen_ctxt
 
 and codegen_expr llvm_ctxt builder gen_ctxt expr =
   let i64_t = Llvm.i64_type llvm_ctxt in
@@ -120,7 +135,18 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
             "Unexpected expression type in BinOp: %s" (fmt_type typ)
         )
       end
-  | BlockExpr(_) -> failwith "not implemented"
+  | BlockExpr(typ, stmts) ->
+      let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+      let alloca = Llvm.build_alloca alloca_typ resolve_alloca_name builder in
+      let updated_vars = StrMap.add resolve_alloca_name alloca gen_ctxt.vars in
+      let gen_ctxt_up = {vars = updated_vars} in
+
+      let _ = codegen_stmts llvm_ctxt builder gen_ctxt_up stmts in
+
+      let loaded = Llvm.build_load alloca resolve_alloca_name builder in
+
+      loaded
+
   | IfThenElseExpr(_) -> failwith "not implemented"
 ;;
 

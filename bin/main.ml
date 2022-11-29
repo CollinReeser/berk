@@ -23,19 +23,30 @@ let main = begin
       let decl_stmt_raw = (
         DeclStmt(
           "my_var", Undecided,
-          BinOp(
-            Undecided, Add,
-            ValI64(5),
-            BinOp(
-              Undecided, Mul,
-              BinOp(
-                Undecided, Sub,
-                (* Note: Reversing these types -> LLVM type-mismatch crash *)
-                ValI64(11),
-                ValI32(7)
-              ),
-              ValI64 (8)
-            )
+          BlockExpr(
+            Undecided, [
+              DeclStmt("my_inner_var_1", Undecided, ValI64(51));
+              DeclStmt(
+                "my_inner_var_2", Undecided,
+                ValVar(Undecided, "my_inner_var_1")
+              );
+              ResolveStmt(
+                BinOp(
+                  Undecided, Add,
+                  ValVar(Undecided, "my_inner_var_2"),
+                  BinOp(
+                    Undecided, Mul,
+                    BinOp(
+                      Undecided, Sub,
+                      (* TODO: Reversing types -> LLVM type-mismatch crash *)
+                      ValI64(11),
+                      ValI32(7)
+                    ),
+                    ValI64 (8)
+                  )
+                )
+              );
+            ]
           )
         )
       ) in
@@ -67,7 +78,10 @@ let main = begin
           return_stmt_raw;
         ];
       } in
+
+      print_func_ast func_def ;
       let func_def_typechecked = type_check_func func_def in
+      print_func_ast func_def_typechecked ;
 
       codegen_func llvm_ctxt the_module the_fpm builder func_def_typechecked ;
 
