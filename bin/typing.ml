@@ -48,45 +48,33 @@ let def_var_qual = {mut = false}
 let rec common_type_of_lr lhs rhs =
   let _common_type_of_lr lhs rhs =
     match (lhs, rhs) with
-    | (I64, I64) -> Some(I64)
-    | (I32, I64) -> Some(I64)
-    | (I16, I64) -> Some(I64)
+    | (I64, I64)
+    | (I32, I64)
+    | (I16, I64)
     | (I8,  I64) -> Some(I64)
-
-    | (I32, I32) -> Some(I32)
-    | (I16, I32) -> Some(I32)
+    | (I32, I32)
+    | (I16, I32)
     | (I8,  I32) -> Some(I32)
-
-    | (I16, I16) -> Some(I16)
+    | (I16, I16)
     | (I8,  I16) -> Some(I16)
-
     | (I8,  I8)  -> Some(I8)
-
-    | (U64, U64) -> Some(U64)
-    | (U32, U64) -> Some(U64)
-    | (U16, U64) -> Some(U64)
+    | (U64, U64)
+    | (U32, U64)
+    | (U16, U64)
     | (U8,  U64) -> Some(U64)
-
-    | (U32, U32) -> Some(U32)
-    | (U16, U32) -> Some(U32)
+    | (U32, U32)
+    | (U16, U32)
     | (U8,  U32) -> Some(U32)
-
-    | (U16, U16) -> Some(U16)
+    | (U16, U16)
     | (U8,  U16) -> Some(U16)
-
     | (U8,  U8)  -> Some(U8)
-
-    | (F128, F128) -> Some(F128)
-    | (F64, F128)  -> Some(F128)
-    | (F32, F128)  -> Some(F128)
-
-    | (F64, F64)   -> Some(F64)
-    | (F32, F64)   -> Some(F64)
-
-    | (F32, F32)   -> Some(F32)
-
+    | (F128, F128)
+    | (F64, F128)
+    | (F32, F128) -> Some(F128)
+    | (F64, F64)
+    | (F32, F64)  -> Some(F64)
+    | (F32, F32)  -> Some(F32)
     | (Bool, Bool) -> Some(Bool)
-
     | (Nil, Nil) -> Some(Nil)
 
     | _ -> None

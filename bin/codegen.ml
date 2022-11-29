@@ -10,15 +10,10 @@ type codegen_ctxt = {
 
 let berk_t_to_llvm_t llvm_ctxt typ =
   match typ with
-  | U64 -> Llvm.i64_type llvm_ctxt
-  | U32 -> Llvm.i32_type llvm_ctxt
-  | U16 -> Llvm.i16_type llvm_ctxt
-  | U8  -> Llvm.i8_type  llvm_ctxt
-
-  | I64 -> Llvm.i64_type llvm_ctxt
-  | I32 -> Llvm.i32_type llvm_ctxt
-  | I16 -> Llvm.i16_type llvm_ctxt
-  | I8  -> Llvm.i8_type  llvm_ctxt
+  | U64 | I64 -> Llvm.i64_type llvm_ctxt
+  | U32 | I32 -> Llvm.i32_type llvm_ctxt
+  | U16 | I16 -> Llvm.i16_type llvm_ctxt
+  | U8  | I8  -> Llvm.i8_type  llvm_ctxt
 
   | F128 -> Llvm.fp128_type  llvm_ctxt
   | F64  -> Llvm.double_type llvm_ctxt
@@ -115,22 +110,20 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
   let i32_t = Llvm.i32_type llvm_ctxt in
   let i16_t = Llvm.i16_type llvm_ctxt in
   let i8_t  = Llvm.i8_type  llvm_ctxt in
-  let bool_t = Llvm.i1_type llvm_ctxt in
+
   let f128_t = Llvm.fp128_type  llvm_ctxt in
   let f64_t  = Llvm.double_type llvm_ctxt in
   let f32_t  = Llvm.float_type  llvm_ctxt in
 
+  let bool_t = Llvm.i1_type llvm_ctxt in
+
   let _codegen_expr = codegen_expr llvm_ctxt builder gen_ctxt in
 
   match expr with
-  | ValU64(n) -> Llvm.const_int i64_t n
-  | ValI64(n) -> Llvm.const_int i64_t n
-  | ValU32(n) -> Llvm.const_int i32_t n
-  | ValI32(n) -> Llvm.const_int i32_t n
-  | ValU16(n) -> Llvm.const_int i16_t n
-  | ValI16(n) -> Llvm.const_int i16_t n
-  | ValU8(n)  -> Llvm.const_int  i8_t n
-  | ValI8(n)  -> Llvm.const_int  i8_t n
+  | ValU64(n) | ValI64(n) -> Llvm.const_int i64_t n
+  | ValU32(n) | ValI32(n) -> Llvm.const_int i32_t n
+  | ValU16(n) | ValI16(n) -> Llvm.const_int i16_t n
+  | ValU8(n)  | ValI8(n)  -> Llvm.const_int  i8_t n
   | ValBool(false) -> Llvm.const_int bool_t 0
   | ValBool(true)  -> Llvm.const_int bool_t 1
   | ValF128(str) -> Llvm.const_float_of_string f128_t str
