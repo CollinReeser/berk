@@ -53,9 +53,8 @@ let main = begin
                     Undecided, Mul,
                     BinOp(
                       Undecided, Sub,
-                      (* TODO: Reversing types -> LLVM type-mismatch crash *)
-                      ValI64(11),
-                      ValI32(7)
+                      ValI32(11),
+                      ValI64(7)
                     ),
                     ValVar(Undecided, "my_inner_var_3")
                   )

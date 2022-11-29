@@ -1,7 +1,5 @@
 open Ast
-open Pretty_print
 open Typing
-(* open Type_check *)
 
 module StrMap = Map.Make(String)
 
@@ -120,18 +118,21 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
   | BinOp(typ, op, lhs, rhs) ->
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in
+      let llvm_t = berk_t_to_llvm_t llvm_ctxt typ in
+      let lhs_common = Llvm.build_intcast lhs_val llvm_t "casttmp" builder in
+      let rhs_common = Llvm.build_intcast rhs_val llvm_t "casttmp" builder in
       begin match typ with
       | I64 | I32 ->
           begin match op with
-          | Add -> Llvm.build_add lhs_val rhs_val "addtmp" builder
-          | Sub -> Llvm.build_sub lhs_val rhs_val "addtmp" builder
-          | Mul -> Llvm.build_mul lhs_val rhs_val "addtmp" builder
+          | Add -> Llvm.build_add lhs_common rhs_common "addtmp" builder
+          | Sub -> Llvm.build_sub lhs_common rhs_common "subtmp" builder
+          | Mul -> Llvm.build_mul lhs_common rhs_common "multmp" builder
           end
       | F32 ->
           begin match op with
-          | Add -> Llvm.build_fadd lhs_val rhs_val "addtmp" builder
-          | Sub -> Llvm.build_fsub lhs_val rhs_val "addtmp" builder
-          | Mul -> Llvm.build_fmul lhs_val rhs_val "addtmp" builder
+          | Add -> Llvm.build_fadd lhs_common rhs_common "addtmp" builder
+          | Sub -> Llvm.build_fsub lhs_common rhs_common "subtmp" builder
+          | Mul -> Llvm.build_fmul lhs_common rhs_common "multmp" builder
           end
       | typ ->
         failwith (

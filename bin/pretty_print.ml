@@ -2,22 +2,6 @@ open Ast
 open Typing
 
 
-let fmt_type berk_type =
-  match berk_type with
-  | I64 -> "i64"
-  | I32 -> "i32"
-  | F32 -> "f32"
-  | Bool -> "bool"
-  | Nil -> "()"
-  | Undecided -> "<?undecided?>"
-;;
-
-
-let fmt_var_qual {mut} =
-  if mut then "mut " else ""
-;;
-
-
 let print_func_param (p_name, p_qual, p_type) =
   Printf.printf "%s%s: " (fmt_var_qual p_qual) p_name;
   Printf.printf "%s" (fmt_type p_type)
