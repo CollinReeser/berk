@@ -24,16 +24,24 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
     else ("", "")
   in
   match ex with
-  | ValI64 (value) ->
-      Printf.printf "%s%d%s" init_ind value typ_s
-  | ValI32 (value) ->
-      Printf.printf "%s%d%s" init_ind value typ_s
-  | ValF32 (value) ->
-      Printf.printf "%s%f%s" init_ind value typ_s
-  | ValBool (value) ->
-      Printf.printf "%s%B%s" init_ind value typ_s
-  | ValVar (_, id) ->
-      Printf.printf "%s%s%s" init_ind id typ_s
+  | ValU64 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValU32 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValU16 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValU8  (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+
+  | ValI64 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValI32 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValI16 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValI8  (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+
+  | ValF128 (str)   -> Printf.printf "%s%s%s" init_ind str   typ_s
+  | ValF64  (value) -> Printf.printf "%s%f%s" init_ind value typ_s
+  | ValF32  (value) -> Printf.printf "%s%f%s" init_ind value typ_s
+
+  | ValBool (value) -> Printf.printf "%s%B%s" init_ind value typ_s
+
+  | ValVar (_, id) -> Printf.printf "%s%s%s" init_ind id typ_s
+
   | BinOp (_, op, lh, rh) ->
       Printf.printf "%s(" init_ind;
       print_expr ~print_typ:print_typ "" lh;

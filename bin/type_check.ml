@@ -66,9 +66,17 @@ and type_check_stmts tc_ctxt stmts =
 
 and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
   match exp with
-  | ValI64(i)  -> ValI64(i)
-  | ValI32(i)  -> ValI32(i)
-  | ValF32(i)  -> ValF32(i)
+  | ValU64(i) -> ValU64(i)
+  | ValU32(i) -> ValU32(i)
+  | ValU16(i) -> ValU16(i)
+  | ValU8(i)  -> ValU8(i)
+  | ValI64(i) -> ValI64(i)
+  | ValI32(i) -> ValI32(i)
+  | ValI16(i) -> ValI16(i)
+  | ValI8(i)  -> ValI8(i)
+  | ValF128(str) -> ValF128(str)
+  | ValF64(f)    -> ValF64(f)
+  | ValF32(f)    -> ValF32(f)
   | ValBool(b) -> ValBool(b)
   | ValVar(_, id) ->
       let (var_t, _) = StrMap.find id tc_ctxt.vars in

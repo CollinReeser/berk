@@ -64,6 +64,24 @@ let main = begin
           )
         )
       ) in
+      let decl_stmt_float_raw = (
+        DeclStmt(
+          "my_float_var", def_var_qual, Undecided,
+          BinOp(
+            Undecided, Add,
+            ValF32(123.456),
+            BinOp(
+              Undecided, Mul,
+              BinOp(
+                Undecided, Sub,
+                ValF128("12345.6789"),
+                ValF64(2345.6789)
+              ),
+              ValF64(1234.5678)
+            )
+          )
+        )
+      ) in
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -89,6 +107,7 @@ let main = begin
         f_params = [];
         f_stmts = [
           decl_stmt_raw;
+          decl_stmt_float_raw;
           return_stmt_raw;
         ];
       } in

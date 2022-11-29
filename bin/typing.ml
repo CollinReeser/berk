@@ -1,7 +1,15 @@
 
 type berk_t =
+  | U64
+  | U32
+  | U16
+  | U8
   | I64
   | I32
+  | I16
+  | I8
+  | F128
+  | F64
   | F32
   | Bool
   | Nil
@@ -9,9 +17,17 @@ type berk_t =
 
 let fmt_type berk_type =
   match berk_type with
+  | U64 -> "u64"
+  | U32 -> "u32"
+  | U16 -> "u16"
+  | U8  -> "u8"
   | I64 -> "i64"
   | I32 -> "i32"
-  | F32 -> "f32"
+  | I16 -> "i16"
+  | I8  -> "i8"
+  | F128 -> "f128"
+  | F64  -> "f64"
+  | F32  -> "f32"
   | Bool -> "bool"
   | Nil -> "()"
   | Undecided -> "<?undecided?>"
@@ -30,15 +46,57 @@ let fmt_var_qual {mut} =
 let def_var_qual = {mut = false}
 
 let rec common_type_of_lr lhs rhs =
-  match (lhs, rhs) with
-  | (I64, I64) -> I64
-  | (I32, I64) -> I64
-  | (I64, I32) -> I64
-  | (I32, I32) -> I32
-  | (F32, F32) -> F32
-  | (Bool, Bool) -> Bool
-  | (Nil, Nil) -> Nil
-  | _ -> failwith "No common type"
+  let _common_type_of_lr lhs rhs =
+    match (lhs, rhs) with
+    | (I64, I64) -> Some(I64)
+    | (I32, I64) -> Some(I64)
+    | (I16, I64) -> Some(I64)
+    | (I8,  I64) -> Some(I64)
+
+    | (I32, I32) -> Some(I32)
+    | (I16, I32) -> Some(I32)
+    | (I8,  I32) -> Some(I32)
+
+    | (I16, I16) -> Some(I16)
+    | (I8,  I16) -> Some(I16)
+
+    | (I8,  I8)  -> Some(I8)
+
+    | (U64, U64) -> Some(U64)
+    | (U32, U64) -> Some(U64)
+    | (U16, U64) -> Some(U64)
+    | (U8,  U64) -> Some(U64)
+
+    | (U32, U32) -> Some(U32)
+    | (U16, U32) -> Some(U32)
+    | (U8,  U32) -> Some(U32)
+
+    | (U16, U16) -> Some(U16)
+    | (U8,  U16) -> Some(U16)
+
+    | (U8,  U8)  -> Some(U8)
+
+    | (F128, F128) -> Some(F128)
+    | (F64, F128)  -> Some(F128)
+    | (F32, F128)  -> Some(F128)
+
+    | (F64, F64)   -> Some(F64)
+    | (F32, F64)   -> Some(F64)
+
+    | (F32, F32)   -> Some(F32)
+
+    | (Bool, Bool) -> Some(Bool)
+
+    | (Nil, Nil) -> Some(Nil)
+
+    | _ -> None
+  in
+  match _common_type_of_lr lhs rhs with
+  | Some(t) -> t
+  | None ->
+    match _common_type_of_lr rhs lhs with
+    | Some(t) -> t
+    | None -> failwith "No common type"
 
 and common_type_of_lst lst =
   match lst with

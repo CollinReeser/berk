@@ -13,8 +13,16 @@ and bin_op =
   | Mul
 
 and expr =
+  | ValU64 of int
+  | ValU32 of int
+  | ValU16 of int
+  | ValU8  of int
   | ValI64 of int
   | ValI32 of int
+  | ValI16 of int
+  | ValI8  of int
+  | ValF128 of string
+  | ValF64 of float
   | ValF32 of float
   | ValBool of bool
   | ValVar of berk_t * ident_t
@@ -31,9 +39,17 @@ and stmt =
 ;;
 
 let expr_type = function
+  | ValU64(_) -> U64
+  | ValU32(_) -> U32
+  | ValU16(_) -> U16
+  | ValU8(_)  -> U8
   | ValI64(_) -> I64
   | ValI32(_) -> I32
-  | ValF32(_) -> F32
+  | ValI16(_) -> I16
+  | ValI8(_)  -> I8
+  | ValF128(_) -> F128
+  | ValF64(_)  -> F64
+  | ValF32(_)  -> F32
   | ValBool(_) -> Bool
   | ValVar(typ, _) -> typ
   | BinOp(typ, _, _, _) -> typ

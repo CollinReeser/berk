@@ -10,10 +10,22 @@ type codegen_ctxt = {
 
 let berk_t_to_llvm_t llvm_ctxt typ =
   match typ with
+  | U64 -> Llvm.i64_type llvm_ctxt
+  | U32 -> Llvm.i32_type llvm_ctxt
+  | U16 -> Llvm.i16_type llvm_ctxt
+  | U8  -> Llvm.i8_type  llvm_ctxt
+
   | I64 -> Llvm.i64_type llvm_ctxt
   | I32 -> Llvm.i32_type llvm_ctxt
-  | F32 -> Llvm.float_type llvm_ctxt
+  | I16 -> Llvm.i16_type llvm_ctxt
+  | I8  -> Llvm.i8_type  llvm_ctxt
+
+  | F128 -> Llvm.fp128_type  llvm_ctxt
+  | F64  -> Llvm.double_type llvm_ctxt
+  | F32  -> Llvm.float_type  llvm_ctxt
+
   | Bool -> Llvm.i1_type llvm_ctxt
+
   | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
@@ -101,16 +113,29 @@ and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
 and codegen_expr llvm_ctxt builder gen_ctxt expr =
   let i64_t = Llvm.i64_type llvm_ctxt in
   let i32_t = Llvm.i32_type llvm_ctxt in
-  let f32_t = Llvm.float_type llvm_ctxt in
+  let i16_t = Llvm.i16_type llvm_ctxt in
+  let i8_t  = Llvm.i8_type  llvm_ctxt in
   let bool_t = Llvm.i1_type llvm_ctxt in
+  let f128_t = Llvm.fp128_type  llvm_ctxt in
+  let f64_t  = Llvm.double_type llvm_ctxt in
+  let f32_t  = Llvm.float_type  llvm_ctxt in
+
   let _codegen_expr = codegen_expr llvm_ctxt builder gen_ctxt in
 
   match expr with
+  | ValU64(n) -> Llvm.const_int i64_t n
   | ValI64(n) -> Llvm.const_int i64_t n
+  | ValU32(n) -> Llvm.const_int i32_t n
   | ValI32(n) -> Llvm.const_int i32_t n
-  | ValF32(n) -> Llvm.const_float f32_t n
+  | ValU16(n) -> Llvm.const_int i16_t n
+  | ValI16(n) -> Llvm.const_int i16_t n
+  | ValU8(n)  -> Llvm.const_int  i8_t n
+  | ValI8(n)  -> Llvm.const_int  i8_t n
   | ValBool(false) -> Llvm.const_int bool_t 0
   | ValBool(true)  -> Llvm.const_int bool_t 1
+  | ValF128(str) -> Llvm.const_float_of_string f128_t str
+  | ValF64(n)  -> Llvm.const_float f64_t  n
+  | ValF32(n)  -> Llvm.const_float f32_t  n
   | ValVar(_, ident) ->
       let alloca = StrMap.find ident gen_ctxt.vars in
       let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in
@@ -119,20 +144,30 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in
       let llvm_t = berk_t_to_llvm_t llvm_ctxt typ in
-      let lhs_common = Llvm.build_intcast lhs_val llvm_t "casttmp" builder in
-      let rhs_common = Llvm.build_intcast rhs_val llvm_t "casttmp" builder in
       begin match typ with
-      | I64 | I32 ->
+      | U64 | U32 | U16 | U8 ->
+          let lhs_comm = Llvm.build_intcast lhs_val llvm_t "ucasttmp" builder in
+          let rhs_comm = Llvm.build_intcast rhs_val llvm_t "ucasttmp" builder in
           begin match op with
-          | Add -> Llvm.build_add lhs_common rhs_common "addtmp" builder
-          | Sub -> Llvm.build_sub lhs_common rhs_common "subtmp" builder
-          | Mul -> Llvm.build_mul lhs_common rhs_common "multmp" builder
+          | Add -> Llvm.build_add lhs_comm rhs_comm "uaddtmp" builder
+          | Sub -> Llvm.build_sub lhs_comm rhs_comm "usubtmp" builder
+          | Mul -> Llvm.build_mul lhs_comm rhs_comm "umultmp" builder
           end
-      | F32 ->
+      | I64 | I32 | I16 | I8 ->
+          let lhs_comm = Llvm.build_intcast lhs_val llvm_t "icasttmp" builder in
+          let rhs_comm = Llvm.build_intcast rhs_val llvm_t "icasttmp" builder in
           begin match op with
-          | Add -> Llvm.build_fadd lhs_common rhs_common "addtmp" builder
-          | Sub -> Llvm.build_fsub lhs_common rhs_common "subtmp" builder
-          | Mul -> Llvm.build_fmul lhs_common rhs_common "multmp" builder
+          | Add -> Llvm.build_add lhs_comm rhs_comm "iaddtmp" builder
+          | Sub -> Llvm.build_sub lhs_comm rhs_comm "isubtmp" builder
+          | Mul -> Llvm.build_mul lhs_comm rhs_comm "imultmp" builder
+          end
+      | F128 | F64 | F32 ->
+          let lhs_comm = Llvm.build_fpcast lhs_val llvm_t "fcasttmp" builder in
+          let rhs_comm = Llvm.build_fpcast rhs_val llvm_t "fcasttmp" builder in
+          begin match op with
+          | Add -> Llvm.build_fadd lhs_comm rhs_comm "faddtmp" builder
+          | Sub -> Llvm.build_fsub lhs_comm rhs_comm "fsubtmp" builder
+          | Mul -> Llvm.build_fmul lhs_comm rhs_comm "fmultmp" builder
           end
       | typ ->
         failwith (
