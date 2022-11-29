@@ -22,16 +22,16 @@ let main = begin
 
       let decl_stmt_raw = (
         DeclStmt(
-          "my_var", Undecided,
+          "my_var", def_var_qual, Undecided,
           BlockExpr(
             Undecided, [
-              DeclStmt("my_inner_var_1", Undecided, ValI64(51));
+              DeclStmt("my_inner_var_1", def_var_qual, Undecided, ValI64(51));
               DeclStmt(
-                "my_inner_var_2", Undecided,
+                "my_inner_var_2", {mut = true}, Undecided,
                 ValVar(Undecided, "my_inner_var_1")
               );
               DeclStmt(
-                "my_inner_var_3", Undecided,
+                "my_inner_var_3", def_var_qual, Undecided,
                 IfThenElseExpr(
                   Undecided,
                   ValBool(false),
@@ -44,6 +44,7 @@ let main = begin
                   )
                 )
               );
+              AssignStmt("my_inner_var_2", ValVar(Undecided, "my_inner_var_3"));
               ResolveStmt(
                 BinOp(
                   Undecided, Add,

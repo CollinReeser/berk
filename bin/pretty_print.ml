@@ -13,8 +13,13 @@ let fmt_type berk_type =
 ;;
 
 
-let print_func_param {p_name; p_type} =
-  Printf.printf "%s: " p_name;
+let fmt_var_qual {mut} =
+  if mut then "mut " else ""
+;;
+
+
+let print_func_param (p_name, p_qual, p_type) =
+  Printf.printf "%s%s: " (fmt_var_qual p_qual) p_name;
   Printf.printf "%s" (fmt_type p_type)
 ;;
 
@@ -66,17 +71,22 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
 
 and print_stmt ?(print_typ = false) ind stmt =
   match stmt with
-  | DeclStmt (ident, btype, ex) -> (
+  | DeclStmt (ident, qual, btype, ex) -> (
     let typ_s = match btype with
       | Undecided -> ""
       | x -> fmt_type x |> Printf.sprintf ": %s"
     in
-    Printf.printf "%slet %s" ind ident;
+    Printf.printf "%slet %s%s" ind (fmt_var_qual qual) ident;
     Printf.printf "%s" typ_s;
     Printf.printf " = ";
     print_expr ~print_typ:print_typ ind ex;
     Printf.printf ";\n"
   )
+  | AssignStmt (ident, ex) ->
+      Printf.printf "%s%s" ind ident;
+      Printf.printf " = ";
+      print_expr ~print_typ:print_typ ind ex;
+      Printf.printf ";\n"
   | ExprStmt (ex) ->
       Printf.printf "%s" ind;
       print_expr ~print_typ:print_typ ind ex;

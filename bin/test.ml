@@ -1,24 +1,19 @@
 open Ast
 open Pretty_print
 open Type_check
+open Typing
 
 
 let build_example_ast =
   {
     f_name = "example_func";
     f_params = [
-      {
-        p_name = "arg_1";
-        p_type = I64;
-      };
-      {
-        p_name = "arg_2";
-        p_type = I64;
-      }
+      ("arg_1", def_var_qual, I64);
+      ("arg_2", def_var_qual, I64);
     ];
     f_stmts = [
       DeclStmt(
-        "abc", Undecided,
+        "abc", def_var_qual, Undecided,
         BinOp(
           Undecided, Add,
           ValI32(5),
@@ -50,7 +45,7 @@ let build_example_ast =
         )
       );
       DeclStmt(
-        "def", I64,
+        "def", def_var_qual, I64,
         IfThenElseExpr(
           Undecided,
           ValBool(false),
@@ -122,7 +117,7 @@ let test_suite =
       BlockExpr(
         Undecided, [
           DeclStmt(
-            "egh", I64,
+            "egh", def_var_qual, I64,
             BinOp(
               Undecided, Add,
               ValI64(5),
@@ -142,7 +137,7 @@ let test_suite =
       ),
       BlockExpr(
         Undecided, [
-          DeclStmt("ijk", Undecided, ValBool(false));
+          DeclStmt("ijk", def_var_qual, Undecided, ValBool(false));
           ResolveStmt(ValI64(24));
         ]
       )

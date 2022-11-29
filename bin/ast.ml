@@ -23,7 +23,8 @@ and expr =
   | IfThenElseExpr of berk_t * expr * expr * expr
 
 and stmt =
-  | DeclStmt of ident_t * berk_t * expr
+  | DeclStmt of ident_t * var_qual * berk_t * expr
+  | AssignStmt of ident_t * expr
   | ExprStmt of expr
   | ResolveStmt of expr
   | ReturnStmt of expr
@@ -41,13 +42,8 @@ let expr_type = function
 ;;
 
 
-type func_param = {
-  p_name: string;
-  p_type: berk_t;
-}
-
 type func_ast = {
   f_name: string;
-  f_params: func_param list;
+  f_params: (ident_t * var_qual * berk_t) list;
   f_stmts: stmt list;
 }

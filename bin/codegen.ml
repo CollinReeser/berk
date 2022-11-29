@@ -60,25 +60,26 @@ and codegen_stmts llvm_ctxt builder gen_ctxt stmts =
       let gen_ctxt_updated = codegen_stmt llvm_ctxt builder gen_ctxt x in
       codegen_stmts llvm_ctxt builder gen_ctxt_updated xs
 
+
 and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
   match stmt with
-  | DeclStmt (ident, typ, expr) ->
-      (* Printf.printf "DeclStmt type: [%s]\n%!" (fmt_type typ) ;
-      let expr_typechecked = type_check_expr expr in
-      let expr_t = expr_type expr_typechecked in
-      Printf.printf "Expr type: [%s]\n%!" (fmt_type expr_t) ;
-      print_expr "" expr_typechecked ;
-      Printf.printf "\n%!" ; *)
+  | DeclStmt (ident, _, typ, expr) ->
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ ident builder in
       let expr_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
       let updated_vars = StrMap.add ident alloca gen_ctxt.vars in
-      (* let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in *)
       let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in
 
       gen_ctxt_up
+
+  | AssignStmt (ident, expr) ->
+      let alloca = StrMap.find ident gen_ctxt.vars in
+      let expr_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
+      let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
+
+      gen_ctxt
 
   | ReturnStmt(expr) ->
       let return_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
@@ -97,6 +98,7 @@ and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
       let _ : Llvm.llvalue = Llvm.build_store expr_val resolve_alloca builder in
 
       gen_ctxt
+
 
 and codegen_expr llvm_ctxt builder gen_ctxt expr =
   let i64_t = Llvm.i64_type llvm_ctxt in

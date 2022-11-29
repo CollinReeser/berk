@@ -4,7 +4,7 @@ open Ast
 module StrMap = Map.Make(String)
 
 type typecheck_ctxt = {
-  vars: berk_t StrMap.t
+  vars: (berk_t * var_qual) StrMap.t
 }
 
 let get_resolve_type stmts =
@@ -29,7 +29,7 @@ let rec type_check_func {f_name; f_params; f_stmts} =
 
 and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
   match stmt with
-  | DeclStmt(id, decl_t, exp) ->
+  | DeclStmt(id, qual, decl_t, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
@@ -39,9 +39,19 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
         then decl_t
         else failwith "Explicitly declared type disagrees with expr"
       in
-      let vars_up = StrMap.add id resolved_t tc_ctxt.vars in
+      let vars_up = StrMap.add id (resolved_t, qual) tc_ctxt.vars in
       let tc_ctxt_up = {vars = vars_up} in
-      (tc_ctxt_up, DeclStmt(id, resolved_t, exp_typechecked))
+      (tc_ctxt_up, DeclStmt(id, qual, resolved_t, exp_typechecked))
+  | AssignStmt(id, exp) ->
+      let (var_t, {mut}) = StrMap.find id tc_ctxt.vars in
+      let _ = if mut then () else failwith "Cannot assign to immutable var" in
+      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_t = expr_type exp_typechecked in
+
+      if type_convertible_to exp_t var_t
+        then (tc_ctxt, AssignStmt(id, exp_typechecked))
+        else failwith "Expr for assignment does not typecheck"
+
   | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt exp))
   | ResolveStmt(exp) -> (tc_ctxt, ResolveStmt(type_check_expr tc_ctxt exp))
   | ReturnStmt(exp) -> (tc_ctxt, ReturnStmt(type_check_expr tc_ctxt exp))
@@ -61,7 +71,7 @@ and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
   | ValF32(i)  -> ValF32(i)
   | ValBool(b) -> ValBool(b)
   | ValVar(_, id) ->
-      let var_t = StrMap.find id tc_ctxt.vars in
+      let (var_t, _) = StrMap.find id tc_ctxt.vars in
       ValVar(var_t, id)
   | BinOp(_, op, lhs, rhs) ->
       let lhs_typechecked = type_check_expr tc_ctxt lhs in

@@ -7,6 +7,12 @@ type berk_t =
   | Nil
   | Undecided
 
+type var_qual = {
+  mut: bool;
+}
+
+let def_var_qual = {mut = false}
+
 let rec common_type_of_lr lhs rhs =
   match (lhs, rhs) with
   | (I64, I64) -> I64
