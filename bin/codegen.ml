@@ -191,7 +191,11 @@ let initialize_fpm the_fpm =
   Llvm_scalar_opts.add_gvn the_fpm ;
   (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
   Llvm_scalar_opts.add_cfg_simplification the_fpm ;
+  (* Promote allocas to registers again; this second round can remove more
+  redundant code. *)
+  Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
   *)
+
   (* Return value here only indicates whether internal state was modified *)
   Llvm.PassManager.initialize the_fpm
 ;;

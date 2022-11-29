@@ -34,9 +34,14 @@ let main = begin
                 "my_inner_var_3", Undecided,
                 IfThenElseExpr(
                   Undecided,
-                  ValBool(true),
+                  ValBool(false),
                   ValI64(6),
-                  ValI64(8)
+                  IfThenElseExpr(
+                    Undecided,
+                    ValBool(true),
+                    ValI64(8),
+                    ValI64(9)
+                  )
                 )
               );
               ResolveStmt(
