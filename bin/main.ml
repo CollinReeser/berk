@@ -39,8 +39,8 @@ let main = begin
                   IfThenElseExpr(
                     Undecided,
                     ValBool(true),
-                    ValI64(8),
-                    ValI64(9)
+                    BlockExpr(Undecided, [ResolveStmt(ValI64(9))]),
+                    ValI64(8)
                   )
                 )
               );
@@ -96,6 +96,7 @@ let main = begin
       print_func_ast func_def ;
       let func_def_typechecked = type_check_func func_def in
       print_func_ast func_def_typechecked ;
+      print_func_ast ~print_typ:true func_def_typechecked ;
 
       codegen_func llvm_ctxt the_module the_fpm builder func_def_typechecked ;
 
