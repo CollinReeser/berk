@@ -117,6 +117,7 @@ let main = begin
 
       let func_def = {
         f_name = "main";
+        f_ret_t = Undecided;
         f_params = [];
         f_stmts = [
           decl_stmt_raw;

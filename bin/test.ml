@@ -7,6 +7,7 @@ open Typing
 let build_example_ast =
   {
     f_name = "example_func";
+    f_ret_t = Undecided;
     f_params = [
       ("arg_1", def_var_qual, I64);
       ("arg_2", def_var_qual, I64);

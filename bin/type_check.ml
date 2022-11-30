@@ -22,10 +22,11 @@ let get_resolve_type stmts =
   | x::xs -> List.fold_left (fun x y -> common_type_of_lr x y) x xs
 ;;
 
-let rec type_check_func {f_name; f_params; f_stmts} =
+let rec type_check_func func_def =
+  let {f_stmts; _} = func_def in
   let tc_ctxt = {vars = StrMap.empty} in
   let (_, f_stmts_typechecked) = type_check_stmts tc_ctxt f_stmts in
-  {f_name = f_name; f_params = f_params; f_stmts = f_stmts_typechecked}
+  {func_def with f_stmts = f_stmts_typechecked}
 
 and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
   match stmt with

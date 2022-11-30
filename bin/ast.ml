@@ -70,4 +70,5 @@ type func_ast = {
   f_name: string;
   f_params: (ident_t * var_qual * berk_t) list;
   f_stmts: stmt list;
+  f_ret_t: berk_t;
 }

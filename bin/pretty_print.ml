@@ -101,10 +101,18 @@ and print_stmt ?(print_typ = false) ind stmt =
       Printf.printf ";\n";
 ;;
 
-let print_func_ast ?(print_typ = false) {f_name; f_params; f_stmts} =
+let print_func_ast ?(print_typ = false) {f_name; f_params; f_stmts; f_ret_t;} =
+  let ret_t_s = begin match f_ret_t with
+    | Nil
+    | Undecided ->
+        if print_typ
+        then Printf.sprintf ": %s" (fmt_type f_ret_t)
+        else ""
+    | _ -> Printf.sprintf ": %s" (fmt_type f_ret_t)
+  end in
   Printf.printf "fn %s(" f_name;
   List.iter print_func_param f_params;
-  Printf.printf ") {\n";
+  Printf.printf ")%s {\n" ret_t_s;
   List.iter (print_stmt ~print_typ:print_typ "  ") f_stmts;
   Printf.printf "}\n"
 ;;
