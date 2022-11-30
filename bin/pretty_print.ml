@@ -50,6 +50,14 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
 
   | ValVar (_, id) -> Printf.printf "%s%s%s" init_ind id typ_s
 
+  | ValCastTrunc (target_t, exp) ->
+    begin
+      let target_t_s = fmt_type target_t in
+      Printf.printf "cast_trunc<%s>(" target_t_s;
+      print_expr ~print_typ:print_typ "" exp;
+      Printf.printf ")"
+    end
+
   | BinOp (_, op, lh, rh) ->
       Printf.printf "%s(" init_ind;
       print_expr ~print_typ:print_typ "" lh;

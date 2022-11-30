@@ -103,7 +103,7 @@ let main = begin
         )
       )
       in
-      let tc_ctxt : typecheck_ctxt = {vars = StrMap.empty} in
+      let tc_ctxt : typecheck_ctxt = default_tc_ctxt Undecided in
       let (tc_ctxt_up, _) = type_check_stmt tc_ctxt decl_stmt_raw in
         test_typecheck ~tc_ctxt:tc_ctxt_up expr_raw;
         Printf.printf "Expr type: %s\n" (
@@ -113,11 +113,11 @@ let main = begin
         Printf.printf "\n";
         print_expr "" (type_check_expr tc_ctxt_up expr_raw);
         Printf.printf "\n";
-      let return_stmt_raw = ReturnStmt(expr_raw) in
+      let return_stmt_raw = ReturnStmt(ValCastTrunc(I8, expr_raw)) in
 
       let func_def = {
         f_name = "main";
-        f_ret_t = Undecided;
+        f_ret_t = I8;
         f_params = [];
         f_stmts = [
           decl_stmt_raw;

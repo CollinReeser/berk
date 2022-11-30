@@ -4,8 +4,11 @@ open Ast
 module StrMap = Map.Make(String)
 
 type typecheck_ctxt = {
-  vars: (berk_t * var_qual) StrMap.t
+  vars: (berk_t * var_qual) StrMap.t;
+  ret_t: berk_t;
 }
+
+let default_tc_ctxt typ = {vars = StrMap.empty; ret_t = typ}
 
 let get_resolve_type stmts =
   let resolve_expr_types =
@@ -22,10 +25,23 @@ let get_resolve_type stmts =
   | x::xs -> List.fold_left (fun x y -> common_type_of_lr x y) x xs
 ;;
 
+let populate_ctxt_with_params f_params base_vars =
+  let add_param vars (id, qual, typ) = begin
+    StrMap.add id (typ, qual) vars
+  end in
+  let added_vars = List.fold_left add_param base_vars f_params in
+  added_vars
+
+
 let rec type_check_func func_def =
-  let {f_stmts; _} = func_def in
-  let tc_ctxt = {vars = StrMap.empty} in
-  let (_, f_stmts_typechecked) = type_check_stmts tc_ctxt f_stmts in
+  let {f_stmts; f_params; f_ret_t; _} = func_def in
+  let tc_ctxt_base = default_tc_ctxt f_ret_t in
+  let vars_base = tc_ctxt_base.vars in
+  let vars_init = populate_ctxt_with_params f_params vars_base in
+  let tc_ctxt_init = {tc_ctxt_base with vars = vars_init} in
+
+  let (_, f_stmts_typechecked) = type_check_stmts tc_ctxt_init f_stmts in
+
   {func_def with f_stmts = f_stmts_typechecked}
 
 and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
@@ -41,7 +57,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
         else failwith "Explicitly declared type disagrees with expr"
       in
       let vars_up = StrMap.add id (resolved_t, qual) tc_ctxt.vars in
-      let tc_ctxt_up = {vars = vars_up} in
+      let tc_ctxt_up = {tc_ctxt with vars = vars_up} in
       (tc_ctxt_up, DeclStmt(id, qual, resolved_t, exp_typechecked))
   | AssignStmt(id, exp) ->
       let (var_t, {mut}) = StrMap.find id tc_ctxt.vars in
@@ -55,7 +71,12 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
 
   | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt exp))
   | ResolveStmt(exp) -> (tc_ctxt, ResolveStmt(type_check_expr tc_ctxt exp))
-  | ReturnStmt(exp) -> (tc_ctxt, ReturnStmt(type_check_expr tc_ctxt exp))
+  | ReturnStmt(exp) ->
+      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_t = expr_type exp_typechecked in
+      if type_convertible_to exp_t tc_ctxt.ret_t
+        then (tc_ctxt, ReturnStmt(exp_typechecked))
+        else failwith "Expr for return does not typecheck with func ret_t"
 
 and type_check_stmts tc_ctxt stmts =
   match stmts with
@@ -86,6 +107,13 @@ and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
   | ValVar(_, id) ->
       let (var_t, _) = StrMap.find id tc_ctxt.vars in
       ValVar(var_t, id)
+
+  | ValCastTrunc(target_t, exp) ->
+      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_t = expr_type exp_typechecked in
+      if type_truncatable_to exp_t target_t
+        then ValCastTrunc(target_t, exp_typechecked)
+        else failwith "Cannot truncate-cast incompatible types"
 
   | BinOp(_, op, lhs, rhs) ->
       begin match op with

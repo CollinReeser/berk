@@ -30,10 +30,11 @@ let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 ;;
 
 
-let rec codegen_func llvm_ctxt the_mod the_fpm builder {f_name; f_stmts; _} =
-  let i64_t = Llvm.i64_type llvm_ctxt in
-  let ints_empty = Array.make 0 i64_t in
-  let func_sig_t = Llvm.function_type i64_t ints_empty in
+let rec codegen_func llvm_ctxt the_mod the_fpm builder func_def =
+  let {f_name; f_stmts; f_ret_t; _} = func_def in
+  let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
+  let dummy_params = Array.make 0 llvm_ret_t in
+  let func_sig_t = Llvm.function_type llvm_ret_t dummy_params in
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
   let gen_ctxt = {cur_func = new_func; vars = StrMap.empty} in
@@ -133,6 +134,12 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
       let alloca = StrMap.find ident gen_ctxt.vars in
       let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in
       loaded
+  | ValCastTrunc(target_t, exp) ->
+    begin
+      let llvm_t = berk_t_to_llvm_t llvm_ctxt target_t in
+      let exp_val = _codegen_expr exp in
+      Llvm.build_trunc exp_val llvm_t "trunctmp" builder
+    end
   | BinOp(_, op, lhs, rhs) ->
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in
