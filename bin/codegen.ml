@@ -133,11 +133,14 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
       let alloca = StrMap.find ident gen_ctxt.vars in
       let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in
       loaded
-  | BinOp(typ, op, lhs, rhs) ->
+  | BinOp(_, op, lhs, rhs) ->
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in
-      let llvm_t = berk_t_to_llvm_t llvm_ctxt typ in
-      begin match typ with
+      let lhs_t = expr_type lhs in
+      let rhs_t = expr_type rhs in
+      let comm_t = common_type_of_lr lhs_t rhs_t in
+      let llvm_t = berk_t_to_llvm_t llvm_ctxt comm_t in
+      begin match comm_t with
       | U64 | U32 | U16 | U8 ->
           let lhs_comm = Llvm.build_intcast lhs_val llvm_t "ucasttmp" builder in
           let rhs_comm = Llvm.build_intcast rhs_val llvm_t "ucasttmp" builder in
