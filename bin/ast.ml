@@ -11,6 +11,8 @@ and bin_op =
   | Add
   | Sub
   | Mul
+  | Eq
+  | NotEq
   | Less
   | LessEq
   | Greater

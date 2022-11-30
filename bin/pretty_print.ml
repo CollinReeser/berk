@@ -13,6 +13,8 @@ let print_bin_op op =
   | Add -> Printf.printf " + "
   | Sub -> Printf.printf " - "
   | Mul -> Printf.printf " * "
+  | Eq -> Printf.printf " == "
+  | NotEq -> Printf.printf " != "
   | Less -> Printf.printf " < "
   | LessEq -> Printf.printf " <= "
   | Greater -> Printf.printf " > "

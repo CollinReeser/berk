@@ -82,6 +82,12 @@ let main = begin
           )
         )
       ) in
+      let decl_stmt_bool_raw = (
+        DeclStmt(
+          "my_bool_var", def_var_qual, Undecided,
+          BinOp(Undecided, NotEq, ValI16(6), ValI32(7))
+        )
+      ) in
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -108,6 +114,7 @@ let main = begin
         f_stmts = [
           decl_stmt_raw;
           decl_stmt_float_raw;
+          decl_stmt_bool_raw;
           return_stmt_raw;
         ];
       } in

@@ -148,6 +148,10 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
           | Add -> Llvm.build_add lhs_comm rhs_comm "uaddtmp" builder
           | Sub -> Llvm.build_sub lhs_comm rhs_comm "usubtmp" builder
           | Mul -> Llvm.build_mul lhs_comm rhs_comm "umultmp" builder
+          | Eq ->
+              Llvm.build_icmp Llvm.Icmp.Eq lhs_comm rhs_comm "uicmptmp" builder
+          | NotEq ->
+              Llvm.build_icmp Llvm.Icmp.Ne lhs_comm rhs_comm "uicmptmp" builder
           | Less ->
               Llvm.build_icmp Llvm.Icmp.Ult lhs_comm rhs_comm "uicmptmp" builder
           | LessEq ->
@@ -164,6 +168,10 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
           | Add -> Llvm.build_add lhs_comm rhs_comm "iaddtmp" builder
           | Sub -> Llvm.build_sub lhs_comm rhs_comm "isubtmp" builder
           | Mul -> Llvm.build_mul lhs_comm rhs_comm "imultmp" builder
+          | Eq ->
+              Llvm.build_icmp Llvm.Icmp.Eq lhs_comm rhs_comm "iicmptmp" builder
+          | NotEq ->
+              Llvm.build_icmp Llvm.Icmp.Ne lhs_comm rhs_comm "iicmptmp" builder
           | Less ->
               Llvm.build_icmp Llvm.Icmp.Slt lhs_comm rhs_comm "iicmptmp" builder
           | LessEq ->
@@ -180,6 +188,10 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
           | Add -> Llvm.build_fadd lhs_comm rhs_comm "faddtmp" builder
           | Sub -> Llvm.build_fsub lhs_comm rhs_comm "fsubtmp" builder
           | Mul -> Llvm.build_fmul lhs_comm rhs_comm "fmultmp" builder
+          | Eq ->
+              Llvm.build_fcmp Llvm.Fcmp.Ueq lhs_comm rhs_comm "fcmptmp" builder
+          | NotEq ->
+              Llvm.build_fcmp Llvm.Fcmp.Une lhs_comm rhs_comm "fcmptmp" builder
           | Less ->
               Llvm.build_fcmp Llvm.Fcmp.Ult lhs_comm rhs_comm "fcmptmp" builder
           | LessEq ->

@@ -96,7 +96,7 @@ and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
           let common_t = common_type_of_lr lhs_t rhs_t in
           BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
 
-      | Less | LessEq | Greater | GreaterEq ->
+      | Eq | NotEq | Less | LessEq | Greater | GreaterEq ->
           let lhs_typechecked = type_check_expr tc_ctxt lhs in
           let rhs_typechecked = type_check_expr tc_ctxt rhs in
           BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
