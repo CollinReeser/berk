@@ -13,6 +13,8 @@ and bin_op =
   | Mul
   | Less
   | LessEq
+  | Greater
+  | GreaterEq
 
 and expr =
   | ValU64 of int

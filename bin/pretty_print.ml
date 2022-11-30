@@ -15,6 +15,8 @@ let print_bin_op op =
   | Mul -> Printf.printf " * "
   | Less -> Printf.printf " < "
   | LessEq -> Printf.printf " <= "
+  | Greater -> Printf.printf " > "
+  | GreaterEq -> Printf.printf " >= "
 
 let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
   let init_ind = if init_ind then ind else "" in

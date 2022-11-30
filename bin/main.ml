@@ -38,7 +38,7 @@ let main = begin
                   ValI64(6),
                   IfThenElseExpr(
                     Undecided,
-                    ValBool(true),
+                    BinOp(Undecided, GreaterEq, ValF64(11.12), ValF32(9.34)),
                     BlockExpr(Undecided, [ResolveStmt(ValI64(9))]),
                     ValI64(8)
                   )
