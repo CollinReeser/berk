@@ -145,6 +145,10 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
           | Add -> Llvm.build_add lhs_comm rhs_comm "uaddtmp" builder
           | Sub -> Llvm.build_sub lhs_comm rhs_comm "usubtmp" builder
           | Mul -> Llvm.build_mul lhs_comm rhs_comm "umultmp" builder
+          | Less ->
+              Llvm.build_icmp Llvm.Icmp.Ult lhs_comm rhs_comm "uicmptmp" builder
+          | LessEq ->
+              Llvm.build_icmp Llvm.Icmp.Ule lhs_comm rhs_comm "uicmptmp" builder
           end
       | I64 | I32 | I16 | I8 ->
           let lhs_comm = Llvm.build_intcast lhs_val llvm_t "icasttmp" builder in
@@ -153,6 +157,10 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
           | Add -> Llvm.build_add lhs_comm rhs_comm "iaddtmp" builder
           | Sub -> Llvm.build_sub lhs_comm rhs_comm "isubtmp" builder
           | Mul -> Llvm.build_mul lhs_comm rhs_comm "imultmp" builder
+          | Less ->
+              Llvm.build_icmp Llvm.Icmp.Slt lhs_comm rhs_comm "iicmptmp" builder
+          | LessEq ->
+              Llvm.build_icmp Llvm.Icmp.Sle lhs_comm rhs_comm "iicmptmp" builder
           end
       | F128 | F64 | F32 ->
           let lhs_comm = Llvm.build_fpcast lhs_val llvm_t "fcasttmp" builder in
@@ -161,6 +169,10 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
           | Add -> Llvm.build_fadd lhs_comm rhs_comm "faddtmp" builder
           | Sub -> Llvm.build_fsub lhs_comm rhs_comm "fsubtmp" builder
           | Mul -> Llvm.build_fmul lhs_comm rhs_comm "fmultmp" builder
+          | Less ->
+              Llvm.build_fcmp Llvm.Fcmp.Ult lhs_comm rhs_comm "fcmptmp" builder
+          | LessEq ->
+              Llvm.build_fcmp Llvm.Fcmp.Ule lhs_comm rhs_comm "fcmptmp" builder
           end
       | typ ->
         failwith (

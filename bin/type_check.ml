@@ -85,17 +85,28 @@ and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
   | ValVar(_, id) ->
       let (var_t, _) = StrMap.find id tc_ctxt.vars in
       ValVar(var_t, id)
+
   | BinOp(_, op, lhs, rhs) ->
-      let lhs_typechecked = type_check_expr tc_ctxt lhs in
-      let rhs_typechecked = type_check_expr tc_ctxt rhs in
-      let lhs_t = expr_type lhs_typechecked in
-      let rhs_t = expr_type rhs_typechecked in
-      let common_t = common_type_of_lr lhs_t rhs_t in
-      BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
+      begin match op with
+      | Add | Sub | Mul ->
+          let lhs_typechecked = type_check_expr tc_ctxt lhs in
+          let rhs_typechecked = type_check_expr tc_ctxt rhs in
+          let lhs_t = expr_type lhs_typechecked in
+          let rhs_t = expr_type rhs_typechecked in
+          let common_t = common_type_of_lr lhs_t rhs_t in
+          BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
+
+      | Less | LessEq ->
+          let lhs_typechecked = type_check_expr tc_ctxt lhs in
+          let rhs_typechecked = type_check_expr tc_ctxt rhs in
+          BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
+      end
+
   | BlockExpr(_, stmts) ->
       let (_, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
       let stmts_resolve_t = get_resolve_type stmts_typechecked in
       BlockExpr(stmts_resolve_t, stmts_typechecked)
+
   | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
       let if_cond_typechecked = type_check_expr tc_ctxt if_cond in
       let if_cond_t = expr_type if_cond_typechecked in
