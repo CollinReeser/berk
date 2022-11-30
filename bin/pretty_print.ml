@@ -32,18 +32,19 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
     else ("", "")
   in
   match ex with
-  | ValU64 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
-  | ValU32 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
-  | ValU16 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValU64 (value)
+  | ValU32 (value)
+  | ValU16 (value)
   | ValU8  (value) -> Printf.printf "%s%d%s" init_ind value typ_s
 
-  | ValI64 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
-  | ValI32 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
-  | ValI16 (value) -> Printf.printf "%s%d%s" init_ind value typ_s
+  | ValI64 (value)
+  | ValI32 (value)
+  | ValI16 (value)
   | ValI8  (value) -> Printf.printf "%s%d%s" init_ind value typ_s
 
   | ValF128 (str)   -> Printf.printf "%s%s%s" init_ind str   typ_s
-  | ValF64  (value) -> Printf.printf "%s%f%s" init_ind value typ_s
+
+  | ValF64  (value)
   | ValF32  (value) -> Printf.printf "%s%f%s" init_ind value typ_s
 
   | ValBool (value) -> Printf.printf "%s%B%s" init_ind value typ_s
@@ -54,6 +55,14 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
     begin
       let target_t_s = fmt_type target_t in
       Printf.printf "cast_trunc<%s>(" target_t_s;
+      print_expr ~print_typ:print_typ "" exp;
+      Printf.printf ")"
+    end
+
+  | ValCastBitwise (target_t, exp) ->
+    begin
+      let target_t_s = fmt_type target_t in
+      Printf.printf "cast_bitwise<%s>(" target_t_s;
       print_expr ~print_typ:print_typ "" exp;
       Printf.printf ")"
     end

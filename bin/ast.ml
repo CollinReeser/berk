@@ -35,6 +35,7 @@ and expr =
   | ValBool of bool
   | ValVar of berk_t * ident_t
   | ValCastTrunc of berk_t * expr
+  | ValCastBitwise of berk_t * expr
   | BinOp of berk_t * bin_op * expr * expr
   | BlockExpr of berk_t * stmt list
   | IfThenElseExpr of berk_t * expr * expr * expr
@@ -62,6 +63,7 @@ let expr_type = function
   | ValBool(_) -> Bool
   | ValVar(typ, _) -> typ
   | ValCastTrunc(typ, _) -> typ
+  | ValCastBitwise(typ, _) -> typ
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ

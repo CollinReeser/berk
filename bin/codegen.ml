@@ -140,6 +140,12 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
       let exp_val = _codegen_expr exp in
       Llvm.build_trunc exp_val llvm_t "trunctmp" builder
     end
+  | ValCastBitwise(target_t, exp) ->
+    begin
+      let llvm_t = berk_t_to_llvm_t llvm_ctxt target_t in
+      let exp_val = _codegen_expr exp in
+      Llvm.build_bitcast exp_val llvm_t "bitcasttmp" builder
+    end
   | BinOp(_, op, lhs, rhs) ->
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in
@@ -180,8 +186,14 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
               Llvm.build_icmp Llvm.Icmp.Uge lhs_comm rhs_comm "uicmptmp" builder
           end
       | I64 | I32 | I16 | I8 ->
-          let lhs_comm = Llvm.build_intcast lhs_val llvm_t "icasttmp" builder in
-          let rhs_comm = Llvm.build_intcast rhs_val llvm_t "icasttmp" builder in
+          let signed_cast init_t init_llvm_val = begin
+            (* comm_t must be the largest common type *)
+            if init_t = comm_t
+              then init_llvm_val
+              else Llvm.build_sext init_llvm_val llvm_t "isexttmp" builder
+          end in
+          let lhs_comm = signed_cast lhs_t lhs_val in
+          let rhs_comm = signed_cast rhs_t rhs_val in
           begin match op with
           | Add -> Llvm.build_add lhs_comm rhs_comm "iaddtmp" builder
           | Sub -> Llvm.build_sub lhs_comm rhs_comm "isubtmp" builder

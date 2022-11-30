@@ -130,10 +130,41 @@ let type_convertible_to from_t to_t =
       let from_t_s = fmt_type from_t in
       let to_t_s = fmt_type to_t in
       begin
-        Printf.printf "Cannot convert [%s] to [%s]" from_t_s to_t_s;
+        Printf.printf "Cannot convert [%s] to [%s]\n" from_t_s to_t_s;
         false
       end
 ;;
+
+
+let type_extendable_to from_t to_t =
+  match (from_t, to_t) with
+  | (I32, I64)
+  | (I16, I64)
+  | (I16, I32)
+  | (I8,  I64)
+  | (I8,  I32)
+  | (I8,  I16) -> true
+
+  | (U32, U64)
+  | (U16, U64)
+  | (U16, U32)
+  | (U8,  U64)
+  | (U8,  U32)
+  | (U8,  U16) -> true
+
+  | (F64, F128)
+  | (F32, F128)
+  | (F32, F64) -> true
+
+  | _ ->
+      let from_t_s = fmt_type from_t in
+      let to_t_s = fmt_type to_t in
+      begin
+        Printf.printf "Cannot extend [%s] to [%s]\n" from_t_s to_t_s;
+        false
+      end
+;;
+
 
 let type_truncatable_to from_t to_t =
   match (from_t, to_t) with
@@ -152,15 +183,38 @@ let type_truncatable_to from_t to_t =
   | (U16, U8) -> true
 
   | (F128, F64)
-  | (F128, F32) -> true
-
+  | (F128, F32)
   | (F64, F32) -> true
 
   | _ ->
       let from_t_s = fmt_type from_t in
       let to_t_s = fmt_type to_t in
       begin
-        Printf.printf "Cannot truncate [%s] to [%s]" from_t_s to_t_s;
+        Printf.printf "Cannot truncate [%s] to [%s]\n" from_t_s to_t_s;
+        false
+      end
+;;
+
+
+let type_bitwise_to from_t to_t =
+  match (from_t, to_t) with
+  | (I64, U64)
+  | (U64, I64) -> true
+
+  | (I32, U32)
+  | (U32, I32) -> true
+
+  | (I16, U16)
+  | (U16, I16) -> true
+
+  | (I8, U8)
+  | (U8, I8) -> true
+
+  | _ ->
+      let from_t_s = fmt_type from_t in
+      let to_t_s = fmt_type to_t in
+      begin
+        Printf.printf "Cannot bitwise cast [%s] to [%s]\n" from_t_s to_t_s;
         false
       end
 ;;

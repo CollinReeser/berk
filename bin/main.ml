@@ -95,6 +95,13 @@ let main = begin
           )
         )
       ) in
+      let decl_stmt_bitcast_raw = (
+        DeclStmt(
+          "my_bitcast_var", def_var_qual,
+          U32,
+          ValCastBitwise(U32, ValI32(-32000))
+        )
+      ) in
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -123,6 +130,7 @@ let main = begin
           decl_stmt_raw;
           decl_stmt_float_raw;
           decl_stmt_bool_raw;
+          decl_stmt_bitcast_raw;
           return_stmt_raw;
         ];
       } in

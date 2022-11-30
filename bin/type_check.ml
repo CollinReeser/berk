@@ -115,6 +115,13 @@ and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
         then ValCastTrunc(target_t, exp_typechecked)
         else failwith "Cannot truncate-cast incompatible types"
 
+  | ValCastBitwise(target_t, exp) ->
+      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_t = expr_type exp_typechecked in
+      if type_bitwise_to exp_t target_t
+        then ValCastBitwise(target_t, exp_typechecked)
+        else failwith "Cannot bitwise-cast incompatible types"
+
   | BinOp(_, op, lhs, rhs) ->
       begin match op with
       | Add | Sub | Mul | Div | Mod ->
