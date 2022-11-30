@@ -85,7 +85,14 @@ let main = begin
       let decl_stmt_bool_raw = (
         DeclStmt(
           "my_bool_var", def_var_qual, Undecided,
-          BinOp(Undecided, NotEq, ValI16(6), ValI32(7))
+          BinOp(
+            Undecided, Eq,
+            BinOp(
+              Undecided, Mod,
+              ValI16(7), ValI16(2)
+            ),
+            ValI32(1)
+          )
         )
       ) in
       let expr_raw = (

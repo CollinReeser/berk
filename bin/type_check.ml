@@ -88,7 +88,7 @@ and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
 
   | BinOp(_, op, lhs, rhs) ->
       begin match op with
-      | Add | Sub | Mul ->
+      | Add | Sub | Mul | Div | Mod ->
           let lhs_typechecked = type_check_expr tc_ctxt lhs in
           let rhs_typechecked = type_check_expr tc_ctxt rhs in
           let lhs_t = expr_type lhs_typechecked in
