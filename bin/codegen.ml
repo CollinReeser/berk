@@ -141,6 +141,15 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
       let comm_t = common_type_of_lr lhs_t rhs_t in
       let llvm_t = berk_t_to_llvm_t llvm_ctxt comm_t in
       begin match comm_t with
+      | Bool ->
+          begin match op with
+          | Eq ->
+              Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
+          | NotEq ->
+              Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
+
+          | _ -> failwith "Non-equality binop not supported for bool"
+          end
       | U64 | U32 | U16 | U8 ->
           let lhs_comm = Llvm.build_intcast lhs_val llvm_t "ucasttmp" builder in
           let rhs_comm = Llvm.build_intcast rhs_val llvm_t "ucasttmp" builder in
