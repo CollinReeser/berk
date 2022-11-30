@@ -34,7 +34,7 @@ let main = begin
                 "my_inner_var_3", def_var_qual, Undecided,
                 IfThenElseExpr(
                   Undecided,
-                  BinOp(Undecided, Less, ValI32(11), ValI64(9)),
+                  BinOp(Undecided, Less, ValI8(11), ValI64(9)),
                   ValI64(6),
                   IfThenElseExpr(
                     Undecided,
