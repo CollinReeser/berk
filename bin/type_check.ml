@@ -43,18 +43,32 @@ let populate_ctxt_with_params f_params base_vars =
   let added_vars = List.fold_left add_param base_vars f_params in
   added_vars
 
-let rec type_check_mod_decl mod_decl =
+let rec type_check_mod_decls mod_decls =
   let mod_ctxt = default_mod_ctxt in
+
+  let rec _type_check_mod_decls ctxt decls =
+    match decls with
+    | [] -> (ctxt, [])
+    | x::xs ->
+      let (mod_ctxt_up, decl_tced) = type_check_mod_decl ctxt x in
+      let (mod_ctxt_fin, decls_tced) = _type_check_mod_decls mod_ctxt_up xs in
+      (mod_ctxt_fin, decl_tced :: decls_tced)
+  in
+  let (_, mod_decls_typechecked) = _type_check_mod_decls mod_ctxt mod_decls in
+
+  mod_decls_typechecked
+
+and type_check_mod_decl mod_ctxt mod_decl =
   match mod_decl with
-  | FuncDecl(f_ast) -> begin
+  | FuncDecl(f_ast) ->
       let {f_name; f_params; f_ret_t; _} = f_ast in
       let func_sigs_up = begin
         StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
       end in
       let mod_ctxt_up = {func_sigs = func_sigs_up} in
       let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
-      FuncDecl(func_ast_typechecked)
-    end
+
+      (mod_ctxt_up, FuncDecl(func_ast_typechecked))
 
 and type_check_func mod_ctxt func_def =
   let {f_stmts; f_params; f_ret_t; _} = func_def in

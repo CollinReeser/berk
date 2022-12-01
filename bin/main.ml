@@ -102,7 +102,7 @@ let main = begin
           ValCastBitwise(U32, ValI32(-32000))
         )
       ) in
-      let decl_false_recursion_raw = (
+      let decl_dodge_recursion_raw = (
         DeclStmt(
           "my_recursive_dodge_var", def_var_qual, Undecided,
           IfThenElseExpr(
@@ -111,6 +111,12 @@ let main = begin
             ValI8(6),
             FuncCall(Undecided, "main", [])
           )
+        )
+      ) in
+      let decl_call_recursion_raw = (
+        DeclStmt(
+          "my_recursive_dodge_var", def_var_qual, Undecided,
+          FuncCall(Undecided, "rec_me", [ValI8(100)])
         )
       ) in
       let expr_raw = (
@@ -131,9 +137,15 @@ let main = begin
         Printf.printf "\n";
         print_expr "" (type_check_expr tc_ctxt_up expr_raw);
         Printf.printf "\n";
-      let return_stmt_raw = ReturnStmt(ValCastTrunc(I8, expr_raw)) in
+      let return_stmt_raw = ReturnStmt(
+        BinOp(
+          Undecided, Add,
+          ValCastTrunc(I8, expr_raw),
+          ValVar(Undecided, "my_recursive_dodge_var")
+        )
+      ) in
 
-      let func_def = {
+      let main_func_def = {
         f_name = "main";
         f_ret_t = I8;
         f_params = [];
@@ -142,26 +154,55 @@ let main = begin
           decl_stmt_float_raw;
           decl_stmt_bool_raw;
           decl_stmt_bitcast_raw;
-          decl_false_recursion_raw;
+          decl_dodge_recursion_raw;
+          decl_call_recursion_raw;
           return_stmt_raw;
         ];
       } in
 
-      print_func_ast func_def ;
-      let mod_decl = FuncDecl(func_def) in
-      let mod_decl_typechecked = type_check_mod_decl mod_decl in
-      let _ = match mod_decl_typechecked with
-      | FuncDecl(f_ast_typechecked) -> begin
-        print_func_ast f_ast_typechecked ;
-        print_func_ast ~print_typ:true f_ast_typechecked ;
-      end in
+      print_func_ast main_func_def ;
 
-      codegen_mod_decl
+      let rec_func_def = {
+        f_name = "rec_me";
+        f_ret_t = I8;
+        f_params = ["counter", def_var_qual, I8];
+        f_stmts = [
+          ReturnStmt(
+            IfThenElseExpr(
+              Undecided,
+              BinOp(Undecided, Eq, ValVar(Undecided, "counter"), ValI8(5)),
+              ValVar(Undecided, "counter"),
+              FuncCall(
+                Undecided, "rec_me", [
+                  BinOp(Undecided, Sub, ValVar(Undecided, "counter"), ValI8(1))
+                ]
+              )
+            )
+          )
+        ];
+      } in
+
+      let mod_decls = [
+        FuncDecl(rec_func_def);
+        FuncDecl(main_func_def);
+      ] in
+
+      let mod_decls_typechecked = type_check_mod_decls mod_decls in
+      let _ = List.iter (
+        fun mod_decl_typechecked ->
+          match mod_decl_typechecked with
+          | FuncDecl(f_ast_typechecked) -> begin
+            print_func_ast f_ast_typechecked ;
+            print_func_ast ~print_typ:true f_ast_typechecked ;
+          end
+      ) mod_decls_typechecked in
+
+      codegen_mod_decls
         llvm_ctxt
         the_module
         the_fpm
         builder
-        mod_decl_typechecked
+        mod_decls_typechecked
       ;
 
       ()
