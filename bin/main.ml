@@ -156,7 +156,13 @@ let main = begin
         print_func_ast ~print_typ:true f_ast_typechecked ;
       end in
 
-      codegen_mod_decl llvm_ctxt the_module the_fpm builder mod_decl_typechecked ;
+      codegen_mod_decl
+        llvm_ctxt
+        the_module
+        the_fpm
+        builder
+        mod_decl_typechecked
+      ;
 
       ()
     end in
