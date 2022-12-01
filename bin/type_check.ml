@@ -3,12 +3,23 @@ open Ast
 
 module StrMap = Map.Make(String)
 
-type typecheck_ctxt = {
-  vars: (berk_t * var_qual) StrMap.t;
-  ret_t: berk_t;
+type module_context = {
+  func_sigs: (berk_t * (ident_t * var_qual * berk_t) list) StrMap.t;
 }
 
-let default_tc_ctxt typ = {vars = StrMap.empty; ret_t = typ}
+let default_mod_ctxt = {func_sigs = StrMap.empty}
+
+type typecheck_context = {
+  vars: (berk_t * var_qual) StrMap.t;
+  ret_t: berk_t;
+  mod_ctxt: module_context;
+}
+
+let default_tc_ctxt typ = {
+  vars = StrMap.empty;
+  ret_t = typ;
+  mod_ctxt = default_mod_ctxt;
+}
 
 let get_resolve_type stmts =
   let resolve_expr_types =
@@ -32,19 +43,35 @@ let populate_ctxt_with_params f_params base_vars =
   let added_vars = List.fold_left add_param base_vars f_params in
   added_vars
 
+let rec type_check_mod_decl mod_decl =
+  let mod_ctxt = default_mod_ctxt in
+  match mod_decl with
+  | FuncDecl(f_ast) -> begin
+      let {f_name; f_params; f_ret_t; _} = f_ast in
+      let func_sigs_up = begin
+        StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
+      end in
+      let mod_ctxt_up = {func_sigs = func_sigs_up} in
+      let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
+      FuncDecl(func_ast_typechecked)
+    end
 
-let rec type_check_func func_def =
+and type_check_func mod_ctxt func_def =
   let {f_stmts; f_params; f_ret_t; _} = func_def in
   let tc_ctxt_base = default_tc_ctxt f_ret_t in
   let vars_base = tc_ctxt_base.vars in
   let vars_init = populate_ctxt_with_params f_params vars_base in
-  let tc_ctxt_init = {tc_ctxt_base with vars = vars_init} in
+  let tc_ctxt_init = {
+    tc_ctxt_base with
+      vars = vars_init;
+      mod_ctxt = mod_ctxt
+  } in
 
   let (_, f_stmts_typechecked) = type_check_stmts tc_ctxt_init f_stmts in
 
   {func_def with f_stmts = f_stmts_typechecked}
 
-and type_check_stmt (tc_ctxt) (stmt) : (typecheck_ctxt * stmt) =
+and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
   match stmt with
   | DeclStmt(id, qual, decl_t, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
@@ -86,7 +113,7 @@ and type_check_stmts tc_ctxt stmts =
       let (tc_ctxt_final, stmts_tced) = type_check_stmts tc_ctxt_updated xs in
       (tc_ctxt_final, stmt_tced :: stmts_tced)
 
-and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
+and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
   match exp with
   | ValU64(i) -> ValU64(i)
   | ValU32(i) -> ValU32(i)
@@ -166,4 +193,18 @@ and type_check_expr (tc_ctxt : typecheck_ctxt) exp : expr =
         then_expr_typechecked,
         else_expr_typechecked
       )
+
+    | FuncCall(_, f_name, exprs) ->
+        let (ret_t, params) = StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs in
+        let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
+        let exprs_t = List.map expr_type exprs_typechecked in
+        let params_t = List.map (fun (_, _, param_t) -> param_t) params in
+        let _ = List.iter2 (
+          fun expr_t param_t ->
+            if type_convertible_to expr_t param_t
+            then ()
+            else failwith "Could not convert expr type to arg type"
+        ) exprs_t params_t in
+
+        FuncCall(ret_t, f_name, exprs_typechecked)
 ;;

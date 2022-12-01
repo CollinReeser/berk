@@ -39,6 +39,7 @@ and expr =
   | BinOp of berk_t * bin_op * expr * expr
   | BlockExpr of berk_t * stmt list
   | IfThenElseExpr of berk_t * expr * expr * expr
+  | FuncCall of berk_t * ident_t * expr list
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -48,7 +49,8 @@ and stmt =
   | ReturnStmt of expr
 ;;
 
-let expr_type = function
+let expr_type typ =
+  match typ with
   | ValU64(_) -> U64
   | ValU32(_) -> U32
   | ValU16(_) -> U16
@@ -67,10 +69,13 @@ let expr_type = function
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
+  | FuncCall(typ, _, _) -> typ
 ;;
 
+type module_decl =
+  | FuncDecl of func_ast
 
-type func_ast = {
+and func_ast = {
   f_name: string;
   f_params: (ident_t * var_qual * berk_t) list;
   f_stmts: stmt list;

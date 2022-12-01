@@ -102,6 +102,17 @@ let main = begin
           ValCastBitwise(U32, ValI32(-32000))
         )
       ) in
+      let decl_false_recursion_raw = (
+        DeclStmt(
+          "my_recursive_dodge_var", def_var_qual, Undecided,
+          IfThenElseExpr(
+            Undecided,
+            ValBool(true),
+            ValI8(6),
+            FuncCall(Undecided, "main", [])
+          )
+        )
+      ) in
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -110,7 +121,7 @@ let main = begin
         )
       )
       in
-      let tc_ctxt : typecheck_ctxt = default_tc_ctxt Undecided in
+      let tc_ctxt : typecheck_context = default_tc_ctxt Undecided in
       let (tc_ctxt_up, _) = type_check_stmt tc_ctxt decl_stmt_raw in
         test_typecheck ~tc_ctxt:tc_ctxt_up expr_raw;
         Printf.printf "Expr type: %s\n" (
@@ -131,16 +142,21 @@ let main = begin
           decl_stmt_float_raw;
           decl_stmt_bool_raw;
           decl_stmt_bitcast_raw;
+          decl_false_recursion_raw;
           return_stmt_raw;
         ];
       } in
 
       print_func_ast func_def ;
-      let func_def_typechecked = type_check_func func_def in
-      print_func_ast func_def_typechecked ;
-      print_func_ast ~print_typ:true func_def_typechecked ;
+      let mod_decl = FuncDecl(func_def) in
+      let mod_decl_typechecked = type_check_mod_decl mod_decl in
+      let _ = match mod_decl_typechecked with
+      | FuncDecl(f_ast_typechecked) -> begin
+        print_func_ast f_ast_typechecked ;
+        print_func_ast ~print_typ:true f_ast_typechecked ;
+      end in
 
-      codegen_func llvm_ctxt the_module the_fpm builder func_def_typechecked ;
+      codegen_mod_decl llvm_ctxt the_module the_fpm builder mod_decl_typechecked ;
 
       ()
     end in

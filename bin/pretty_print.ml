@@ -85,6 +85,12 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       Printf.printf "\n%s} else {\n" ind;
       print_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") else_expr;
       Printf.printf "\n%s}" ind
+  | FuncCall(_, id, exprs) ->
+    begin
+      Printf.printf "%s%s%s(" init_ind typ_s_rev id;
+      List.iter (print_expr ~print_typ:print_typ "") exprs;
+      Printf.printf ")"
+    end
 
 and print_stmt ?(print_typ = false) ind stmt =
   match stmt with

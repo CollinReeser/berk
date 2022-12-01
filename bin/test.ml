@@ -67,7 +67,11 @@ let build_example_ast =
 ;;
 
 
-let test_typecheck ?(tc_ctxt : typecheck_ctxt = {vars = StrMap.empty; ret_t = Undecided}) ast =
+let test_typecheck ?(
+  tc_ctxt : typecheck_context = {
+    vars = StrMap.empty; ret_t = Undecided; mod_ctxt = default_mod_ctxt
+  }
+) ast =
   Printf.printf "Expression [";
   print_expr "" ast;
   Printf.printf "] typechecks to: ";

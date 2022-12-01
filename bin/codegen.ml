@@ -3,9 +3,16 @@ open Typing
 
 module StrMap = Map.Make(String)
 
-type codegen_ctxt = {
+type module_gen_context = {
+  func_sigs: Llvm.llvalue StrMap.t;
+}
+
+let default_mod_gen_ctxt = {func_sigs = StrMap.empty}
+
+type func_gen_context = {
   cur_func: Llvm.llvalue;
-  vars: Llvm.llvalue StrMap.t;
+  cur_vars: Llvm.llvalue StrMap.t;
+  mod_ctxt: module_gen_context
 }
 
 let berk_t_to_llvm_t llvm_ctxt typ =
@@ -29,17 +36,32 @@ let resolve_alloca_name = "___RESOLVE_ALLOCA"
 let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 ;;
 
+let rec codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_decl =
+  let mod_ctxt = default_mod_gen_ctxt in
+  match mod_decl with
+  | FuncDecl(f_ast) ->
+      codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
 
-let rec codegen_func llvm_ctxt the_mod the_fpm builder func_def =
-  let {f_name; f_stmts; f_ret_t; _} = func_def in
+and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
+  let {f_name; f_stmts; f_ret_t; _} = f_ast in
+
   let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
   let dummy_params = Array.make 0 llvm_ret_t in
   let func_sig_t = Llvm.function_type llvm_ret_t dummy_params in
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
-  let gen_ctxt = {cur_func = new_func; vars = StrMap.empty} in
+
+  let func_sigs_orig = mod_ctxt.func_sigs in
+  let func_sigs_up = StrMap.add f_name new_func func_sigs_orig in
+  let mod_ctxt_up = {func_sigs = func_sigs_up} in
+  let func_ctxt = {
+    cur_func = new_func;
+    cur_vars = StrMap.empty;
+    mod_ctxt = mod_ctxt_up
+  } in
+
   Llvm.position_at_end bb builder ;
-  codegen_stmts llvm_ctxt builder gen_ctxt f_stmts |> ignore ;
+  codegen_stmts llvm_ctxt builder func_ctxt f_stmts |> ignore ;
 
   (* Validate the generated code, checking for consistency. *)
   let _ = begin
@@ -59,54 +81,54 @@ let rec codegen_func llvm_ctxt the_mod the_fpm builder func_def =
 
   ()
 
-and codegen_stmts llvm_ctxt builder gen_ctxt stmts =
+and codegen_stmts llvm_ctxt builder func_ctxt stmts =
   match stmts with
-  | [] -> gen_ctxt
+  | [] -> func_ctxt
   | x::xs ->
-      let gen_ctxt_updated = codegen_stmt llvm_ctxt builder gen_ctxt x in
-      codegen_stmts llvm_ctxt builder gen_ctxt_updated xs
+      let func_ctxt_updated = codegen_stmt llvm_ctxt builder func_ctxt x in
+      codegen_stmts llvm_ctxt builder func_ctxt_updated xs
 
 
-and codegen_stmt (llvm_ctxt) (builder) (gen_ctxt) (stmt) : codegen_ctxt =
+and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
   match stmt with
   | DeclStmt (ident, _, typ, expr) ->
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ ident builder in
-      let expr_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
+      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
-      let updated_vars = StrMap.add ident alloca gen_ctxt.vars in
-      let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in
+      let updated_vars = StrMap.add ident alloca func_ctxt.cur_vars in
+      let func_ctxt_up = {func_ctxt with cur_vars = updated_vars} in
 
-      gen_ctxt_up
+      func_ctxt_up
 
   | AssignStmt (ident, expr) ->
-      let alloca = StrMap.find ident gen_ctxt.vars in
-      let expr_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
+      let alloca = StrMap.find ident func_ctxt.cur_vars in
+      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
-      gen_ctxt
+      func_ctxt
 
   | ReturnStmt(expr) ->
-      let return_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
+      let return_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
 
-      gen_ctxt
+      func_ctxt
 
   | ExprStmt (expr) ->
-      let _ = codegen_expr llvm_ctxt builder gen_ctxt expr in
+      let _ = codegen_expr llvm_ctxt builder func_ctxt expr in
 
-      gen_ctxt
+      func_ctxt
 
   | ResolveStmt (expr) ->
-      let expr_val = codegen_expr llvm_ctxt builder gen_ctxt expr in
-      let resolve_alloca = StrMap.find resolve_alloca_name gen_ctxt.vars in
+      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
+      let resolve_alloca = StrMap.find resolve_alloca_name func_ctxt.cur_vars in
       let _ : Llvm.llvalue = Llvm.build_store expr_val resolve_alloca builder in
 
-      gen_ctxt
+      func_ctxt
 
 
-and codegen_expr llvm_ctxt builder gen_ctxt expr =
+and codegen_expr llvm_ctxt builder func_ctxt expr =
   let i64_t = Llvm.i64_type llvm_ctxt in
   let i32_t = Llvm.i32_type llvm_ctxt in
   let i16_t = Llvm.i16_type llvm_ctxt in
@@ -118,7 +140,7 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
 
   let bool_t = Llvm.i1_type llvm_ctxt in
 
-  let _codegen_expr = codegen_expr llvm_ctxt builder gen_ctxt in
+  let _codegen_expr = codegen_expr llvm_ctxt builder func_ctxt in
 
   match expr with
   | ValU64(n) | ValI64(n) -> Llvm.const_int i64_t n
@@ -131,7 +153,7 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
   | ValF64(n)  -> Llvm.const_float f64_t  n
   | ValF32(n)  -> Llvm.const_float f32_t  n
   | ValVar(_, ident) ->
-      let alloca = StrMap.find ident gen_ctxt.vars in
+      let alloca = StrMap.find ident func_ctxt.cur_vars in
       let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in
       loaded
   | ValCastTrunc(target_t, exp) ->
@@ -244,19 +266,20 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
   | BlockExpr(typ, stmts) ->
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ resolve_alloca_name builder in
-      let updated_vars = StrMap.add resolve_alloca_name alloca gen_ctxt.vars in
-      let gen_ctxt_up = {gen_ctxt with vars = updated_vars} in
+      let cur_vars = func_ctxt.cur_vars in
+      let updated_vars = StrMap.add resolve_alloca_name alloca cur_vars in
+      let func_ctxt_up = {func_ctxt with cur_vars = updated_vars} in
 
-      let _ = codegen_stmts llvm_ctxt builder gen_ctxt_up stmts in
+      let _ = codegen_stmts llvm_ctxt builder func_ctxt_up stmts in
 
       let loaded = Llvm.build_load alloca resolve_alloca_name builder in
 
       loaded
 
   | IfThenElseExpr(typ, cond_expr, then_expr, else_expr) ->
-      let bb_then = Llvm.append_block llvm_ctxt "if_then" gen_ctxt.cur_func in
-      let bb_else = Llvm.append_block llvm_ctxt "if_else" gen_ctxt.cur_func in
-      let bb_if_end = Llvm.append_block llvm_ctxt "if_end" gen_ctxt.cur_func in
+      let bb_then = Llvm.append_block llvm_ctxt "if_then" func_ctxt.cur_func in
+      let bb_else = Llvm.append_block llvm_ctxt "if_else" func_ctxt.cur_func in
+      let bb_if_end = Llvm.append_block llvm_ctxt "if_end" func_ctxt.cur_func in
 
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ if_expr_alloca_name builder in
@@ -280,7 +303,18 @@ and codegen_expr llvm_ctxt builder gen_ctxt expr =
       let loaded = Llvm.build_load alloca if_expr_alloca_name builder in
 
       loaded
-;;
+
+    | FuncCall(_, ident, exprs) ->
+        (* build_call : llvalue -> llvalue array -> string -> llbuilder -> llvalue
+
+        build_call fn args name b creates a %name = call %fn(args...)
+        instruction at the position specified by the instruction builder b. See the
+        method llvm::LLVMBuilder::CreateCall. ;; *)
+
+        let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in
+        let llvm_args = Array.of_list (List.map _codegen_expr exprs) in
+
+        Llvm.build_call llvm_func_val llvm_args "calltmp" builder
 
 
 let initialize_fpm the_fpm =
