@@ -15,6 +15,7 @@ type func_gen_context = {
   mod_ctxt: module_gen_context
 }
 
+
 let berk_t_to_llvm_t llvm_ctxt typ =
   match typ with
   | U64 | I64 -> Llvm.i64_type llvm_ctxt
@@ -36,6 +37,7 @@ let resolve_alloca_name = "___RESOLVE_ALLOCA"
 let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 ;;
 
+
 let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
   let mod_ctxt = default_mod_gen_ctxt in
   let _codegen_mod_decl =
@@ -45,31 +47,34 @@ let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
   let _ = List.fold_left _codegen_mod_decl mod_ctxt mod_decls in
   ()
 
+
 and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
   match mod_decl with
   | FuncDecl(f_ast) ->
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
 
+
 and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
   let {f_name; f_stmts; f_ret_t; f_params} = f_ast in
 
   let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
-  let llvm_params = begin
-    List.map (fun (_, _, typ) -> berk_t_to_llvm_t llvm_ctxt typ) f_params
-  end in
-  let llvm_params_arr = Array.of_list llvm_params in
-  let func_sig_t = Llvm.function_type llvm_ret_t llvm_params_arr in
+  let llvm_param_t_lst = List.map (
+    fun (_, _, typ) -> berk_t_to_llvm_t llvm_ctxt typ
+  ) f_params
+  in
+  let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
+  let func_sig_t = Llvm.function_type llvm_ret_t llvm_param_t_arr in
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
-  let bb = Llvm.append_block llvm_ctxt "entry" new_func in
-  Llvm.position_at_end bb builder ;
 
-  let func_sigs_orig = mod_ctxt.func_sigs in
-  let func_sigs_up = StrMap.add f_name new_func func_sigs_orig in
+  let bb = Llvm.append_block llvm_ctxt "entry" new_func in
+  let _ = Llvm.position_at_end bb builder in
+
+  let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
   let mod_ctxt_up = {func_sigs = func_sigs_up} in
 
   let llvm_params = Array.to_list (Llvm.params new_func) in
 
-  let arg_to_param = List.combine f_params llvm_params in
+  let arg_to_param_lst = List.combine f_params llvm_params in
 
   let llvm_param_allocas = List.map (
     fun ((id, _, typ), llvm_param) ->
@@ -78,13 +83,13 @@ and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
       let _ : Llvm.llvalue = Llvm.build_store llvm_param alloca builder in
 
       alloca
-  ) arg_to_param in
+  ) arg_to_param_lst in
 
-  let arg_to_alloca = List.combine f_params llvm_param_allocas in
+  let arg_to_alloca_lst = List.combine f_params llvm_param_allocas in
 
   let init_vars = List.fold_left (
     fun vars ((id, _, _), param) -> StrMap.add id param vars
-  ) StrMap.empty arg_to_alloca
+  ) StrMap.empty arg_to_alloca_lst
   in
 
   let func_ctxt = {
@@ -112,6 +117,7 @@ and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
   let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
 
   mod_ctxt_up
+
 
 and codegen_stmts llvm_ctxt builder func_ctxt stmts =
   match stmts with
@@ -337,12 +343,6 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       loaded
 
     | FuncCall(_, ident, exprs) ->
-        (* build_call : llvalue -> llvalue array -> string -> llbuilder -> llvalue
-
-        build_call fn args name b creates a %name = call %fn(args...)
-        instruction at the position specified by the instruction builder b. See the
-        method llvm::LLVMBuilder::CreateCall. ;; *)
-
         let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in
         let llvm_args = Array.of_list (List.map _codegen_expr exprs) in
 
