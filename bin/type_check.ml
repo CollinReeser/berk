@@ -221,4 +221,39 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         ) exprs_t params_t in
 
         FuncCall(ret_t, f_name, exprs_typechecked)
+
+    | ArrayExpr(_, exprs) ->
+        let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
+        let expr_t_lst = List.map expr_type exprs_typechecked in
+        let common_t = common_type_of_lst expr_t_lst in
+        let arr_t = Array(common_t, List.length exprs) in
+
+        ArrayExpr(arr_t, exprs_typechecked)
+
+    | IndexExpr(_, idx, arr) ->
+        let idx_typechecked = type_check_expr tc_ctxt idx in
+        let arr_typechecked = type_check_expr tc_ctxt arr in
+        let idx_t = expr_type idx_typechecked in
+        let arr_t = expr_type arr_typechecked in
+        if is_index_type idx_t && is_indexable_type arr_t
+          then
+            begin match arr_t with
+            | Array(elem_typ, sz) ->
+                let index_expr_typechecked = IndexExpr(
+                  elem_typ, idx_typechecked, arr_typechecked
+                ) in
+                begin match idx_typechecked with
+                  | ValU64(i)
+                  | ValU32(i)
+                  | ValU16(i)
+                  | ValU8(i) ->
+                      if i < sz
+                        then index_expr_typechecked
+                        else failwith "Static out-of-bounds index into array"
+                  | _ -> index_expr_typechecked
+                end
+            | _ -> failwith "Unexpected index target in index expr"
+            end
+          else failwith "Unexpected components of index operation"
+
 ;;

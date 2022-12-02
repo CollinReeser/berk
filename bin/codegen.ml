@@ -16,7 +16,7 @@ type func_gen_context = {
 }
 
 
-let berk_t_to_llvm_t llvm_ctxt typ =
+let rec berk_t_to_llvm_t llvm_ctxt typ =
   match typ with
   | U64 | I64 -> Llvm.i64_type llvm_ctxt
   | U32 | I32 -> Llvm.i32_type llvm_ctxt
@@ -28,6 +28,11 @@ let berk_t_to_llvm_t llvm_ctxt typ =
   | F32  -> Llvm.float_type  llvm_ctxt
 
   | Bool -> Llvm.i1_type llvm_ctxt
+
+  | Array(elem_typ, sz) ->
+      let llvm_elem_t = berk_t_to_llvm_t llvm_ctxt elem_typ in
+      let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
+      Llvm.pointer_type llvm_arr_t
 
   | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
@@ -347,6 +352,40 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
         let llvm_args = Array.of_list (List.map _codegen_expr exprs) in
 
         Llvm.build_call llvm_func_val llvm_args "calltmp" builder
+
+    | ArrayExpr(typ, exprs) ->
+        let llvm_expr_vals = List.map _codegen_expr exprs in
+        let llvm_ptr_t = berk_t_to_llvm_t llvm_ctxt typ in
+        let llvm_arr_t = Llvm.element_type llvm_ptr_t in
+        let alloca = Llvm.build_alloca llvm_arr_t "arraytmp" builder in
+        let _ = List.iteri (
+          fun idx expr_val ->
+            let indices = Array.of_list [
+              Llvm.const_int i32_t 0;
+              Llvm.const_int i32_t idx;
+            ] in
+            let llvm_gep = Llvm.build_gep alloca indices "geptmp" builder in
+            let _ = Llvm.build_store expr_val llvm_gep builder in
+            ()
+        ) llvm_expr_vals in
+
+        alloca
+
+        (* let loaded = Llvm.build_load alloca "loadarraytmp" builder in
+
+        loaded *)
+
+    | IndexExpr(_, idx_expr, arr_expr) ->
+        let idx_val = _codegen_expr idx_expr in
+        let arr_val = _codegen_expr arr_expr in
+        let indices = Array.of_list [
+          Llvm.const_int i32_t 0;
+          idx_val;
+        ] in
+        let llvm_gep = Llvm.build_gep arr_val indices "geptmp" builder in
+        let loaded = Llvm.build_load llvm_gep "loadarraytmp" builder in
+
+        loaded
 
 
 let initialize_fpm the_fpm =

@@ -119,6 +119,26 @@ let main = begin
           FuncCall(Undecided, "rec_me", [ValI8(100)])
         )
       ) in
+      let decl_array_raw = (
+        DeclStmt(
+          "my_array_var", def_var_qual, Undecided,
+          ArrayExpr(
+            Undecided, [
+              ValI8(10);
+              ValI8(9);
+              ValI8(8);
+              ValI8(7);
+              ValI8(6);
+            ]
+          )
+        )
+      ) in
+      let decl_array_idx_raw = (
+        DeclStmt(
+          "my_array_idx_var", def_var_qual, Undecided,
+          IndexExpr(Undecided, ValU64(2), ValVar(Undecided, "my_array_var"))
+        )
+      ) in
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -140,8 +160,12 @@ let main = begin
       let return_stmt_raw = ReturnStmt(
         BinOp(
           Undecided, Add,
-          ValCastTrunc(I8, expr_raw),
-          ValVar(Undecided, "my_recursive_dodge_var")
+          ValVar(Undecided, "my_array_idx_var"),
+          BinOp(
+            Undecided, Add,
+            ValCastTrunc(I8, expr_raw),
+            ValVar(Undecided, "my_recursive_dodge_var")
+          )
         )
       ) in
 
@@ -156,6 +180,8 @@ let main = begin
           decl_stmt_bitcast_raw;
           decl_dodge_recursion_raw;
           decl_call_recursion_raw;
+          decl_array_raw;
+          decl_array_idx_raw;
           return_stmt_raw;
         ];
       } in

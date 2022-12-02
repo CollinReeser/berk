@@ -91,6 +91,18 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       List.iter (print_expr ~print_typ:print_typ "") exprs;
       Printf.printf ")"
     end
+  | ArrayExpr(_, exprs) ->
+      Printf.printf "%s[" init_ind;
+      List.iter (
+        fun ex -> print_expr ~print_typ:print_typ "" ex; Printf.printf ", "
+      ) exprs;
+      Printf.printf "]"
+  | IndexExpr(_, idx, arr) ->
+      Printf.printf "%s[" init_ind;
+      print_expr ~print_typ:print_typ "" idx;
+      Printf.printf "]";
+      print_expr ~print_typ:print_typ "" arr
+
 
 and print_stmt ?(print_typ = false) ind stmt =
   match stmt with

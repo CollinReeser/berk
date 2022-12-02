@@ -40,6 +40,9 @@ and expr =
   | BlockExpr of berk_t * stmt list
   | IfThenElseExpr of berk_t * expr * expr * expr
   | FuncCall of berk_t * ident_t * expr list
+  | ArrayExpr of (berk_t * expr list)
+  (* First expr is index, second is array *)
+  | IndexExpr of (berk_t * expr * expr)
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -70,6 +73,8 @@ let expr_type typ =
   | BlockExpr(typ, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
+  | ArrayExpr(typ, _) -> typ
+  | IndexExpr(typ, _, _) -> typ
 ;;
 
 type module_decl =

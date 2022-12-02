@@ -13,9 +13,10 @@ type berk_t =
   | F32
   | Bool
   | Nil
+  | Array of berk_t * int
   | Undecided
 
-let fmt_type berk_type =
+let rec fmt_type berk_type =
   match berk_type with
   | U64 -> "u64"
   | U32 -> "u32"
@@ -30,6 +31,9 @@ let fmt_type berk_type =
   | F32  -> "f32"
   | Bool -> "bool"
   | Nil -> "()"
+  | Array (typ, sz) ->
+      let sz_s = Printf.sprintf "%d" sz in
+      "array<" ^ (fmt_type typ) ^ ">[" ^ sz_s ^ "]"
   | Undecided -> "<?undecided?>"
 ;;
 
@@ -217,4 +221,27 @@ let type_bitwise_to from_t to_t =
         Printf.printf "Cannot bitwise cast [%s] to [%s]\n" from_t_s to_t_s;
         false
       end
+;;
+
+
+let is_index_type idx_t =
+  match idx_t with
+  | U64
+  | U32
+  | U16
+  | U8 -> true
+  | _ ->
+      let not_idx_s = fmt_type idx_t in
+      Printf.printf "Cannot index into array with type [%s]\n" not_idx_s;
+      false
+;;
+
+
+let is_indexable_type arr_t =
+  match arr_t with
+  | Array(_, _) -> true
+  | _ ->
+      let not_arr_s = fmt_type arr_t in
+      Printf.printf "Type [%s] is not indexable indexable\n" not_arr_s;
+      false
 ;;
