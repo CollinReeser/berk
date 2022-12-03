@@ -165,9 +165,9 @@ let main = begin
       let decl_tuple_unpack_lit_raw = (
         DeclDeconStmt(
           [
-            ("my_tuple_lit_unpack_var_1", def_var_qual);
+            ("my_tuple_lit_unpack_var_1", {mut = true});
             ("my_tuple_lit_unpack_var_2", def_var_qual);
-            ("my_tuple_lit_unpack_var_3", def_var_qual);
+            ("my_tuple_lit_unpack_var_3", {mut = true});
           ],
           Undecided,
           TupleExpr(
@@ -190,6 +190,20 @@ let main = begin
           ],
           Undecided,
           ValVar(Undecided, "my_tuple_var")
+        )
+      ) in
+      let assign_tuple_unpack_lit_raw = (
+        AssignDeconStmt(
+          [
+            ("my_tuple_lit_unpack_var_1");
+            ("my_tuple_lit_unpack_var_3");
+          ],
+          TupleExpr(
+            Undecided, [
+              ValI8(13);
+              ValI32(11);
+            ]
+          )
         )
       ) in
       let expr_raw = (
@@ -238,6 +252,7 @@ let main = begin
           decl_tuple_raw;
           decl_tuple_unpack_lit_raw;
           decl_tuple_unpack_var_raw;
+          assign_tuple_unpack_lit_raw;
           return_stmt_raw;
         ];
       } in
