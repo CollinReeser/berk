@@ -14,9 +14,18 @@ type berk_t =
   | Bool
   | Nil
   | Array of berk_t * int
+  | Tuple of berk_t list
   | Undecided
 
-let rec fmt_type berk_type =
+let rec fmt_join_types delim types =
+  match types with
+  | [] -> ""
+  | [x] -> fmt_type x
+  | x::xs ->
+      let lhs = fmt_type x in
+      lhs ^ delim ^ (fmt_join_types delim xs)
+
+and fmt_type berk_type =
   match berk_type with
   | U64 -> "u64"
   | U32 -> "u32"
@@ -34,6 +43,7 @@ let rec fmt_type berk_type =
   | Array (typ, sz) ->
       let sz_s = Printf.sprintf "%d" sz in
       "array<" ^ (fmt_type typ) ^ ">[" ^ sz_s ^ "]"
+  | Tuple (types) -> "(" ^ (fmt_join_types ", " types) ^ ")"
   | Undecided -> "<?undecided?>"
 ;;
 

@@ -48,6 +48,7 @@ and expr =
   | ArrayExpr of (berk_t * expr list)
   (* Bool decides adding bounds-check, first expr is index, second is array *)
   | IndexExpr of (berk_t * maybe_bounds_check * expr * expr)
+  | TupleExpr of berk_t * expr list
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -80,6 +81,7 @@ let expr_type typ =
   | FuncCall(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
   | IndexExpr(typ, _, _, _) -> typ
+  | TupleExpr(typ, _) -> typ
 ;;
 
 type module_decl =

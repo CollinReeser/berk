@@ -34,6 +34,12 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
       let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
       Llvm.pointer_type llvm_arr_t
 
+  | Tuple(types) ->
+      let llvm_t_lst = List.map (berk_t_to_llvm_t llvm_ctxt) types in
+      let llvm_t_arr = Array.of_list llvm_t_lst in
+      let llvm_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+      Llvm.pointer_type llvm_tuple_t
+
   | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
@@ -383,6 +389,24 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
         let loaded = Llvm.build_load llvm_gep "loadarraytmp" builder in
 
         loaded
+
+    | TupleExpr(typ, exprs) ->
+        let llvm_expr_vals = List.map _codegen_expr exprs in
+        let llvm_ptr_t = berk_t_to_llvm_t llvm_ctxt typ in
+        let llvm_tuple_t = Llvm.element_type llvm_ptr_t in
+        let alloca = Llvm.build_alloca llvm_tuple_t "tupletmp" builder in
+        let _ = List.iteri (
+          fun idx expr_val ->
+            let indices = Array.of_list [
+              Llvm.const_int i32_t 0;
+              Llvm.const_int i32_t idx;
+            ] in
+            let llvm_gep = Llvm.build_gep alloca indices "geptmp" builder in
+            let _ = Llvm.build_store expr_val llvm_gep builder in
+            ()
+        ) llvm_expr_vals in
+
+        alloca
 
 
 let initialize_fpm the_fpm =

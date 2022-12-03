@@ -110,6 +110,11 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       Printf.printf "]";
       print_expr ~print_typ:print_typ "" arr
 
+  | TupleExpr(_, exprs) ->
+      Printf.printf "%s(" init_ind;
+      print_join_exprs ~print_typ:print_typ ind ", " exprs;
+      Printf.printf ")"
+
 
 and print_stmt ?(print_typ = false) ind stmt =
   match stmt with

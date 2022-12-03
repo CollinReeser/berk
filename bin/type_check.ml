@@ -261,4 +261,11 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
             end
           else failwith "Unexpected components of index operation"
 
+    | TupleExpr(_, exprs) ->
+        let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
+        let exprs_t_lst = List.map expr_type exprs_typechecked in
+        let tuple_t = Tuple(exprs_t_lst) in
+
+        TupleExpr(tuple_t, exprs_typechecked)
+
 ;;

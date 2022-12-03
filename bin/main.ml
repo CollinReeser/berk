@@ -143,6 +143,20 @@ let main = begin
           )
         )
       ) in
+      let decl_tuple_raw = (
+        DeclStmt(
+          "my_tuple_var", def_var_qual, Undecided,
+          TupleExpr(
+            Undecided, [
+              ValI8(10);
+              ValU8(9);
+              ValI32(8);
+              ValU32(7);
+              ValBool(false);
+            ]
+          )
+        )
+      ) in
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -186,6 +200,7 @@ let main = begin
           decl_call_recursion_raw;
           decl_array_raw;
           decl_array_idx_raw;
+          decl_tuple_raw;
           return_stmt_raw;
         ];
       } in
