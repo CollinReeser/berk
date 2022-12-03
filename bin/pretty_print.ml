@@ -22,7 +22,16 @@ let print_bin_op op =
   | Greater -> Printf.printf " > "
   | GreaterEq -> Printf.printf " >= "
 
-let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
+let rec print_join_exprs ?(print_typ = false) ind delim exprs =
+  match exprs with
+  | [] -> ()
+  | [x] -> print_expr ~print_typ:print_typ ind x
+  | x::xs ->
+      print_expr ~print_typ:print_typ ind x ;
+      Printf.printf delim;
+      print_join_exprs ~print_typ:print_typ ind delim xs
+
+and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
   let init_ind = if init_ind then ind else "" in
   let (typ_s, typ_s_rev) =
     if print_typ
@@ -93,11 +102,9 @@ let rec print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
     end
   | ArrayExpr(_, exprs) ->
       Printf.printf "%s[" init_ind;
-      List.iter (
-        fun ex -> print_expr ~print_typ:print_typ "" ex; Printf.printf ", "
-      ) exprs;
+      print_join_exprs ~print_typ:print_typ ind ", " exprs;
       Printf.printf "]"
-  | IndexExpr(_, idx, arr) ->
+  | IndexExpr(_, _, idx, arr) ->
       Printf.printf "%s[" init_ind;
       print_expr ~print_typ:print_typ "" idx;
       Printf.printf "]";

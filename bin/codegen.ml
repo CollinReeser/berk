@@ -371,13 +371,10 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
         alloca
 
-        (* let loaded = Llvm.build_load alloca "loadarraytmp" builder in
-
-        loaded *)
-
-    | IndexExpr(_, idx_expr, arr_expr) ->
+    | IndexExpr(_, _, idx_expr, arr_expr) ->
         let idx_val = _codegen_expr idx_expr in
         let arr_val = _codegen_expr arr_expr in
+        (* TODO: Add bounds check logic when relevant *)
         let indices = Array.of_list [
           Llvm.const_int i32_t 0;
           idx_val;

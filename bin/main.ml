@@ -136,7 +136,11 @@ let main = begin
       let decl_array_idx_raw = (
         DeclStmt(
           "my_array_idx_var", def_var_qual, Undecided,
-          IndexExpr(Undecided, ValU64(2), ValVar(Undecided, "my_array_var"))
+          IndexExpr(
+            Undecided, Undecided,
+            ValU64(3),
+            ValVar(Undecided, "my_array_var")
+          )
         )
       ) in
       let expr_raw = (

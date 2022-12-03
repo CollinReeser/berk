@@ -230,7 +230,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
 
         ArrayExpr(arr_t, exprs_typechecked)
 
-    | IndexExpr(_, idx, arr) ->
+    | IndexExpr(_, _, idx, arr) ->
         let idx_typechecked = type_check_expr tc_ctxt idx in
         let arr_typechecked = type_check_expr tc_ctxt arr in
         let idx_t = expr_type idx_typechecked in
@@ -239,18 +239,23 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
           then
             begin match arr_t with
             | Array(elem_typ, sz) ->
-                let index_expr_typechecked = IndexExpr(
-                  elem_typ, idx_typechecked, arr_typechecked
-                ) in
                 begin match idx_typechecked with
                   | ValU64(i)
                   | ValU32(i)
                   | ValU16(i)
                   | ValU8(i) ->
                       if i < sz
-                        then index_expr_typechecked
+                        then
+                          IndexExpr(
+                            elem_typ, NoBoundsCheck,
+                            idx_typechecked, arr_typechecked
+                          )
                         else failwith "Static out-of-bounds index into array"
-                  | _ -> index_expr_typechecked
+                  | _ ->
+                      IndexExpr(
+                        elem_typ, DoBoundsCheck,
+                        idx_typechecked, arr_typechecked
+                      )
                 end
             | _ -> failwith "Unexpected index target in index expr"
             end
