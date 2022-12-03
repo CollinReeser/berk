@@ -42,7 +42,7 @@ and fmt_type berk_type =
   | Nil -> "()"
   | Array (typ, sz) ->
       let sz_s = Printf.sprintf "%d" sz in
-      "array<" ^ (fmt_type typ) ^ ">[" ^ sz_s ^ "]"
+      "[" ^ (fmt_type typ) ^ " x " ^ sz_s ^ "]"
   | Tuple (types) -> "(" ^ (fmt_join_types ", " types) ^ ")"
   | Undecided -> "<?undecided?>"
 ;;

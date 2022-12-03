@@ -105,35 +105,77 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       print_join_exprs ~print_typ:print_typ ind ", " exprs;
       Printf.printf "]"
   | IndexExpr(_, _, idx, arr) ->
-      Printf.printf "%s[" init_ind;
+      Printf.printf "%s" init_ind;
+      print_expr ~print_typ:print_typ "" arr;
+      Printf.printf "[";
       print_expr ~print_typ:print_typ "" idx;
       Printf.printf "]";
-      print_expr ~print_typ:print_typ "" arr
 
   | TupleExpr(_, exprs) ->
       Printf.printf "%s(" init_ind;
       print_join_exprs ~print_typ:print_typ ind ", " exprs;
       Printf.printf ")"
 
+and print_join_idents_quals delim idents_quals =
+  match idents_quals with
+  | [] -> ()
+  | [(ident, qual)] -> Printf.printf "%s%s" (fmt_var_qual qual) ident
+  | (ident, qual)::xs ->
+      Printf.printf "%s%s%s" (fmt_var_qual qual) ident delim;
+      print_join_idents_quals delim xs
+
+and print_join_idents delim idents =
+  match idents with
+  | [] -> ()
+  | [ident] -> Printf.printf "%s" ident
+  | ident::xs ->
+      Printf.printf "%s%s" ident delim;
+      print_join_idents delim xs
 
 and print_stmt ?(print_typ = false) ind stmt =
   match stmt with
-  | DeclStmt (ident, qual, btype, ex) -> (
-    let typ_s = match btype with
-      | Undecided -> ""
-      | x -> fmt_type x |> Printf.sprintf ": %s"
-    in
-    Printf.printf "%slet %s%s" ind (fmt_var_qual qual) ident;
-    Printf.printf "%s" typ_s;
-    Printf.printf " = ";
-    print_expr ~print_typ:print_typ ind ex;
-    Printf.printf ";\n"
-  )
-  | AssignStmt (ident, ex) ->
-      Printf.printf "%s%s" ind ident;
-      Printf.printf " = ";
-      print_expr ~print_typ:print_typ ind ex;
-      Printf.printf ";\n"
+  | DeclStmt (idents_quals, btype, ex) -> begin
+      let typ_s = match btype with
+        | Undecided -> ""
+        | x -> fmt_type x |> Printf.sprintf ": %s"
+      in
+      Printf.printf "%slet " ind;
+      match idents_quals with
+      | [(ident, qual)] -> begin
+          Printf.printf "%s%s" (fmt_var_qual qual) ident;
+          Printf.printf "%s" typ_s;
+          Printf.printf " = ";
+          print_expr ~print_typ:print_typ ind ex;
+          Printf.printf ";\n";
+        end
+      | _ -> begin
+          Printf.printf "(";
+          print_join_idents_quals ", " idents_quals;
+          Printf.printf ")";
+          Printf.printf "%s" typ_s;
+          Printf.printf " = ";
+          print_expr ~print_typ:print_typ ind ex;
+          Printf.printf ";\n"
+        end
+    end
+  | AssignStmt (idents, ex) ->
+      Printf.printf "%s" ind;
+      begin match idents with
+        | [ident] -> begin
+            Printf.printf "%s" ident;
+            Printf.printf " = ";
+            print_expr ~print_typ:print_typ ind ex;
+            Printf.printf ";\n"
+          end
+        | _ -> begin
+            Printf.printf "(";
+            print_join_idents ", " idents;
+            Printf.printf ")";
+            Printf.printf " = ";
+            print_expr ~print_typ:print_typ ind ex;
+            Printf.printf ";\n"
+          end
+      end
   | ExprStmt (ex) ->
       Printf.printf "%s" ind;
       print_expr ~print_typ:print_typ ind ex;

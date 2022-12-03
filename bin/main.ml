@@ -22,16 +22,19 @@ let main = begin
 
       let decl_stmt_raw = (
         DeclStmt(
-          "my_var", def_var_qual, Undecided,
+          [("my_var", def_var_qual)], Undecided,
           BlockExpr(
             Undecided, [
-              DeclStmt("my_inner_var_1", def_var_qual, Undecided, ValI64(51));
               DeclStmt(
-                "my_inner_var_2", {mut = true}, Undecided,
+                [("my_inner_var_1", def_var_qual)], Undecided,
+                ValI64(51)
+              );
+              DeclStmt(
+                [("my_inner_var_2", {mut = true})], Undecided,
                 ValVar(Undecided, "my_inner_var_1")
               );
               DeclStmt(
-                "my_inner_var_3", def_var_qual, Undecided,
+                [("my_inner_var_3", def_var_qual)], Undecided,
                 IfThenElseExpr(
                   Undecided,
                   BinOp(Undecided, Less, ValI8(11), ValI64(9)),
@@ -44,7 +47,9 @@ let main = begin
                   )
                 )
               );
-              AssignStmt("my_inner_var_2", ValVar(Undecided, "my_inner_var_3"));
+              AssignStmt(
+                ["my_inner_var_2"], ValVar(Undecided, "my_inner_var_3")
+              );
               ResolveStmt(
                 BinOp(
                   Undecided, Add,
@@ -66,7 +71,7 @@ let main = begin
       ) in
       let decl_stmt_float_raw = (
         DeclStmt(
-          "my_float_var", def_var_qual, Undecided,
+          [("my_float_var", def_var_qual)], Undecided,
           BinOp(
             Undecided, Add,
             ValF32(123.456),
@@ -84,7 +89,7 @@ let main = begin
       ) in
       let decl_stmt_bool_raw = (
         DeclStmt(
-          "my_bool_var", def_var_qual, Undecided,
+          [("my_bool_var", def_var_qual)], Undecided,
           BinOp(
             Undecided, Eq,
             BinOp(
@@ -97,14 +102,14 @@ let main = begin
       ) in
       let decl_stmt_bitcast_raw = (
         DeclStmt(
-          "my_bitcast_var", def_var_qual,
+          [("my_bitcast_var", def_var_qual)],
           U32,
           ValCastBitwise(U32, ValI32(-32000))
         )
       ) in
       let decl_dodge_recursion_raw = (
         DeclStmt(
-          "my_recursive_dodge_var", def_var_qual, Undecided,
+          [("my_recursive_dodge_var", def_var_qual)], Undecided,
           IfThenElseExpr(
             Undecided,
             ValBool(true),
@@ -115,13 +120,13 @@ let main = begin
       ) in
       let decl_call_recursion_raw = (
         DeclStmt(
-          "my_recursive_dodge_var", def_var_qual, Undecided,
+          [("my_recursive_dodge_var", def_var_qual)], Undecided,
           FuncCall(Undecided, "rec_me", [ValI8(100)])
         )
       ) in
       let decl_array_raw = (
         DeclStmt(
-          "my_array_var", def_var_qual, Undecided,
+          [("my_array_var", def_var_qual)], Undecided,
           ArrayExpr(
             Undecided, [
               ValI8(10);
@@ -135,17 +140,17 @@ let main = begin
       ) in
       let decl_array_idx_raw = (
         DeclStmt(
-          "my_array_idx_var", def_var_qual, Undecided,
+          [("my_array_idx_var", def_var_qual)], Undecided,
           IndexExpr(
             Undecided, Undecided,
-            ValU64(3),
+            ValU64(2),
             ValVar(Undecided, "my_array_var")
           )
         )
       ) in
       let decl_tuple_raw = (
         DeclStmt(
-          "my_tuple_var", def_var_qual, Undecided,
+          [("my_tuple_var", def_var_qual)], Undecided,
           TupleExpr(
             Undecided, [
               ValI8(10);
@@ -155,6 +160,36 @@ let main = begin
               ValBool(false);
             ]
           )
+        )
+      ) in
+      let decl_tuple_unpack_lit_raw = (
+        DeclStmt(
+          [
+            ("my_tuple_lit_unpack_var_1", def_var_qual);
+            ("my_tuple_lit_unpack_var_2", def_var_qual);
+            ("my_tuple_lit_unpack_var_3", def_var_qual);
+          ],
+          Undecided,
+          TupleExpr(
+            Undecided, [
+              ValI8(13);
+              ValU16(12);
+              ValI32(11);
+            ]
+          )
+        )
+      ) in
+      let decl_tuple_unpack_var_raw = (
+        DeclStmt(
+          [
+            ("my_tuple_var_unpack_var_1", def_var_qual);
+            ("my_tuple_var_unpack_var_2", def_var_qual);
+            ("my_tuple_var_unpack_var_3", def_var_qual);
+            ("my_tuple_var_unpack_var_4", def_var_qual);
+            ("my_tuple_var_unpack_var_5", def_var_qual);
+          ],
+          Undecided,
+          ValVar(Undecided, "my_tuple_var")
         )
       ) in
       let expr_raw = (
@@ -201,6 +236,8 @@ let main = begin
           decl_array_raw;
           decl_array_idx_raw;
           decl_tuple_raw;
+          decl_tuple_unpack_lit_raw;
+          decl_tuple_unpack_var_raw;
           return_stmt_raw;
         ];
       } in

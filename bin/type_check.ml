@@ -85,9 +85,16 @@ and type_check_func mod_ctxt func_def =
 
   {func_def with f_stmts = f_stmts_typechecked}
 
+and update_vars_with_idents_quals vars_init idents_quals types =
+  let idents_quals_types = List.combine idents_quals types in
+  List.fold_left (
+    fun vars ((id, qual), typ) ->
+      StrMap.add id (typ, qual) vars
+  ) vars_init idents_quals_types
+
 and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
   match stmt with
-  | DeclStmt(id, qual, decl_t, exp) ->
+  | DeclStmt(idents_quals, decl_t, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
@@ -97,18 +104,84 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         then decl_t
         else failwith "Explicitly declared type disagrees with expr"
       in
-      let vars_up = StrMap.add id (resolved_t, qual) tc_ctxt.vars in
+      let vars_up = begin match idents_quals with
+        | [(id, qual)] -> StrMap.add id (resolved_t, qual) tc_ctxt.vars
+        | _ ->
+          begin match resolved_t with
+          | Array(typ, sz) ->
+              if sz == List.length idents_quals
+              then
+                begin
+                  let types = List.init sz (fun _ -> typ) in
+                  update_vars_with_idents_quals tc_ctxt.vars idents_quals types
+                end
+              else failwith "Mismatch in number of idents vs array expr in decl"
+          | Tuple(types) ->
+              if List.length types == List.length idents_quals
+              then
+                begin
+                  update_vars_with_idents_quals tc_ctxt.vars idents_quals types
+                end
+              else failwith "Mismatch in number of idents vs tuple expr in decl"
+          | _ -> failwith "Cannot deconstruct non-aggregate type in decl"
+          end
+        end in
       let tc_ctxt_up = {tc_ctxt with vars = vars_up} in
-      (tc_ctxt_up, DeclStmt(id, qual, resolved_t, exp_typechecked))
-  | AssignStmt(id, exp) ->
-      let (var_t, {mut}) = StrMap.find id tc_ctxt.vars in
-      let _ = if mut then () else failwith "Cannot assign to immutable var" in
+
+      (tc_ctxt_up, DeclStmt(idents_quals, resolved_t, exp_typechecked))
+
+  | AssignStmt(idents, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
 
-      if type_convertible_to exp_t var_t
-        then (tc_ctxt, AssignStmt(id, exp_typechecked))
-        else failwith "Expr for assignment does not typecheck"
+      let typecheck_id_typ_pairs idents types =
+        List.iter2 (
+          fun id typ ->
+            let (var_t, {mut}) = StrMap.find id tc_ctxt.vars in
+            let _ = if mut
+              then ()
+              else failwith "Cannot assign to immutable var"
+            in
+            if type_convertible_to typ var_t
+              then ()
+              else failwith "Cannot assign type to var"
+        ) idents types
+      in
+
+      begin match (idents, exp_t) with
+        | ([id], exp_t) ->
+          begin
+            let (var_t, {mut}) = StrMap.find id tc_ctxt.vars in
+            let _ = if mut
+              then ()
+              else failwith "Cannot assign to immutable var"
+            in
+            if type_convertible_to exp_t var_t
+              then (tc_ctxt, AssignStmt(idents, exp_typechecked))
+              else failwith "Expr for assignment does not typecheck"
+          end
+        | (idents, Array(typ, sz)) ->
+          let _ =
+            if List.length idents == sz
+              then
+                let types = List.init sz (fun _ -> typ) in
+                typecheck_id_typ_pairs idents types
+              else failwith "Mismatch in number of idents vs array expr in assi"
+          in
+
+          (tc_ctxt, AssignStmt(idents, exp_typechecked))
+
+        | (idents, Tuple(types)) ->
+          let _ =
+            if List.length idents == List.length types
+              then typecheck_id_typ_pairs idents types
+              else failwith "Mismatch in number of idents vs tuple expr in assi"
+          in
+
+          (tc_ctxt, AssignStmt(idents, exp_typechecked))
+
+        | _ -> failwith "Cannot deconstruct non-aggregate type into ids"
+      end
 
   | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt exp))
   | ResolveStmt(exp) -> (tc_ctxt, ResolveStmt(type_check_expr tc_ctxt exp))

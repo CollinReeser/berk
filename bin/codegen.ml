@@ -49,6 +49,19 @@ let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 ;;
 
 
+let fold_left_2_i f acc lhs rhs =
+  let rec _fold_left_2_i f acc lhs rhs idx =
+    match (lhs, rhs) with
+    | ([], []) -> acc
+    | (x::xs, y::ys) ->
+        let new_acc = f acc x y idx in
+        _fold_left_2_i f new_acc xs ys (idx + 1)
+    | _ -> failwith "Mismatched lists!"
+  in
+  _fold_left_2_i f acc lhs rhs 0
+;;
+
+
 let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
   let mod_ctxt = default_mod_gen_ctxt in
   let _codegen_mod_decl =
@@ -140,10 +153,10 @@ and codegen_stmts llvm_ctxt builder func_ctxt stmts =
 
 and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
   match stmt with
-  | DeclStmt (ident, _, typ, expr) ->
+  | DeclStmt ([(ident, _)], typ, expr) ->
+      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ ident builder in
-      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
       let updated_vars = StrMap.add ident alloca func_ctxt.cur_vars in
@@ -151,10 +164,63 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
 
       func_ctxt_up
 
-  | AssignStmt (ident, expr) ->
+  | DeclStmt (idents_quals, typ, expr) ->
+      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
+      let types = match typ with
+        | Array(typ, sz) -> List.init sz (fun _ -> typ)
+        | Tuple(types) -> types
+        | _ -> failwith "Cannot gen destructuring for non-aggregate type"
+      in
+
+      let i32_t = Llvm.i32_type llvm_ctxt in
+      let idents = List.map (fun (id, _) -> id) idents_quals in
+
+      let updated_vars = fold_left_2_i (
+        fun vars ident typ idx ->
+          let indices = Array.of_list [
+            Llvm.const_int i32_t 0;
+            Llvm.const_int i32_t idx;
+          ] in
+
+          let llvm_gep = Llvm.build_gep expr_val indices "geptmp" builder in
+          let loaded = Llvm.build_load llvm_gep "loadidxtmp" builder in
+
+          let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+          let alloca = Llvm.build_alloca alloca_typ ident builder in
+          let _ : Llvm.llvalue = Llvm.build_store loaded alloca builder in
+
+          StrMap.add ident alloca vars
+      ) func_ctxt.cur_vars idents types in
+
+      {func_ctxt with cur_vars = updated_vars}
+
+  | AssignStmt ([ident], expr) ->
       let alloca = StrMap.find ident func_ctxt.cur_vars in
       let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
+
+      func_ctxt
+
+  | AssignStmt (idents, expr) ->
+      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
+
+      let i32_t = Llvm.i32_type llvm_ctxt in
+
+      let _ = List.iteri (
+        fun idx ident ->
+          let indices = Array.of_list [
+            Llvm.const_int i32_t 0;
+            Llvm.const_int i32_t idx;
+          ] in
+
+          let llvm_gep = Llvm.build_gep expr_val indices "geptmp" builder in
+          let loaded = Llvm.build_load llvm_gep "loadidxtmp" builder in
+
+          let var_alloca = StrMap.find ident func_ctxt.cur_vars in
+          let _ : Llvm.llvalue = Llvm.build_store loaded var_alloca builder in
+
+          ()
+      ) idents in
 
       func_ctxt
 
@@ -421,9 +487,13 @@ let initialize_fpm the_fpm =
   Llvm_scalar_opts.add_gvn the_fpm ;
   (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
   Llvm_scalar_opts.add_cfg_simplification the_fpm ;
-  (* Promote allocas to registers again; this second round can remove more
-  redundant code. *)
+
+  (* Do some optimizations again, as these have demonstrably reduced more
+  code when ran again after the above. *)
+
   Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
+  Llvm_scalar_opts.add_instruction_combination the_fpm ;
+
   *)
 
   (* Return value here only indicates whether internal state was modified *)

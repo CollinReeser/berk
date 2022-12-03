@@ -14,7 +14,7 @@ let build_example_ast =
     ];
     f_stmts = [
       DeclStmt(
-        "abc", def_var_qual, Undecided,
+        [("abc", def_var_qual)], Undecided,
         BinOp(
           Undecided, Add,
           ValI32(5),
@@ -46,7 +46,7 @@ let build_example_ast =
         )
       );
       DeclStmt(
-        "def", def_var_qual, I64,
+        [("def", def_var_qual)], I64,
         IfThenElseExpr(
           Undecided,
           ValBool(false),
@@ -122,7 +122,7 @@ let test_suite =
       BlockExpr(
         Undecided, [
           DeclStmt(
-            "egh", def_var_qual, I64,
+            [("egh", def_var_qual)], I64,
             BinOp(
               Undecided, Add,
               ValI64(5),
@@ -142,7 +142,7 @@ let test_suite =
       ),
       BlockExpr(
         Undecided, [
-          DeclStmt("ijk", def_var_qual, Undecided, ValBool(false));
+          DeclStmt([("ijk", def_var_qual)], Undecided, ValBool(false));
           ResolveStmt(ValI64(24));
         ]
       )
