@@ -94,7 +94,7 @@ and update_vars_with_idents_quals vars_init idents_quals types =
 
 and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
   match stmt with
-  | DeclStmt(idents_quals, decl_t, exp) ->
+  | DeclStmt(ident, qual, decl_t, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
@@ -104,33 +104,63 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         then decl_t
         else failwith "Explicitly declared type disagrees with expr"
       in
-      let vars_up = begin match idents_quals with
-        | [(id, qual)] -> StrMap.add id (resolved_t, qual) tc_ctxt.vars
-        | _ ->
-          begin match resolved_t with
-          | Array(typ, sz) ->
-              if sz == List.length idents_quals
-              then
-                begin
-                  let types = List.init sz (fun _ -> typ) in
-                  update_vars_with_idents_quals tc_ctxt.vars idents_quals types
-                end
-              else failwith "Mismatch in number of idents vs array expr in decl"
-          | Tuple(types) ->
-              if List.length types == List.length idents_quals
-              then
-                begin
-                  update_vars_with_idents_quals tc_ctxt.vars idents_quals types
-                end
-              else failwith "Mismatch in number of idents vs tuple expr in decl"
-          | _ -> failwith "Cannot deconstruct non-aggregate type in decl"
-          end
-        end in
+
+      let vars_up = StrMap.add ident (resolved_t, qual) tc_ctxt.vars in
       let tc_ctxt_up = {tc_ctxt with vars = vars_up} in
 
-      (tc_ctxt_up, DeclStmt(idents_quals, resolved_t, exp_typechecked))
+      (tc_ctxt_up, DeclStmt(ident, qual, resolved_t, exp_typechecked))
 
-  | AssignStmt(idents, exp) ->
+  | DeclDeconStmt(idents_quals, decl_t, exp) ->
+      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_t = expr_type exp_typechecked in
+      let resolved_t = match decl_t with
+      | Undecided -> exp_t
+      | _ ->
+        if type_convertible_to exp_t decl_t
+        then decl_t
+        else failwith "Explicitly declared type disagrees with expr"
+      in
+
+      let vars_up = begin match resolved_t with
+        | Array(typ, sz) ->
+            if sz == List.length idents_quals
+            then
+              begin
+                let types = List.init sz (fun _ -> typ) in
+                update_vars_with_idents_quals tc_ctxt.vars idents_quals types
+              end
+            else failwith "Mismatch in number of idents vs array expr in decl"
+        | Tuple(types) ->
+            if List.length types == List.length idents_quals
+            then
+              begin
+                update_vars_with_idents_quals tc_ctxt.vars idents_quals types
+              end
+            else failwith "Mismatch in number of idents vs tuple expr in decl"
+        | _ -> failwith "Cannot deconstruct non-aggregate type in decl"
+        end
+      in
+      let tc_ctxt_up = {tc_ctxt with vars = vars_up} in
+
+      (tc_ctxt_up, DeclDeconStmt(idents_quals, resolved_t, exp_typechecked))
+
+  | AssignStmt(ident, exp) ->
+      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_t = expr_type exp_typechecked in
+
+      let (var_t, {mut}) = StrMap.find ident tc_ctxt.vars in
+
+      let _ =
+        if mut
+          then ()
+          else failwith "Cannot assign to immutable var"
+      in
+
+      if type_convertible_to exp_t var_t
+        then (tc_ctxt, AssignStmt(ident, exp_typechecked))
+        else failwith "Expr for assignment does not typecheck"
+
+  | AssignDeconStmt(idents, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
 
@@ -148,19 +178,8 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         ) idents types
       in
 
-      begin match (idents, exp_t) with
-        | ([id], exp_t) ->
-          begin
-            let (var_t, {mut}) = StrMap.find id tc_ctxt.vars in
-            let _ = if mut
-              then ()
-              else failwith "Cannot assign to immutable var"
-            in
-            if type_convertible_to exp_t var_t
-              then (tc_ctxt, AssignStmt(idents, exp_typechecked))
-              else failwith "Expr for assignment does not typecheck"
-          end
-        | (idents, Array(typ, sz)) ->
+      begin match exp_t with
+        | Array(typ, sz) ->
           let _ =
             if List.length idents == sz
               then
@@ -169,16 +188,16 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
               else failwith "Mismatch in number of idents vs array expr in assi"
           in
 
-          (tc_ctxt, AssignStmt(idents, exp_typechecked))
+          (tc_ctxt, AssignDeconStmt(idents, exp_typechecked))
 
-        | (idents, Tuple(types)) ->
+        | Tuple(types) ->
           let _ =
             if List.length idents == List.length types
               then typecheck_id_typ_pairs idents types
               else failwith "Mismatch in number of idents vs tuple expr in assi"
           in
 
-          (tc_ctxt, AssignStmt(idents, exp_typechecked))
+          (tc_ctxt, AssignDeconStmt(idents, exp_typechecked))
 
         | _ -> failwith "Cannot deconstruct non-aggregate type into ids"
       end

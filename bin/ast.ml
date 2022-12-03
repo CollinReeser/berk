@@ -51,8 +51,10 @@ and expr =
   | TupleExpr of berk_t * expr list
 
 and stmt =
-  | DeclStmt of (ident_t * var_qual) list * berk_t * expr
-  | AssignStmt of ident_t list * expr
+  | DeclStmt of ident_t * var_qual * berk_t * expr
+  | DeclDeconStmt of (ident_t * var_qual) list * berk_t * expr
+  | AssignStmt of ident_t * expr
+  | AssignDeconStmt of ident_t list * expr
   | ExprStmt of expr
   | ResolveStmt of expr
   | ReturnStmt of expr

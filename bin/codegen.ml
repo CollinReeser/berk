@@ -153,7 +153,7 @@ and codegen_stmts llvm_ctxt builder func_ctxt stmts =
 
 and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
   match stmt with
-  | DeclStmt ([(ident, _)], typ, expr) ->
+  | DeclStmt (ident, _, typ, expr) ->
       let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
       let alloca = Llvm.build_alloca alloca_typ ident builder in
@@ -164,7 +164,7 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
 
       func_ctxt_up
 
-  | DeclStmt (idents_quals, typ, expr) ->
+  | DeclDeconStmt (idents_quals, typ, expr) ->
       let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let types = match typ with
         | Array(typ, sz) -> List.init sz (fun _ -> typ)
@@ -194,14 +194,14 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
 
       {func_ctxt with cur_vars = updated_vars}
 
-  | AssignStmt ([ident], expr) ->
+  | AssignStmt (ident, expr) ->
       let alloca = StrMap.find ident func_ctxt.cur_vars in
       let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
       func_ctxt
 
-  | AssignStmt (idents, expr) ->
+  | AssignDeconStmt (idents, expr) ->
       let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
 
       let i32_t = Llvm.i32_type llvm_ctxt in
