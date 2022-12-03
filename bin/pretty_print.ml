@@ -97,7 +97,7 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
   | FuncCall(_, id, exprs) ->
     begin
       Printf.printf "%s%s%s(" init_ind typ_s_rev id;
-      List.iter (print_expr ~print_typ:print_typ "") exprs;
+      print_join_exprs ~print_typ:print_typ ind ", " exprs;
       Printf.printf ")"
     end
   | ArrayExpr(_, exprs) ->
