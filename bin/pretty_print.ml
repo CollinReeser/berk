@@ -181,6 +181,17 @@ and print_stmt ?(print_typ = false) ind stmt =
 ;;
 
 let print_func_ast ?(print_typ = false) {f_name; f_params; f_stmts; f_ret_t;} =
+  let rec print_join_func_params delim params =
+    begin match params with
+      | [] -> ()
+      | [x] -> print_func_param x
+      | x::xs ->
+          print_func_param x;
+          Printf.printf "%s " delim;
+          print_join_func_params delim xs
+    end
+  in
+
   let ret_t_s = begin match f_ret_t with
     | Nil
     | Undecided ->
@@ -190,7 +201,7 @@ let print_func_ast ?(print_typ = false) {f_name; f_params; f_stmts; f_ret_t;} =
     | _ -> Printf.sprintf ": %s" (fmt_type f_ret_t)
   end in
   Printf.printf "fn %s(" f_name;
-  List.iter print_func_param f_params;
+  print_join_func_params "," f_params;
   Printf.printf ")%s {\n" ret_t_s;
   List.iter (print_stmt ~print_typ:print_typ "  ") f_stmts;
   Printf.printf "}\n"
