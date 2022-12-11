@@ -107,7 +107,7 @@ and common_type_of_lst lst =
   | x::xs -> List.fold_left common_type_of_lr x xs
 ;;
 
-let type_convertible_to from_t to_t =
+let rec type_convertible_to from_t to_t =
   match (from_t, to_t) with
   | (I64, I64)
   | (I32, I64)
@@ -140,6 +140,15 @@ let type_convertible_to from_t to_t =
 
   | (Bool, Bool) -> true
   | (Nil, Nil) -> true
+
+  | (Tuple(lhs_types), Tuple(rhs_types)) ->
+      if (List.length lhs_types) != (List.length rhs_types)
+        then false
+        else begin
+          let agreements = List.map2 type_convertible_to lhs_types rhs_types in
+          List.fold_left (==) true agreements
+        end
+
   | _ ->
       let from_t_s = fmt_type from_t in
       let to_t_s = fmt_type to_t in
