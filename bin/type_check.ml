@@ -203,6 +203,23 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       end
 
   | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt exp))
+  | BlockStmt (stmts) ->
+      let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
+      (tc_ctxt_up, BlockStmt(stmts_typechecked))
+
+  | IfThenElseStmt (if_cond, then_stmt, else_stmt) ->
+      let if_cond_typechecked = type_check_expr tc_ctxt if_cond in
+      let (_, then_stmt_typechecked) = type_check_stmt tc_ctxt then_stmt in
+      let (_, else_stmt_typechecked) = type_check_stmt tc_ctxt else_stmt in
+      (
+        tc_ctxt,
+        IfThenElseStmt(
+          if_cond_typechecked,
+          then_stmt_typechecked,
+          else_stmt_typechecked
+        )
+      )
+
   | ResolveStmt(exp) -> (tc_ctxt, ResolveStmt(type_check_expr tc_ctxt exp))
   | ReturnStmt(exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in

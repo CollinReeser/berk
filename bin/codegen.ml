@@ -78,6 +78,52 @@ and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
 
 
+and get_rev_instruction_list bb =
+  let init_pos = Llvm.instr_end bb in
+  let rec _get_rev_instruction_list cur_pos =
+    begin match cur_pos with
+      | Llvm.At_start (_) -> []
+      | Llvm.After (inst) ->
+        let next_pos = Llvm.instr_pred inst in
+        inst::(_get_rev_instruction_list next_pos)
+    end
+  in
+  _get_rev_instruction_list init_pos
+
+
+(*
+TODO: Incomplete. Catches cases where there are multiple trailing terminators,
+but not cases where a rogue terminator is somewhere arbitrarily in the "middle"
+of the basic block; in that case, _all_ instructions from the end to the rogue
+terminator must be removed. Maybe we hold onto a growing list of the trailing
+instructions as we iterate in reverse, and whenever we find "another"
+terminator, we drop that list?
+*)
+and remove_dead_instructions bb =
+  let instr_list = get_rev_instruction_list bb in
+  let rec _remove_dead_instructions i_lst =
+    begin match i_lst with
+      | [] -> ()
+      | _::[] -> ()
+      | x::y::z ->
+        let _ = if Llvm.is_terminator y
+          then Llvm.delete_instruction x
+          else ()
+        in
+        _remove_dead_instructions (y::z)
+    end
+  in
+  _remove_dead_instructions instr_list
+
+
+(*
+TODO: Add a pass that removes unreachable basic blocks.
+*)
+and clean_up_basic_blocks_of_function llvm_func =
+  let _ = Llvm.iter_blocks remove_dead_instructions llvm_func in
+  ()
+
+
 and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
   let {f_name; f_stmts; f_ret_t; f_params} = f_ast in
 
@@ -123,6 +169,13 @@ and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
   } in
 
   codegen_stmts llvm_ctxt builder func_ctxt f_stmts |> ignore ;
+
+  (* TODO: Do better here. Sometimes, generated code ends with an empty basic
+  block. Basic blocks must have at least a terminator, so we add a "nonsense"
+  one here. *)
+  let _ = Llvm.build_unreachable builder in
+
+  clean_up_basic_blocks_of_function new_func ;
 
   (* Validate the generated code, checking for consistency. *)
   let _ = begin
@@ -232,6 +285,32 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
 
   | ExprStmt (expr) ->
       let _ = codegen_expr llvm_ctxt builder func_ctxt expr in
+
+      func_ctxt
+
+  | BlockStmt (stmts) ->
+      let _ = codegen_stmts llvm_ctxt builder func_ctxt stmts in
+
+      func_ctxt
+
+  | IfThenElseStmt (if_cond, then_stmt, else_stmt) ->
+      let bb_then = Llvm.append_block llvm_ctxt "if_then" func_ctxt.cur_func in
+      let bb_else = Llvm.append_block llvm_ctxt "if_else" func_ctxt.cur_func in
+      let bb_if_end = Llvm.append_block llvm_ctxt "if_end" func_ctxt.cur_func in
+
+      let cond_val = codegen_expr llvm_ctxt builder func_ctxt if_cond in
+
+      let _ = Llvm.build_cond_br cond_val bb_then bb_else builder in
+
+      let _ = Llvm.position_at_end bb_then builder in
+      let _ = codegen_stmt llvm_ctxt builder func_ctxt then_stmt in
+      let _ = Llvm.build_br bb_if_end builder in
+
+      let _ = Llvm.position_at_end bb_else builder in
+      let _ = codegen_stmt llvm_ctxt builder func_ctxt else_stmt in
+      let _ = Llvm.build_br bb_if_end builder in
+
+      let _ = Llvm.position_at_end bb_if_end builder in
 
       func_ctxt
 
@@ -423,7 +502,9 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
         let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in
         let llvm_args = Array.of_list (List.map _codegen_expr exprs) in
 
-        Llvm.build_call llvm_func_val llvm_args "calltmp" builder
+        let call = Llvm.build_call llvm_func_val llvm_args "calltmp" builder in
+        Llvm.set_tail_call true call;
+        call
 
     | ArrayExpr(typ, exprs) ->
         let llvm_expr_vals = List.map _codegen_expr exprs in

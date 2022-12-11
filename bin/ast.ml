@@ -56,6 +56,8 @@ and stmt =
   | AssignStmt of ident_t * expr
   | AssignDeconStmt of ident_t list * expr
   | ExprStmt of expr
+  | BlockStmt of stmt list
+  | IfThenElseStmt of expr * stmt * stmt
   | ResolveStmt of expr
   | ReturnStmt of expr
 ;;

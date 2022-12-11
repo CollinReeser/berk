@@ -10,6 +10,7 @@ open Test
 
 let main = begin
   record_backtrace true;
+  Llvm.enable_pretty_stacktrace ();
   test_suite;
 
   begin
@@ -225,13 +226,20 @@ let main = begin
         print_expr "" (type_check_expr tc_ctxt_up expr_raw);
         Printf.printf "\n";
       let return_stmt_raw = ReturnStmt(
-        BinOp(
+        (* BinOp(
           Undecided, Add,
           ValVar(Undecided, "my_array_idx_var"),
           BinOp(
             Undecided, Add,
             ValCastTrunc(I8, expr_raw),
             ValVar(Undecided, "my_recursive_dodge_var")
+          )
+        ) *)
+
+        ValCastBitwise(
+          I8,
+          FuncCall(
+            Undecided, "tailcall_collatz_len", [ValU8(12)]
           )
         )
       ) in
@@ -279,8 +287,160 @@ let main = begin
         ];
       } in
 
+      let collatz_len_internal_func_def = {
+        f_name = "collatz_len_internal";
+        f_ret_t = U64;
+        f_params = [("cur", def_var_qual, U64); ("len", def_var_qual, U64)];
+        f_stmts = [
+          ReturnStmt(
+            IfThenElseExpr(
+              Undecided,
+              BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValU64(1)),
+              ValVar(Undecided, "len"),
+              IfThenElseExpr(
+                Undecided,
+                BinOp(
+                  Undecided, Eq,
+                  ValU64(1),
+                  BinOp(Undecided, Mod, ValVar(Undecided, "cur"), ValU64(2))
+                ),
+                FuncCall(
+                  Undecided, "collatz_len_internal", [
+                    BinOp(
+                      Undecided, Add,
+                      ValU64(1),
+                      BinOp(Undecided, Mul, ValVar(Undecided, "cur"), ValU64(3))
+                    );
+                    BinOp(Undecided, Add, ValVar(Undecided, "len"), ValU64(1));
+                  ]
+                ),
+                FuncCall(
+                  Undecided, "collatz_len_internal", [
+                    BinOp(
+                      Undecided, Div,
+                      ValVar(Undecided, "cur"),
+                      ValU64(2)
+                    );
+                    BinOp(Undecided, Add, ValVar(Undecided, "len"), ValU64(1));
+                  ]
+                )
+              )
+            )
+          )
+        ];
+      } in
+
+      let collatz_len_func_def = {
+        f_name = "collatz_len";
+        f_ret_t = U64;
+        f_params = ["start", def_var_qual, U64];
+        f_stmts = [
+          ReturnStmt(
+            FuncCall(
+              Undecided, "collatz_len_internal", [
+                ValVar(Undecided, "start");
+                ValU64(1);
+              ]
+            )
+          )
+        ];
+      } in
+
+      let tailcall_collatz_len_internal_func_def = {
+        f_name = "tailcall_collatz_len_internal";
+        f_ret_t = U8;
+        f_params = [("cur", def_var_qual, U8); ("len", def_var_qual, U8)];
+        f_stmts = [
+          BlockStmt(
+            [
+              IfThenElseStmt(
+                BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValU8(1)),
+                BlockStmt(
+                  [
+                    ReturnStmt(
+                      ValVar(Undecided, "len")
+                    );
+                  ]
+                ),
+                IfThenElseStmt(
+                  BinOp(
+                    Undecided, Eq,
+                    ValU8(1),
+                    BinOp(Undecided, Mod, ValVar(Undecided, "cur"), ValU8(2))
+                  ),
+                  BlockStmt(
+                    [
+                      ReturnStmt(
+                        FuncCall(
+                          Undecided, "tailcall_collatz_len_internal", [
+                            BinOp(
+                              Undecided, Add,
+                              ValU8(1),
+                              BinOp(
+                                Undecided, Mul,
+                                ValVar(Undecided, "cur"),
+                                ValU8(3)
+                              )
+                            );
+                            BinOp(
+                              Undecided, Add,
+                              ValVar(Undecided, "len"),
+                              ValU8(1)
+                            );
+                          ]
+                        )
+                      );
+                    ]
+                  ),
+                  BlockStmt(
+                    [
+                      ReturnStmt(
+                        FuncCall(
+                          Undecided, "tailcall_collatz_len_internal", [
+                            BinOp(
+                              Undecided, Div,
+                              ValVar(Undecided, "cur"),
+                              ValU8(2)
+                            );
+                            BinOp(
+                              Undecided, Add,
+                              ValVar(Undecided, "len"),
+                              ValU8(1)
+                            );
+                          ]
+                        )
+                      );
+                    ]
+                  )
+                )
+              );
+            ]
+          )
+        ];
+      } in
+
+      let tailcall_collatz_len_func_def = {
+        f_name = "tailcall_collatz_len";
+        f_ret_t = U8;
+        f_params = ["start", def_var_qual, U8];
+        f_stmts = [
+          ReturnStmt(
+            FuncCall(
+              Undecided, "tailcall_collatz_len_internal", [
+                ValVar(Undecided, "start");
+                ValU8(1);
+              ]
+            )
+          )
+        ];
+      } in
+
       let mod_decls = [
         FuncDecl(rec_func_def);
+        FuncDecl(collatz_len_internal_func_def);
+        FuncDecl(collatz_len_func_def);
+        FuncDecl(tailcall_collatz_len_internal_func_def);
+        FuncDecl(tailcall_collatz_len_func_def);
         FuncDecl(main_func_def);
       ] in
 
@@ -293,6 +453,8 @@ let main = begin
             print_func_ast ~print_typ:true f_ast_typechecked ;
           end
       ) mod_decls_typechecked in
+
+      Printf.printf "%!";
 
       codegen_mod_decls
         llvm_ctxt
