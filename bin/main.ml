@@ -245,7 +245,7 @@ let main = begin
               ],
               Undecided,
               FuncCall(
-                Undecided, "collatz_highest_seed", [ValU8(20)]
+                Undecided, "collatz_highest_seed", [ValU64(120)]
               )
             );
             ReturnStmt(
@@ -266,7 +266,9 @@ let main = begin
                 )
               ) *)
 
-              ValCastBitwise(I8, ValVar(Undecided, "collatz_max_seed"))
+              ValCastBitwise(
+                I8, ValCastTrunc(U8, ValVar(Undecided, "collatz_max_seed"))
+              )
             );
           ]
         )
@@ -377,8 +379,8 @@ let main = begin
 
       let tailcall_collatz_len_internal_func_def = {
         f_name = "tailcall_collatz_len_internal";
-        f_ret_t = U8;
-        f_params = [("cur", def_var_qual, U8); ("len", def_var_qual, U8)];
+        f_ret_t = U64;
+        f_params = [("cur", def_var_qual, U64); ("len", def_var_qual, U64)];
         f_stmts = [
           IfThenElseStmt(
             BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValU8(1)),
@@ -446,14 +448,14 @@ let main = begin
 
       let tailcall_collatz_len_func_def = {
         f_name = "tailcall_collatz_len";
-        f_ret_t = U8;
-        f_params = ["start", def_var_qual, U8];
+        f_ret_t = U64;
+        f_params = ["start", def_var_qual, U64];
         f_stmts = [
           ReturnStmt(
             FuncCall(
               Undecided, "tailcall_collatz_len_internal", [
                 ValVar(Undecided, "start");
-                ValU8(1);
+                ValU64(1);
               ]
             )
           )
@@ -462,12 +464,12 @@ let main = begin
 
       let collatz_highest_seed_internal_func_def = {
         f_name = "collatz_highest_seed_internal";
-        f_ret_t = Tuple([U8; U8]);
+        f_ret_t = Tuple([U64; U64]);
         f_params = [
-          ("max_seed", def_var_qual, U8);
-          ("max_len",  def_var_qual, U8);
-          ("cur_seed", def_var_qual, U8);
-          ("ceiling",  def_var_qual, U8);
+          ("max_seed", def_var_qual, U64);
+          ("max_len",  def_var_qual, U64);
+          ("cur_seed", def_var_qual, U64);
+          ("ceiling",  def_var_qual, U64);
         ];
         f_stmts = [
           IfThenElseStmt(
@@ -534,15 +536,15 @@ let main = begin
 
       let collatz_highest_seed_func_def = {
         f_name = "collatz_highest_seed";
-        f_ret_t = Tuple([U8; U8]);
-        f_params = ["ceiling", def_var_qual, U8];
+        f_ret_t = Tuple([U64; U64]);
+        f_params = ["ceiling", def_var_qual, U64];
         f_stmts = [
           ReturnStmt(
             FuncCall(
               Undecided, "collatz_highest_seed_internal", [
-                ValU8(1);
-                ValU8(1);
-                ValU8(1);
+                ValU64(1);
+                ValU64(1);
+                ValU64(1);
                 ValVar(Undecided, "ceiling");
               ]
             )
@@ -647,7 +649,7 @@ let main = begin
 
       in
 
-      let (highest_seed, max_len) = collatz_highest_seed 20 in
+      let (highest_seed, max_len) = collatz_highest_seed 120 in
       Printf.printf "Highest seed: [%d], max len: [%d]" highest_seed max_len
     end in
 
