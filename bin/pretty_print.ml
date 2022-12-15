@@ -181,15 +181,15 @@ and print_stmt ?(print_typ = false) ind stmt =
   | BlockStmt (stmts) ->
       Printf.printf "%s{\n" ind;
       List.iter (print_stmt ~print_typ:print_typ (ind ^ "  ")) stmts;
-      Printf.printf "%s}" ind
+      Printf.printf "%s}\n" ind
   | IfThenElseStmt (if_cond, then_block, else_block) ->
       Printf.printf "%sif (" ind;
       print_expr ~print_typ:print_typ "" if_cond;
       Printf.printf ") {\n";
       print_stmt ~print_typ:print_typ (ind ^ "  ") then_block;
-      Printf.printf "\n%s} else {\n" ind;
+      Printf.printf "%s} else {\n" ind;
       print_stmt ~print_typ:print_typ (ind ^ "  ") else_block;
-      Printf.printf "\n%s}" ind;
+      Printf.printf "%s}\n" ind;
   | ResolveStmt (ex) ->
       Printf.printf "%sresolve " ind;
       print_expr ~print_typ:print_typ ind ex;
