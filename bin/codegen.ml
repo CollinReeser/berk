@@ -32,13 +32,13 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
   | Array(elem_typ, sz) ->
       let llvm_elem_t = berk_t_to_llvm_t llvm_ctxt elem_typ in
       let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
-      Llvm.pointer_type llvm_arr_t
+      llvm_arr_t
 
   | Tuple(types) ->
       let llvm_t_lst = List.map (berk_t_to_llvm_t llvm_ctxt) types in
       let llvm_t_arr = Array.of_list llvm_t_lst in
       let llvm_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
-      Llvm.pointer_type llvm_tuple_t
+      llvm_tuple_t
 
   | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
@@ -46,19 +46,6 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
 
 let resolve_alloca_name = "___RESOLVE_ALLOCA"
 let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
-;;
-
-
-let fold_left_2_i f acc lhs rhs =
-  let rec _fold_left_2_i f acc lhs rhs idx =
-    match (lhs, rhs) with
-    | ([], []) -> acc
-    | (x::xs, y::ys) ->
-        let new_acc = f acc x y idx in
-        _fold_left_2_i f new_acc xs ys (idx + 1)
-    | _ -> failwith "Mismatched lists!"
-  in
-  _fold_left_2_i f acc lhs rhs 0
 ;;
 
 
@@ -196,6 +183,59 @@ and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
   mod_ctxt_up
 
 
+and build_aggregate builder typ vals =
+  let rec _build_aggregate vals cur_val idx =
+    begin match vals with
+    | [] -> cur_val
+    | x::xs ->
+        let next_val = (
+          Llvm.build_insertvalue cur_val x idx "tupletmp" builder
+        ) in
+        let next_idx = idx + 1 in
+        _build_aggregate xs next_val next_idx
+    end
+  in
+  let undef_aggregate = Llvm.undef typ in
+  _build_aggregate vals undef_aggregate 0
+
+
+and deconstruct_aggregate builder idents agg =
+  let rec _deconstruct_aggregate idents idx decon_lst =
+    begin match idents with
+    | [] -> decon_lst
+    | _::xs ->
+        let next_val = Llvm.build_extractvalue agg idx "decontmp" builder in
+        let next_idx = idx + 1 in
+        let next_decon = decon_lst @ [next_val] in
+        _deconstruct_aggregate xs next_idx next_decon
+    end
+  in
+  _deconstruct_aggregate idents 0 []
+
+
+and deconstruct_aggregate_sz builder sz agg =
+  let rec _deconstruct_aggregate_sz idx decon_lst =
+    if idx < sz
+    then
+      begin
+        let next_val = Llvm.build_extractvalue agg idx "decontmp" builder in
+        let next_idx = idx + 1 in
+        let next_decon = decon_lst @ [next_val] in
+        _deconstruct_aggregate_sz next_idx next_decon
+      end
+    else
+      decon_lst
+  in
+  _deconstruct_aggregate_sz 0 []
+
+
+and combine3 lhs mid rhs =
+  match (lhs, mid, rhs) with
+  | ([], [], []) -> []
+  | (x::xs, y::ys, z::zs) -> (x, y, z) :: combine3 xs ys zs
+  | _ -> failwith "combine3 expects three equal-length lists"
+
+
 and codegen_stmts llvm_ctxt builder func_ctxt stmts =
   match stmts with
   | [] -> func_ctxt
@@ -218,32 +258,25 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
       func_ctxt_up
 
   | DeclDeconStmt (idents_quals, typ, expr) ->
-      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
+      let agg_expr = codegen_expr llvm_ctxt builder func_ctxt expr in
       let types = match typ with
         | Array(typ, sz) -> List.init sz (fun _ -> typ)
         | Tuple(types) -> types
         | _ -> failwith "Cannot gen destructuring for non-aggregate type"
       in
 
-      let i32_t = Llvm.i32_type llvm_ctxt in
       let idents = List.map (fun (id, _) -> id) idents_quals in
+      let decon_exprs = deconstruct_aggregate builder idents agg_expr in
+      let types_idents_exprs = combine3 types idents decon_exprs in
 
-      let updated_vars = fold_left_2_i (
-        fun vars ident typ idx ->
-          let indices = Array.of_list [
-            Llvm.const_int i32_t 0;
-            Llvm.const_int i32_t idx;
-          ] in
-
-          let llvm_gep = Llvm.build_gep expr_val indices "geptmp" builder in
-          let loaded = Llvm.build_load llvm_gep "loadidxtmp" builder in
-
+      let updated_vars = List.fold_left (
+        fun vars (typ, ident, exp) ->
           let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
           let alloca = Llvm.build_alloca alloca_typ ident builder in
-          let _ : Llvm.llvalue = Llvm.build_store loaded alloca builder in
+          let _ : Llvm.llvalue = Llvm.build_store exp alloca builder in
 
           StrMap.add ident alloca vars
-      ) func_ctxt.cur_vars idents types in
+      ) func_ctxt.cur_vars types_idents_exprs in
 
       {func_ctxt with cur_vars = updated_vars}
 
@@ -255,25 +288,16 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
       func_ctxt
 
   | AssignDeconStmt (idents, expr) ->
-      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
+      let agg_expr = codegen_expr llvm_ctxt builder func_ctxt expr in
+      let decon_exprs = deconstruct_aggregate builder idents agg_expr in
 
-      let i32_t = Llvm.i32_type llvm_ctxt in
-
-      let _ = List.iteri (
-        fun idx ident ->
-          let indices = Array.of_list [
-            Llvm.const_int i32_t 0;
-            Llvm.const_int i32_t idx;
-          ] in
-
-          let llvm_gep = Llvm.build_gep expr_val indices "geptmp" builder in
-          let loaded = Llvm.build_load llvm_gep "loadidxtmp" builder in
-
+      let _ = List.iter2 (
+        fun ident exp ->
           let var_alloca = StrMap.find ident func_ctxt.cur_vars in
-          let _ : Llvm.llvalue = Llvm.build_store loaded var_alloca builder in
+          let _ : Llvm.llvalue = Llvm.build_store exp var_alloca builder in
 
           ()
-      ) idents in
+      ) idents decon_exprs in
 
       func_ctxt
 
@@ -508,52 +532,109 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
     | ArrayExpr(typ, exprs) ->
         let llvm_expr_vals = List.map _codegen_expr exprs in
-        let llvm_ptr_t = berk_t_to_llvm_t llvm_ctxt typ in
-        let llvm_arr_t = Llvm.element_type llvm_ptr_t in
-        let alloca = Llvm.build_alloca llvm_arr_t "arraytmp" builder in
+        let llvm_arr_t = berk_t_to_llvm_t llvm_ctxt typ in
+
+        let arr_aggregate = (
+          build_aggregate builder llvm_arr_t llvm_expr_vals
+        ) in
+
+        arr_aggregate
+
+    | IndexExpr(_, idx_expr, arr_expr) ->
+        let arr_typ = expr_type arr_expr in
+        let (arr_typ, arr_sz) = begin match arr_typ with
+          | Array(typ, sz) -> (typ, sz)
+          | _ ->
+            begin
+              let pretty_typ = fmt_type arr_typ in
+              let err_msg = (
+                Printf.sprintf
+                  "Indexing into other than static array: %s"
+                  pretty_typ
+              ) in
+              failwith err_msg
+            end
+        end in
+
+        let idx_val = _codegen_expr idx_expr in
+
+        (* TODO: Add an out-of-bounds check based in the index val and the
+        static size of the array. *)
+
+        let arr_val = _codegen_expr arr_expr in
+
+        (* Store the static array into an alloca so we can dynamically index
+        into it. *)
+
+        let deconstructed_lst = (
+          deconstruct_aggregate_sz builder arr_sz arr_val
+        ) in
+
+        let llvm_alloca_typ = berk_t_to_llvm_t llvm_ctxt arr_typ in
+        let llvm_arr_sz = Llvm.const_int i32_t arr_sz in
+
+        let alloca_arr = (
+          Llvm.build_array_alloca
+            llvm_alloca_typ llvm_arr_sz "allocaarrtmp" builder
+        ) in
+
         let _ = List.iteri (
-          fun idx expr_val ->
+          fun idx elem_val ->
             let indices = Array.of_list [
-              Llvm.const_int i32_t 0;
               Llvm.const_int i32_t idx;
             ] in
-            let llvm_gep = Llvm.build_gep alloca indices "geptmp" builder in
-            let _ = Llvm.build_store expr_val llvm_gep builder in
+            let llvm_gep = Llvm.build_gep alloca_arr indices "geptmp" builder in
+            let _ = Llvm.build_store elem_val llvm_gep builder in
             ()
-        ) llvm_expr_vals in
+        ) deconstructed_lst in
 
-        alloca
+        (* Load from the alloca our specific dynamic index. *)
 
-    | IndexExpr(_, _, idx_expr, arr_expr) ->
-        let idx_val = _codegen_expr idx_expr in
-        let arr_val = _codegen_expr arr_expr in
-        (* TODO: Add bounds check logic when relevant *)
-        let indices = Array.of_list [
-          Llvm.const_int i32_t 0;
-          idx_val;
-        ] in
-        let llvm_gep = Llvm.build_gep arr_val indices "geptmp" builder in
-        let loaded = Llvm.build_load llvm_gep "loadarraytmp" builder in
+        let indices = Array.of_list [idx_val] in
+        let idx_gep = Llvm.build_gep alloca_arr indices "geptmp" builder in
+        let loaded = Llvm.build_load idx_gep "loadarraytmp" builder in
 
         loaded
 
+    | StaticIndexExpr(_, idx, arr_expr) ->
+        let arr_typ = expr_type arr_expr in
+        let arr_sz = begin match arr_typ with
+          | Array(_, sz) -> sz
+          | _ ->
+            begin
+              let pretty_typ = fmt_type arr_typ in
+              let err_msg = (
+                Printf.sprintf
+                  "Indexing into other than static array: %s"
+                  pretty_typ
+              ) in
+              failwith err_msg
+            end
+        end in
+
+        let _ = begin
+          if idx >= 0 && idx < arr_sz
+          then ()
+          else failwith (Printf.sprintf "idx %d OoB for %d" idx arr_sz)
+        end in
+
+        let llvm_arr_val = _codegen_expr arr_expr in
+
+        let extracted = (
+          Llvm.build_extractvalue llvm_arr_val idx "idxtmp" builder
+        ) in
+
+        extracted
+
     | TupleExpr(typ, exprs) ->
         let llvm_expr_vals = List.map _codegen_expr exprs in
-        let llvm_ptr_t = berk_t_to_llvm_t llvm_ctxt typ in
-        let llvm_tuple_t = Llvm.element_type llvm_ptr_t in
-        let alloca = Llvm.build_alloca llvm_tuple_t "tupletmp" builder in
-        let _ = List.iteri (
-          fun idx expr_val ->
-            let indices = Array.of_list [
-              Llvm.const_int i32_t 0;
-              Llvm.const_int i32_t idx;
-            ] in
-            let llvm_gep = Llvm.build_gep alloca indices "geptmp" builder in
-            let _ = Llvm.build_store expr_val llvm_gep builder in
-            ()
-        ) llvm_expr_vals in
+        let llvm_tuple_t = berk_t_to_llvm_t llvm_ctxt typ in
 
-        alloca
+        let tuple_aggregate = (
+          build_aggregate builder llvm_tuple_t llvm_expr_vals
+        ) in
+
+        tuple_aggregate
 
 
 let initialize_fpm the_fpm =

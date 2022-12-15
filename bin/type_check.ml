@@ -339,7 +339,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
 
         ArrayExpr(arr_t, exprs_typechecked)
 
-    | IndexExpr(_, _, idx, arr) ->
+    | IndexExpr(_, idx, arr) ->
         let idx_typechecked = type_check_expr tc_ctxt idx in
         let arr_typechecked = type_check_expr tc_ctxt arr in
         let idx_t = expr_type idx_typechecked in
@@ -356,19 +356,33 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
                       if i < sz
                         then
                           IndexExpr(
-                            elem_typ, NoBoundsCheck,
-                            idx_typechecked, arr_typechecked
+                            elem_typ, idx_typechecked, arr_typechecked
                           )
                         else failwith "Static out-of-bounds index into array"
                   | _ ->
                       IndexExpr(
-                        elem_typ, DoBoundsCheck,
-                        idx_typechecked, arr_typechecked
+                        elem_typ, idx_typechecked, arr_typechecked
                       )
                 end
             | _ -> failwith "Unexpected index target in index expr"
             end
           else failwith "Unexpected components of index operation"
+
+    | StaticIndexExpr(_, idx, arr) ->
+        let arr_typechecked = type_check_expr tc_ctxt arr in
+        let arr_t = expr_type arr_typechecked in
+        let static_idx_typechecked = begin
+          match arr_t with
+          | Array(elem_typ, sz) ->
+            begin
+              if idx < 0 || idx >= sz
+              then failwith "out-of-bounds idx for array"
+              else StaticIndexExpr(elem_typ, idx, arr_typechecked)
+            end
+          | _ -> failwith "Unexpectedly indexing into non-array"
+        end in
+
+        static_idx_typechecked
 
     | TupleExpr(_, exprs) ->
         let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in

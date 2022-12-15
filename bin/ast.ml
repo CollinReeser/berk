@@ -46,8 +46,10 @@ and expr =
   | IfThenElseExpr of berk_t * expr * expr * expr
   | FuncCall of berk_t * ident_t * expr list
   | ArrayExpr of (berk_t * expr list)
-  (* Bool decides adding bounds-check, first expr is index, second is array *)
-  | IndexExpr of (berk_t * maybe_bounds_check * expr * expr)
+  (* First expr is index, second is array *)
+  | IndexExpr of (berk_t * expr * expr)
+  (* int is index, expr is array *)
+  | StaticIndexExpr of (berk_t * int * expr)
   | TupleExpr of berk_t * expr list
 
 and stmt =
@@ -84,7 +86,8 @@ let expr_type typ =
   | IfThenElseExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
-  | IndexExpr(typ, _, _, _) -> typ
+  | IndexExpr(typ, _, _) -> typ
+  | StaticIndexExpr(typ, _, _) -> typ
   | TupleExpr(typ, _) -> typ
 ;;
 

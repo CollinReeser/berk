@@ -104,7 +104,15 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       Printf.printf "%s[" init_ind;
       print_join_exprs ~print_typ:print_typ ind ", " exprs;
       Printf.printf "]"
-  | IndexExpr(_, _, idx, arr) ->
+
+  | StaticIndexExpr(_, idx, arr) ->
+      Printf.printf "%s" init_ind;
+      print_expr ~print_typ:print_typ "" arr;
+      Printf.printf "[";
+      Printf.printf "%d" idx;
+      Printf.printf "]";
+
+  | IndexExpr(_, idx, arr) ->
       Printf.printf "%s" init_ind;
       print_expr ~print_typ:print_typ "" arr;
       Printf.printf "[";

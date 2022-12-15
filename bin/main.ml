@@ -139,11 +139,20 @@ let main = begin
           )
         )
       ) in
+      let decl_array_static_idx_raw = (
+        DeclStmt(
+          "my_array_static_idx_var", def_var_qual, Undecided,
+          StaticIndexExpr(
+            Undecided, 2,
+            ValVar(Undecided, "my_array_var")
+          )
+        )
+      ) in
       let decl_array_idx_raw = (
         DeclStmt(
           "my_array_idx_var", def_var_qual, Undecided,
           IndexExpr(
-            Undecided, Undecided,
+            Undecided,
             ValU64(2),
             ValVar(Undecided, "my_array_var")
           )
@@ -256,6 +265,7 @@ let main = begin
           decl_dodge_recursion_raw;
           decl_call_recursion_raw;
           decl_array_raw;
+          decl_array_static_idx_raw;
           decl_array_idx_raw;
           decl_tuple_raw;
           decl_tuple_unpack_lit_raw;
@@ -435,12 +445,30 @@ let main = begin
         ];
       } in
 
+      let return_tuple_func_def = {
+        f_name = "return_tuple";
+        f_ret_t = Tuple([U8; U16; F32]);
+        f_params = [];
+        f_stmts = [
+          ReturnStmt(
+            TupleExpr(
+              Undecided, [
+                ValU8(13);
+                ValU16(56);
+                ValF32(66.77);
+              ]
+            )
+          )
+        ];
+      } in
+
       let mod_decls = [
         FuncDecl(rec_func_def);
         FuncDecl(collatz_len_internal_func_def);
         FuncDecl(collatz_len_func_def);
         FuncDecl(tailcall_collatz_len_internal_func_def);
         FuncDecl(tailcall_collatz_len_func_def);
+        FuncDecl(return_tuple_func_def);
         FuncDecl(main_func_def);
       ] in
 
