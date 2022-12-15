@@ -245,7 +245,8 @@ let main = begin
               ],
               Undecided,
               FuncCall(
-                Undecided, "collatz_highest_seed", [ValU64(120)]
+                (* Undecided, "collatz_highest_seed", [ValU64(120)] *)
+                Undecided, "collatz_highest_seed", [ValU64(100000000)]
               )
             );
             ReturnStmt(
@@ -649,7 +650,8 @@ let main = begin
 
       in
 
-      let (highest_seed, max_len) = collatz_highest_seed 120 in
+      (* let (highest_seed, max_len) = collatz_highest_seed 120 in *)
+      let (highest_seed, max_len) = collatz_highest_seed 100000000 in
       Printf.printf "Highest seed: [%d], max len: [%d]" highest_seed max_len
     end in
 
