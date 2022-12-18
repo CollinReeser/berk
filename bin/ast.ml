@@ -92,11 +92,18 @@ let expr_type typ =
 ;;
 
 type module_decl =
-  | FuncDecl of func_ast
+  | FuncDecl of func_decl_t
+  | FuncDef of func_def_t
 
-and func_ast = {
+and f_param = (ident_t * var_qual * berk_t)
+
+and func_decl_t = {
   f_name: string;
-  f_params: (ident_t * var_qual * berk_t) list;
-  f_stmts: stmt list;
+  f_params: f_param list;
   f_ret_t: berk_t;
+}
+
+and func_def_t = {
+  f_decl: func_decl_t;
+  f_stmts: stmt list;
 }

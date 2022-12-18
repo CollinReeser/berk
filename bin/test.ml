@@ -4,14 +4,16 @@ open Type_check
 open Typing
 
 
-let build_example_ast =
+let build_example_ast : func_def_t =
   {
-    f_name = "example_func";
-    f_ret_t = Undecided;
-    f_params = [
-      ("arg_1", def_var_qual, I64);
-      ("arg_2", def_var_qual, I64);
-    ];
+    f_decl = {
+      f_name = "example_func";
+      f_params = [
+        ("arg_1", def_var_qual, I64);
+        ("arg_2", def_var_qual, I64);
+      ];
+      f_ret_t = Undecided;
+    };
     f_stmts = [
       DeclStmt(
         "abc", def_var_qual, Undecided,

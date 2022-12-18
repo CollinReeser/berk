@@ -200,7 +200,9 @@ and print_stmt ?(print_typ = false) ind stmt =
       Printf.printf ";\n";
 ;;
 
-let print_func_ast ?(print_typ = false) {f_name; f_params; f_stmts; f_ret_t;} =
+let print_func_ast
+  ?(print_typ = false) {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;}
+=
   let rec print_join_func_params delim params =
     begin match params with
       | [] -> ()

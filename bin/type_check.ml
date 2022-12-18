@@ -60,18 +60,20 @@ let rec type_check_mod_decls mod_decls =
 
 and type_check_mod_decl mod_ctxt mod_decl =
   match mod_decl with
-  | FuncDecl(f_ast) ->
-      let {f_name; f_params; f_ret_t; _} = f_ast in
+  | FuncDecl(_) -> failwith "Unimplemented"
+
+  | FuncDef(f_ast) ->
+      let {f_decl = {f_name; f_params; f_ret_t;}; _} = f_ast in
       let func_sigs_up = begin
         StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
       end in
       let mod_ctxt_up = {func_sigs = func_sigs_up} in
       let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
 
-      (mod_ctxt_up, FuncDecl(func_ast_typechecked))
+      (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
 and type_check_func mod_ctxt func_def =
-  let {f_stmts; f_params; f_ret_t; _} = func_def in
+  let {f_decl = {f_params; f_ret_t; _;}; f_stmts;} = func_def in
   let tc_ctxt_base = default_tc_ctxt f_ret_t in
   let vars_base = tc_ctxt_base.vars in
   let vars_init = populate_ctxt_with_params f_params vars_base in

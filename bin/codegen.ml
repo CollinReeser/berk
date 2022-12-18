@@ -61,7 +61,9 @@ let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
 
 and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
   match mod_decl with
-  | FuncDecl(f_ast) ->
+  | FuncDecl(_) -> failwith "Unimplemented"
+
+  | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
 
 
@@ -112,7 +114,7 @@ and clean_up_basic_blocks_of_function llvm_func =
 
 
 and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
-  let {f_name; f_stmts; f_ret_t; f_params} = f_ast in
+  let {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;} = f_ast in
 
   let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
   let llvm_param_t_lst = List.map (
