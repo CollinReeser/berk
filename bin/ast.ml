@@ -38,6 +38,7 @@ and expr =
   | ValF64 of float
   | ValF32 of float
   | ValBool of bool
+  | ValStr of string
   | ValVar of berk_t * ident_t
   | ValCastTrunc of berk_t * expr
   | ValCastBitwise of berk_t * expr
@@ -78,6 +79,7 @@ let expr_type typ =
   | ValF64(_)  -> F64
   | ValF32(_)  -> F32
   | ValBool(_) -> Bool
+  | ValStr(_) -> String
   | ValVar(typ, _) -> typ
   | ValCastTrunc(typ, _) -> typ
   | ValCastBitwise(typ, _) -> typ
@@ -107,3 +109,16 @@ and func_def_t = {
   f_decl: func_decl_t;
   f_stmts: stmt list;
 }
+
+(* Return the pair of all the non-variadic function parameter types, and whether
+the parameter list ends with a variadic-args sentinel. Fails if ill-formed. *)
+let rec get_static_f_params (f_params : f_param list) =
+  begin match f_params with
+  | [] -> ([], false)
+  | [(_, _, VarArgSentinel)] -> ([], true)
+  | (_, _, VarArgSentinel)::_ ->
+      failwith "Variadic arguments may exist only once, at end of param list"
+  | (_, _, x)::xs ->
+      let (rest, is_vararg) = get_static_f_params xs in
+      (x::rest, is_vararg)
+  end

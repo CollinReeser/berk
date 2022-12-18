@@ -58,6 +58,8 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
 
   | ValBool (value) -> Printf.printf "%s%B%s" init_ind value typ_s
 
+  | ValStr (str)    -> Printf.printf "%s%s%s" init_ind str   typ_s
+
   | ValVar (_, id) -> Printf.printf "%s%s%s" init_ind id typ_s
 
   | ValCastTrunc (target_t, exp) ->
@@ -200,20 +202,18 @@ and print_stmt ?(print_typ = false) ind stmt =
       Printf.printf ";\n";
 ;;
 
-let print_func_ast
-  ?(print_typ = false) {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;}
-=
-  let rec print_join_func_params delim params =
-    begin match params with
-      | [] -> ()
-      | [x] -> print_func_param x
-      | x::xs ->
-          print_func_param x;
-          Printf.printf "%s " delim;
-          print_join_func_params delim xs
-    end
-  in
+let rec print_join_func_params delim params =
+  begin match params with
+    | [] -> ()
+    | [x] -> print_func_param x
+    | x::xs ->
+        print_func_param x;
+        Printf.printf "%s " delim;
+        print_join_func_params delim xs
+  end
+;;
 
+let print_func_signature ?(print_typ = false) {f_name; f_params; f_ret_t;} =
   let ret_t_s = begin match f_ret_t with
     | Nil
     | Undecided ->
@@ -222,9 +222,24 @@ let print_func_ast
         else ""
     | _ -> Printf.sprintf ": %s" (fmt_type f_ret_t)
   end in
+
   Printf.printf "fn %s(" f_name;
   print_join_func_params "," f_params;
-  Printf.printf ")%s {\n" ret_t_s;
-  List.iter (print_stmt ~print_typ:print_typ "  ") f_stmts;
+  Printf.printf ")%s" ret_t_s
+;;
+
+let print_func_decl ?(print_typ = false) ?(extern = false) f_decl =
+  begin if extern
+    then Printf.printf "extern "
+    else ()
+  end ;
+  print_func_signature ~print_typ:print_typ f_decl ;
+  Printf.printf ";\n"
+;;
+
+let print_func_ast ?(print_typ = false) {f_decl; f_stmts;} =
+  print_func_signature ~print_typ:print_typ f_decl ;
+  Printf.printf " {\n" ;
+  List.iter (print_stmt ~print_typ:print_typ "  ") f_stmts ;
   Printf.printf "}\n"
 ;;

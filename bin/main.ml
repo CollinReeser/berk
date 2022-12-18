@@ -249,6 +249,55 @@ let main = begin
                 Undecided, "collatz_highest_seed", [ValU64(1000000)]
               )
             );
+            DeclStmt(
+              "_", def_var_qual,
+              Undecided,
+              FuncCall(
+                Undecided, "printf", [
+                  ValStr("Hello, world!\n");
+                ]
+              )
+            );
+            DeclStmt(
+              "_", def_var_qual,
+              Undecided,
+              FuncCall(
+                Undecided, "printf", [
+                  ValStr("Hello, world!\n");
+                ]
+              )
+            );
+            DeclStmt(
+              "_", def_var_qual,
+              Undecided,
+              FuncCall(
+                Undecided, "printf", [
+                  ValStr("Max Seed: [%d]\n");
+                  ValVar(Undecided, "collatz_max_seed");
+                ]
+              )
+            );
+            DeclStmt(
+              "_", def_var_qual,
+              Undecided,
+              FuncCall(
+                Undecided, "printf", [
+                  ValStr("Max Len: [%d]\n");
+                  ValVar(Undecided, "collatz_max_len");
+                ]
+              )
+            );
+            DeclStmt(
+              "_", def_var_qual,
+              Undecided,
+              FuncCall(
+                Undecided, "printf", [
+                  ValStr("Max Seed: [%d]\nMax Len: [%d]\n");
+                  ValVar(Undecided, "collatz_max_seed");
+                  ValVar(Undecided, "collatz_max_len");
+                ]
+              )
+            );
             ReturnStmt(
               (* BinOp(
                 Undecided, Add,
@@ -589,6 +638,16 @@ let main = begin
       } in
 
       let mod_decls = [
+        FuncExternDecl(
+          {
+            f_name = "printf";
+            f_params = [
+              ("fmt", def_var_qual, String);
+              ("vargs", def_var_qual, VarArgSentinel);
+            ];
+            f_ret_t = I32;
+          }
+        );
         FuncDef(rec_func_def);
         FuncDef(collatz_len_internal_func_def);
         FuncDef(collatz_len_func_def);
@@ -604,7 +663,8 @@ let main = begin
       let _ = List.iter (
         fun mod_decl_typechecked ->
           match mod_decl_typechecked with
-          | FuncExternDecl(_) -> failwith "Unimplemented"
+          | FuncExternDecl(f_decl_typechecked) ->
+            print_func_decl ~print_typ:true ~extern:true f_decl_typechecked ;
 
           | FuncDef(f_ast_typechecked) -> begin
             print_func_ast f_ast_typechecked ;

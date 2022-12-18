@@ -5,9 +5,8 @@ module StrMap = Map.Make(String)
 
 type module_gen_context = {
   func_sigs: Llvm.llvalue StrMap.t;
+  llvm_mod: Llvm.llmodule;
 }
-
-let default_mod_gen_ctxt = {func_sigs = StrMap.empty}
 
 type func_gen_context = {
   cur_func: Llvm.llvalue;
@@ -29,6 +28,11 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
 
   | Bool -> Llvm.i1_type llvm_ctxt
 
+  | String ->
+      let llvm_char_t = Llvm.i8_type llvm_ctxt in
+      let llvm_str_t = Llvm.pointer_type llvm_char_t in
+      llvm_str_t
+
   | Array(elem_typ, sz) ->
       let llvm_elem_t = berk_t_to_llvm_t llvm_ctxt elem_typ in
       let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
@@ -40,6 +44,7 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
       let llvm_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
       llvm_tuple_t
 
+  | VarArgSentinel -> failwith "Should not need to determine type for var arg"
   | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
@@ -50,7 +55,7 @@ let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 
 
 let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
-  let mod_ctxt = default_mod_gen_ctxt in
+  let mod_ctxt = {func_sigs = StrMap.empty; llvm_mod = the_mod} in
   let _codegen_mod_decl =
     fun ctxt decl ->
       codegen_mod_decl llvm_ctxt the_mod the_fpm builder ctxt decl
@@ -61,7 +66,8 @@ let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
 
 and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
   match mod_decl with
-  | FuncExternDecl(_) -> failwith "Unimplemented"
+  | FuncExternDecl(f_decl_ast) ->
+      codegen_func_decl llvm_ctxt the_mod mod_ctxt f_decl_ast
 
   | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
@@ -113,23 +119,50 @@ and clean_up_basic_blocks_of_function llvm_func =
   ()
 
 
-and codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast =
-  let {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;} = f_ast in
-
+and codegen_func_decl
+  llvm_ctxt the_mod mod_ctxt {f_name; f_params; f_ret_t}
+=
   let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
-  let llvm_param_t_lst = List.map (
-    fun (_, _, typ) -> berk_t_to_llvm_t llvm_ctxt typ
-  ) f_params
+  let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
+  let llvm_param_t_lst =
+    List.map (berk_t_to_llvm_t llvm_ctxt) f_params_non_variadic
   in
   let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
-  let func_sig_t = Llvm.function_type llvm_ret_t llvm_param_t_arr in
+  let func_sig_t =
+    if is_var_arg
+    then Llvm.var_arg_function_type llvm_ret_t llvm_param_t_arr
+    else Llvm.function_type llvm_ret_t llvm_param_t_arr
+  in
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
+
+  let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
+  let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
+
+  mod_ctxt_up
+
+
+and codegen_func
+  llvm_ctxt the_mod the_fpm builder mod_ctxt
+  {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;}
+=
+  let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
+  let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
+  let llvm_param_t_lst =
+    List.map (berk_t_to_llvm_t llvm_ctxt) f_params_non_variadic
+  in
+  let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
+  let func_sig_t =
+    if is_var_arg
+    then Llvm.var_arg_function_type llvm_ret_t llvm_param_t_arr
+    else Llvm.function_type llvm_ret_t llvm_param_t_arr
+  in
+  let new_func = Llvm.declare_function f_name func_sig_t the_mod in
+
+  let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
+  let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
 
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
   let _ = Llvm.position_at_end bb builder in
-
-  let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
-  let mod_ctxt_up = {func_sigs = func_sigs_up} in
 
   let llvm_params = Array.to_list (Llvm.params new_func) in
 
@@ -372,6 +405,22 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
   | ValF128(str) -> Llvm.const_float_of_string f128_t str
   | ValF64(n)  -> Llvm.const_float f64_t  n
   | ValF32(n)  -> Llvm.const_float f32_t  n
+  | ValStr(str) ->
+      let llvm_str = Llvm.const_stringz llvm_ctxt str in
+      let global_str =
+        Llvm.define_global "str" llvm_str func_ctxt.mod_ctxt.llvm_mod
+      in
+      let indices = Array.of_list [
+        Llvm.const_int i32_t 0;
+        Llvm.const_int i32_t 0;
+      ] in
+      (* We don't want the pointer to the statically sized array, but rather a
+      more "raw" pointer to the first element, as the LLVM-side type of our
+      string values is a "raw" pointer to some bytes (as opposed to a pointer
+      to a structure or statically-sized array). *)
+      let llvm_gep = Llvm.build_gep global_str indices "strgeptmp" builder in
+      llvm_gep
+
   | ValVar(_, ident) ->
       let alloca = StrMap.find ident func_ctxt.cur_vars in
       let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in

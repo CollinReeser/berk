@@ -59,25 +59,39 @@ let rec type_check_mod_decls mod_decls =
   mod_decls_typechecked
 
 and type_check_mod_decl mod_ctxt mod_decl =
+  let rec confirm_at_most_trailing_var_arg f_params =
+    begin match f_params with
+    | [] -> true
+    | (_, _, VarArgSentinel)::_::_ -> false
+    | _::xs -> confirm_at_most_trailing_var_arg xs
+    end
+  in
+
   match mod_decl with
   | FuncExternDecl(f_decl_ast) ->
       let {f_name; f_params; f_ret_t;} = f_decl_ast in
-      let func_sigs_up = begin
-        StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
-      end in
-      let mod_ctxt_up = {func_sigs = func_sigs_up} in
+      if not (confirm_at_most_trailing_var_arg f_params)
+      then failwith "Only zero-or-one trailing var-args permitted"
+      else
+        let func_sigs_up = begin
+          StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
+        end in
+        let mod_ctxt_up = {func_sigs = func_sigs_up} in
 
-      (mod_ctxt_up, FuncExternDecl(f_decl_ast))
+        (mod_ctxt_up, FuncExternDecl(f_decl_ast))
 
   | FuncDef(f_ast) ->
       let {f_decl = {f_name; f_params; f_ret_t;}; _} = f_ast in
-      let func_sigs_up = begin
-        StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
-      end in
-      let mod_ctxt_up = {func_sigs = func_sigs_up} in
-      let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
+      if not (confirm_at_most_trailing_var_arg f_params)
+      then failwith "Only zero-or-one trailing var-args permitted"
+      else
+        let func_sigs_up = begin
+          StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
+        end in
+        let mod_ctxt_up = {func_sigs = func_sigs_up} in
+        let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
 
-      (mod_ctxt_up, FuncDef(func_ast_typechecked))
+        (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
 and type_check_func mod_ctxt func_def =
   let {f_decl = {f_params; f_ret_t; _;}; f_stmts;} = func_def in
@@ -263,6 +277,8 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
 
   | ValBool(b) -> ValBool(b)
 
+  | ValStr(s) -> ValStr(s)
+
   | ValVar(_, id) ->
       let (var_t, _) = StrMap.find id tc_ctxt.vars in
       ValVar(var_t, id)
@@ -328,15 +344,46 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
 
     | FuncCall(_, f_name, exprs) ->
         let (ret_t, params) = StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs in
+        let (params_non_variadic, is_var_arg) = get_static_f_params params in
+
         let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
         let exprs_t = List.map expr_type exprs_typechecked in
-        let params_t = List.map (fun (_, _, param_t) -> param_t) params in
+
+        let cmp_non_variadic_params_to_exprs =
+          List.compare_lengths params_non_variadic exprs_t
+        in
+        let _ =
+          if (
+            is_var_arg && (cmp_non_variadic_params_to_exprs <= 0)
+          ) || (
+            cmp_non_variadic_params_to_exprs = 0
+          )
+          then ()
+          else failwith
+            "Func call args must not be less than num non-variadic func params"
+        in
+
+        let take lst n =
+          let rec _take accum remain n =
+            begin match (remain, n) with
+            | (_, 0)  -> accum
+            | ([], _) -> failwith "Could not take remaining items: empty list"
+            | (x::xs, _) -> _take (accum @ [x]) xs (n - 1)
+            end
+          in
+          _take [] lst n
+        in
+
+        let exprs_t_non_variadic =
+          take exprs_t (List.length params_non_variadic)
+        in
+
         let _ = List.iter2 (
           fun expr_t param_t ->
             if type_convertible_to expr_t param_t
             then ()
             else failwith "Could not convert expr type to arg type"
-        ) exprs_t params_t in
+        ) exprs_t_non_variadic params_non_variadic in
 
         FuncCall(ret_t, f_name, exprs_typechecked)
 

@@ -12,9 +12,11 @@ type berk_t =
   | F64
   | F32
   | Bool
+  | String
   | Nil
   | Array of berk_t * int
   | Tuple of berk_t list
+  | VarArgSentinel
   | Undecided
 
 let rec fmt_join_types delim types =
@@ -39,11 +41,13 @@ and fmt_type berk_type =
   | F64  -> "f64"
   | F32  -> "f32"
   | Bool -> "bool"
+  | String -> "string"
   | Nil -> "()"
   | Array (typ, sz) ->
       let sz_s = Printf.sprintf "%d" sz in
       "[" ^ (fmt_type typ) ^ " x " ^ sz_s ^ "]"
   | Tuple (types) -> "(" ^ (fmt_join_types ", " types) ^ ")"
+  | VarArgSentinel -> "..."
   | Undecided -> "<?undecided?>"
 ;;
 
@@ -138,6 +142,7 @@ let rec type_convertible_to from_t to_t =
   | (F32, F64)
   | (F32, F32) -> true
 
+  | (String, String) -> true
   | (Bool, Bool) -> true
   | (Nil, Nil) -> true
 
