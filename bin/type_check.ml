@@ -60,7 +60,14 @@ let rec type_check_mod_decls mod_decls =
 
 and type_check_mod_decl mod_ctxt mod_decl =
   match mod_decl with
-  | FuncDecl(_) -> failwith "Unimplemented"
+  | FuncExternDecl(f_decl_ast) ->
+      let {f_name; f_params; f_ret_t;} = f_decl_ast in
+      let func_sigs_up = begin
+        StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
+      end in
+      let mod_ctxt_up = {func_sigs = func_sigs_up} in
+
+      (mod_ctxt_up, FuncExternDecl(f_decl_ast))
 
   | FuncDef(f_ast) ->
       let {f_decl = {f_name; f_params; f_ret_t;}; _} = f_ast in

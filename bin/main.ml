@@ -604,7 +604,7 @@ let main = begin
       let _ = List.iter (
         fun mod_decl_typechecked ->
           match mod_decl_typechecked with
-          | FuncDecl(_) -> failwith "Unimplemented"
+          | FuncExternDecl(_) -> failwith "Unimplemented"
 
           | FuncDef(f_ast_typechecked) -> begin
             print_func_ast f_ast_typechecked ;

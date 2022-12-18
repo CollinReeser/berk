@@ -92,7 +92,7 @@ let expr_type typ =
 ;;
 
 type module_decl =
-  | FuncDecl of func_decl_t
+  | FuncExternDecl of func_decl_t
   | FuncDef of func_def_t
 
 and f_param = (ident_t * var_qual * berk_t)

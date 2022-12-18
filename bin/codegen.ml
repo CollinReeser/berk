@@ -61,7 +61,7 @@ let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
 
 and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
   match mod_decl with
-  | FuncDecl(_) -> failwith "Unimplemented"
+  | FuncExternDecl(_) -> failwith "Unimplemented"
 
   | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
