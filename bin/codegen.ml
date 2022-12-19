@@ -54,6 +54,116 @@ let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 ;;
 
 
+(* Return the instructions of the given basic block in reverse order
+(last -> first). *)
+let get_rev_instruction_list bb =
+  let init_pos = Llvm.instr_end bb in
+  let rec _get_rev_instruction_list cur_pos =
+    begin match cur_pos with
+      | Llvm.At_start (_) -> []
+      | Llvm.After (inst) ->
+        let next_pos = Llvm.instr_pred inst in
+        inst::(_get_rev_instruction_list next_pos)
+    end
+  in
+  _get_rev_instruction_list init_pos
+;;
+
+(* Removes any instructions after a terminator in the given basic block. *)
+let remove_dead_instructions bb =
+  let instr_list = get_rev_instruction_list bb in
+  let rec _remove_dead_instructions instr_head instr_tail =
+    begin match instr_tail with
+      | [] -> ()
+      | x::xs ->
+        let instr_head_up =
+          begin
+            if Llvm.is_terminator x
+            then
+              begin
+                List.iter (Llvm.delete_instruction) instr_head ;
+                [x]
+              end
+            else
+              x::instr_head
+          end
+        in
+        _remove_dead_instructions instr_head_up xs
+    end
+  in
+  _remove_dead_instructions [] instr_list
+;;
+
+
+(*
+Various cleanup operations on the basic blocks that were generated but result
+in invalid IR.
+
+TODO: Add a pass that removes unreachable basic blocks.
+*)
+let clean_up_basic_blocks_of_function llvm_func =
+  let _ = Llvm.iter_blocks remove_dead_instructions llvm_func in
+  ()
+;;
+
+
+let build_aggregate builder typ vals =
+  let rec _build_aggregate vals cur_val idx =
+    begin match vals with
+    | [] -> cur_val
+    | x::xs ->
+        let next_val = (
+          Llvm.build_insertvalue cur_val x idx "tupletmp" builder
+        ) in
+        let next_idx = idx + 1 in
+        _build_aggregate xs next_val next_idx
+    end
+  in
+  let undef_aggregate = Llvm.undef typ in
+  _build_aggregate vals undef_aggregate 0
+;;
+
+
+let deconstruct_aggregate builder idents agg =
+  let rec _deconstruct_aggregate idents idx decon_lst =
+    begin match idents with
+    | [] -> decon_lst
+    | _::xs ->
+        let next_val = Llvm.build_extractvalue agg idx "decontmp" builder in
+        let next_idx = idx + 1 in
+        let next_decon = decon_lst @ [next_val] in
+        _deconstruct_aggregate xs next_idx next_decon
+    end
+  in
+  _deconstruct_aggregate idents 0 []
+;;
+
+
+let deconstruct_aggregate_sz builder sz agg =
+  let rec _deconstruct_aggregate_sz idx decon_lst =
+    if idx < sz
+    then
+      begin
+        let next_val = Llvm.build_extractvalue agg idx "decontmp" builder in
+        let next_idx = idx + 1 in
+        let next_decon = decon_lst @ [next_val] in
+        _deconstruct_aggregate_sz next_idx next_decon
+      end
+    else
+      decon_lst
+  in
+  _deconstruct_aggregate_sz 0 []
+;;
+
+
+let rec combine3 lhs mid rhs =
+  match (lhs, mid, rhs) with
+  | ([], [], []) -> []
+  | (x::xs, y::ys, z::zs) -> (x, y, z) :: combine3 xs ys zs
+  | _ -> failwith "combine3 expects three equal-length lists"
+;;
+
+
 let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
   let mod_ctxt = {func_sigs = StrMap.empty; llvm_mod = the_mod} in
   let _codegen_mod_decl =
@@ -71,52 +181,6 @@ and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
 
   | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
-
-
-and get_rev_instruction_list bb =
-  let init_pos = Llvm.instr_end bb in
-  let rec _get_rev_instruction_list cur_pos =
-    begin match cur_pos with
-      | Llvm.At_start (_) -> []
-      | Llvm.After (inst) ->
-        let next_pos = Llvm.instr_pred inst in
-        inst::(_get_rev_instruction_list next_pos)
-    end
-  in
-  _get_rev_instruction_list init_pos
-
-
-(*
-TODO: Incomplete. Catches cases where there are multiple trailing terminators,
-but not cases where a rogue terminator is somewhere arbitrarily in the "middle"
-of the basic block; in that case, _all_ instructions from the end to the rogue
-terminator must be removed. Maybe we hold onto a growing list of the trailing
-instructions as we iterate in reverse, and whenever we find "another"
-terminator, we drop that list?
-*)
-and remove_dead_instructions bb =
-  let instr_list = get_rev_instruction_list bb in
-  let rec _remove_dead_instructions i_lst =
-    begin match i_lst with
-      | [] -> ()
-      | _::[] -> ()
-      | x::y::z ->
-        let _ = if Llvm.is_terminator y
-          then Llvm.delete_instruction x
-          else ()
-        in
-        _remove_dead_instructions (y::z)
-    end
-  in
-  _remove_dead_instructions instr_list
-
-
-(*
-TODO: Add a pass that removes unreachable basic blocks.
-*)
-and clean_up_basic_blocks_of_function llvm_func =
-  let _ = Llvm.iter_blocks remove_dead_instructions llvm_func in
-  ()
 
 
 and codegen_func_decl
@@ -216,59 +280,6 @@ and codegen_func
   let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
 
   mod_ctxt_up
-
-
-and build_aggregate builder typ vals =
-  let rec _build_aggregate vals cur_val idx =
-    begin match vals with
-    | [] -> cur_val
-    | x::xs ->
-        let next_val = (
-          Llvm.build_insertvalue cur_val x idx "tupletmp" builder
-        ) in
-        let next_idx = idx + 1 in
-        _build_aggregate xs next_val next_idx
-    end
-  in
-  let undef_aggregate = Llvm.undef typ in
-  _build_aggregate vals undef_aggregate 0
-
-
-and deconstruct_aggregate builder idents agg =
-  let rec _deconstruct_aggregate idents idx decon_lst =
-    begin match idents with
-    | [] -> decon_lst
-    | _::xs ->
-        let next_val = Llvm.build_extractvalue agg idx "decontmp" builder in
-        let next_idx = idx + 1 in
-        let next_decon = decon_lst @ [next_val] in
-        _deconstruct_aggregate xs next_idx next_decon
-    end
-  in
-  _deconstruct_aggregate idents 0 []
-
-
-and deconstruct_aggregate_sz builder sz agg =
-  let rec _deconstruct_aggregate_sz idx decon_lst =
-    if idx < sz
-    then
-      begin
-        let next_val = Llvm.build_extractvalue agg idx "decontmp" builder in
-        let next_idx = idx + 1 in
-        let next_decon = decon_lst @ [next_val] in
-        _deconstruct_aggregate_sz next_idx next_decon
-      end
-    else
-      decon_lst
-  in
-  _deconstruct_aggregate_sz 0 []
-
-
-and combine3 lhs mid rhs =
-  match (lhs, mid, rhs) with
-  | ([], [], []) -> []
-  | (x::xs, y::ys, z::zs) -> (x, y, z) :: combine3 xs ys zs
-  | _ -> failwith "combine3 expects three equal-length lists"
 
 
 and codegen_stmts llvm_ctxt builder func_ctxt stmts =
