@@ -315,6 +315,27 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         else_expr_typechecked
       )
 
+  | WhileExpr(_, while_cond, then_stmts, finally_expr) ->
+      let while_cond_typechecked = type_check_expr tc_ctxt while_cond in
+      let while_cond_t = expr_type while_cond_typechecked in
+
+      let (_, then_stmts_typechecked) = type_check_stmts tc_ctxt then_stmts in
+
+      let finally_expr_typechecked = type_check_expr tc_ctxt finally_expr in
+      let finally_expr_t = expr_type finally_expr_typechecked in
+
+      let _ = match while_cond_t with
+      | Bool -> ()
+      | _ -> failwith "if-expr condition must resolve to Bool"
+      in
+
+      WhileExpr(
+        finally_expr_t,
+        while_cond_typechecked,
+        then_stmts_typechecked,
+        finally_expr_typechecked
+      )
+
     | FuncCall(_, f_name, exprs) ->
         let (ret_t, params) = StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs in
         let (params_non_variadic, is_var_arg) = get_static_f_params params in

@@ -49,6 +49,8 @@ and expr =
   | BlockExpr of berk_t * stmt list * expr
   (* if expr, then expr, else expr *)
   | IfThenElseExpr of berk_t * expr * expr * expr
+  (* while expr, then stmts, else expr *)
+  | WhileExpr of berk_t * expr * stmt list * expr
   | FuncCall of berk_t * ident_t * expr list
   | ArrayExpr of (berk_t * expr list)
   (* First expr is index, second is array *)
@@ -88,6 +90,7 @@ let expr_type typ =
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
+  | WhileExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
   | IndexExpr(typ, _, _) -> typ

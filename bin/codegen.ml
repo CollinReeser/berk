@@ -50,7 +50,8 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
 
-let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
+let if_expr_alloc_name = "___IF_THEN_ELSE_ALLOCA"
+let while_expr_alloc_name = "___WHILE_FINALLY_ALLOCA"
 ;;
 
 
@@ -349,7 +350,10 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
 
   | ReturnStmt(expr) ->
       let return_val = codegen_expr llvm_ctxt builder func_ctxt expr in
-      let _ : Llvm.llvalue = Llvm.build_ret return_val builder in
+      let _ = begin match (expr_type expr) with
+        | Nil -> Llvm.build_ret_void builder
+        | _   -> Llvm.build_ret return_val builder
+      end in
 
       func_ctxt
 
@@ -563,7 +567,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
         | _ ->
             let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
             let alloca =
-              Llvm.build_alloca alloca_typ if_expr_alloca_name builder
+              Llvm.build_alloca alloca_typ if_expr_alloc_name builder
             in
 
             let do_store llvm_val = begin
@@ -572,19 +576,86 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
             end in
 
             let _ = core_if_then_else_gen do_store in
-            let loaded = Llvm.build_load alloca if_expr_alloca_name builder in
+            let loaded = Llvm.build_load alloca if_expr_alloc_name builder in
 
             loaded
       end in
 
       resolved_val
 
-  | FuncCall(_, ident, exprs) ->
+  | WhileExpr(typ, cond_expr, then_stmts, finally_expr) ->
+      let cur_func = func_ctxt.cur_func in
+      let bb_cond = Llvm.append_block llvm_ctxt "while_cond" cur_func in
+      let bb_then = Llvm.append_block llvm_ctxt "while_then" cur_func in
+      let bb_fin = Llvm.append_block llvm_ctxt "while_fin" cur_func in
+      let bb_end = Llvm.append_block llvm_ctxt "while_end" cur_func in
+
+      (* Generate the core while-loop logic. *)
+      let core_while_gen maybe_do_store = begin
+        let _ = Llvm.build_br bb_cond builder in
+
+        let _ = Llvm.position_at_end bb_cond builder in
+        let cond_val = _codegen_expr cond_expr in
+        let _ = Llvm.build_cond_br cond_val bb_then bb_fin builder in
+
+        let _ = Llvm.position_at_end bb_then builder in
+        let _ = codegen_stmts llvm_ctxt builder func_ctxt then_stmts in
+        let _ = Llvm.build_br bb_cond builder in
+
+        let _ = Llvm.position_at_end bb_fin builder in
+        let finally_val = _codegen_expr finally_expr in
+        let _ = maybe_do_store finally_val in
+        let _ = Llvm.build_br bb_end builder in
+
+        let _ = Llvm.position_at_end bb_end builder in
+
+        ()
+      end in
+
+      (* If this while-expr yields a non-nil value, we want to ensure we yield
+      that value. Otherwise, if this while-expr is ultimately nil, we want to
+      avoid attempting to store an undef value into any alloca. *)
+      let resolved_val = begin match typ with
+        | Nil ->
+            let no_store _ = () in
+
+            let () = core_while_gen no_store in
+            let nil_val = _codegen_expr ValNil in
+
+            nil_val
+
+        | _ ->
+            let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+            let alloca =
+              Llvm.build_alloca alloca_typ while_expr_alloc_name builder
+            in
+
+            let do_store llvm_val = begin
+              let _ : Llvm.llvalue = Llvm.build_store llvm_val alloca builder in
+              ()
+            end in
+
+            let _ = core_while_gen do_store in
+            let loaded = Llvm.build_load alloca while_expr_alloc_name builder in
+
+            loaded
+      end in
+
+      resolved_val
+
+  | FuncCall(typ, ident, exprs) ->
       let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in
       let llvm_args = Array.of_list (List.map _codegen_expr exprs) in
 
-      let call = Llvm.build_call llvm_func_val llvm_args "calltmp" builder in
-      Llvm.set_tail_call true call;
+      (* Calls to void functions must not "assign" to a named result. *)
+      let res_name = begin match typ with
+        | Nil -> ""
+        | _ -> "calltmp"
+      end in
+
+      let call = Llvm.build_call llvm_func_val llvm_args res_name builder in
+      Llvm.set_tail_call true call ;
+
       call
 
   | ArrayExpr(typ, exprs) ->

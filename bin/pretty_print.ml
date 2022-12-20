@@ -100,6 +100,14 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       Printf.printf "\n%s} else {\n" ind;
       print_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") else_expr;
       Printf.printf "\n%s}" ind
+  | WhileExpr (_, while_cond, then_stmts, finally_expr) ->
+      Printf.printf "%s%sif (" init_ind typ_s_rev;
+      print_expr ~print_typ:print_typ "" while_cond;
+      Printf.printf ") {\n";
+      List.iter (print_stmt ~print_typ:print_typ (ind ^ "  ")) then_stmts;
+      Printf.printf "\n%s} finally {\n" ind;
+      print_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") finally_expr;
+      Printf.printf "\n%s}" ind
   | FuncCall(_, id, exprs) ->
     begin
       Printf.printf "%s%s%s(" init_ind typ_s_rev id;

@@ -233,6 +233,14 @@ let main = begin
         print_expr "" (type_check_expr tc_ctxt_up expr_raw);
         Printf.printf "\n";
 
+      let collatz_seq_stmt_raw =
+        ExprStmt(
+          FuncCall(
+            Undecided, "collatz_print_seq", [ValU64(9)]
+          )
+        )
+      in
+
       let return_stmt_raw =
         ExprStmt(
           BlockExpr(
@@ -346,6 +354,7 @@ let main = begin
           decl_tuple_unpack_lit_raw;
           decl_tuple_unpack_var_raw;
           assign_tuple_unpack_lit_raw;
+          collatz_seq_stmt_raw;
           return_stmt_raw;
         ];
       } in
@@ -650,6 +659,101 @@ let main = begin
         ];
       } in
 
+      let collatz_print_seq_func_def = {
+        f_decl = {
+          f_name = "collatz_print_seq";
+          f_ret_t = Nil;
+          f_params = ["cur", {mut = true}, U64];
+        };
+        f_stmts = [
+          ExprStmt(
+            BlockExpr(
+              Undecided, [
+                ExprStmt(
+                  WhileExpr(
+                    Undecided,
+                    BinOp(
+                      Undecided, NotEq,
+                      ValVar(Undecided, "cur"),
+                      ValU64(1)
+                    ),
+                    [
+                      ExprStmt(
+                        FuncCall(
+                          Undecided, "printf", [
+                            ValStr("  [%d]\n");
+                            ValVar(Undecided, "cur");
+                          ]
+                        )
+                      );
+                      ExprStmt(
+                        IfThenElseExpr(
+                          Undecided,
+                          BinOp(
+                            Undecided,
+                            Eq,
+                            BinOp(
+                              Undecided, Mod,
+                              ValVar(Undecided, "cur"),
+                              ValU64(2)
+                            ),
+                            ValU64(0)
+                          ),
+                          BlockExpr(
+                            Undecided, [
+                              AssignStmt(
+                                "cur",
+                                BinOp(
+                                  Undecided,
+                                  Div,
+                                  ValVar(Undecided, "cur"),
+                                  ValU64(2)
+                                )
+                              );
+                            ],
+                            ValNil
+                          ),
+                          BlockExpr(
+                            Undecided, [
+                              AssignStmt(
+                                "cur",
+                                BinOp(
+                                  Undecided,
+                                  Add,
+                                  BinOp(
+                                    Undecided,
+                                    Mul,
+                                    ValVar(Undecided, "cur"),
+                                    ValU64(3)
+                                  ),
+                                  ValU64(1)
+                                )
+                              );
+                            ],
+                            ValNil
+                          )
+                        )
+                      );
+                    ],
+                    ValNil
+                  )
+                );
+                ExprStmt(
+                  FuncCall(
+                    Undecided, "printf", [
+                      ValStr("  [%d]\n");
+                      ValVar(Undecided, "cur");
+                    ]
+                  )
+                );
+                ReturnStmt(ValNil);
+              ],
+              ValNil
+            );
+          )
+        ];
+      } in
+
       let return_tuple_func_def = {
         f_decl = {
           f_name = "return_tuple";
@@ -688,6 +792,7 @@ let main = begin
         FuncDef(collatz_highest_seed_internal_func_def);
         FuncDef(collatz_highest_seed_func_def);
         FuncDef(return_tuple_func_def);
+        FuncDef(collatz_print_seq_func_def);
         FuncDef(main_func_def);
       ] in
 
