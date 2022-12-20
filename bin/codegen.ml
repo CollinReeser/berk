@@ -582,119 +582,119 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       resolved_val
 
-    | FuncCall(_, ident, exprs) ->
-        let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in
-        let llvm_args = Array.of_list (List.map _codegen_expr exprs) in
+  | FuncCall(_, ident, exprs) ->
+      let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in
+      let llvm_args = Array.of_list (List.map _codegen_expr exprs) in
 
-        let call = Llvm.build_call llvm_func_val llvm_args "calltmp" builder in
-        Llvm.set_tail_call true call;
-        call
+      let call = Llvm.build_call llvm_func_val llvm_args "calltmp" builder in
+      Llvm.set_tail_call true call;
+      call
 
-    | ArrayExpr(typ, exprs) ->
-        let llvm_expr_vals = List.map _codegen_expr exprs in
-        let llvm_arr_t = berk_t_to_llvm_t llvm_ctxt typ in
+  | ArrayExpr(typ, exprs) ->
+      let llvm_expr_vals = List.map _codegen_expr exprs in
+      let llvm_arr_t = berk_t_to_llvm_t llvm_ctxt typ in
 
-        let arr_aggregate = (
-          build_aggregate builder llvm_arr_t llvm_expr_vals
-        ) in
+      let arr_aggregate = (
+        build_aggregate builder llvm_arr_t llvm_expr_vals
+      ) in
 
-        arr_aggregate
+      arr_aggregate
 
-    | IndexExpr(_, idx_expr, arr_expr) ->
-        let arr_typ = expr_type arr_expr in
-        let (arr_typ, arr_sz) = begin match arr_typ with
-          | Array(typ, sz) -> (typ, sz)
-          | _ ->
-            begin
-              let pretty_typ = fmt_type arr_typ in
-              let err_msg = (
-                Printf.sprintf
-                  "Indexing into other than static array: %s"
-                  pretty_typ
-              ) in
-              failwith err_msg
-            end
-        end in
+  | IndexExpr(_, idx_expr, arr_expr) ->
+      let arr_typ = expr_type arr_expr in
+      let (arr_typ, arr_sz) = begin match arr_typ with
+        | Array(typ, sz) -> (typ, sz)
+        | _ ->
+          begin
+            let pretty_typ = fmt_type arr_typ in
+            let err_msg = (
+              Printf.sprintf
+                "Indexing into other than static array: %s"
+                pretty_typ
+            ) in
+            failwith err_msg
+          end
+      end in
 
-        let idx_val = _codegen_expr idx_expr in
+      let idx_val = _codegen_expr idx_expr in
 
-        (* TODO: Add an out-of-bounds check based in the index val and the
-        static size of the array. *)
+      (* TODO: Add an out-of-bounds check based in the index val and the
+      static size of the array. *)
 
-        let arr_val = _codegen_expr arr_expr in
+      let arr_val = _codegen_expr arr_expr in
 
-        (* Store the static array into an alloca so we can dynamically index
-        into it. *)
+      (* Store the static array into an alloca so we can dynamically index
+      into it. *)
 
-        let deconstructed_lst = (
-          deconstruct_aggregate_sz builder arr_sz arr_val
-        ) in
+      let deconstructed_lst = (
+        deconstruct_aggregate_sz builder arr_sz arr_val
+      ) in
 
-        let llvm_alloca_typ = berk_t_to_llvm_t llvm_ctxt arr_typ in
-        let llvm_arr_sz = Llvm.const_int i32_t arr_sz in
+      let llvm_alloca_typ = berk_t_to_llvm_t llvm_ctxt arr_typ in
+      let llvm_arr_sz = Llvm.const_int i32_t arr_sz in
 
-        let alloca_arr = (
-          Llvm.build_array_alloca
-            llvm_alloca_typ llvm_arr_sz "allocaarrtmp" builder
-        ) in
+      let alloca_arr = (
+        Llvm.build_array_alloca
+          llvm_alloca_typ llvm_arr_sz "allocaarrtmp" builder
+      ) in
 
-        let _ = List.iteri (
-          fun idx elem_val ->
-            let indices = Array.of_list [
-              Llvm.const_int i32_t idx;
-            ] in
-            let llvm_gep = Llvm.build_gep alloca_arr indices "geptmp" builder in
-            let _ = Llvm.build_store elem_val llvm_gep builder in
-            ()
-        ) deconstructed_lst in
+      let _ = List.iteri (
+        fun idx elem_val ->
+          let indices = Array.of_list [
+            Llvm.const_int i32_t idx;
+          ] in
+          let llvm_gep = Llvm.build_gep alloca_arr indices "geptmp" builder in
+          let _ = Llvm.build_store elem_val llvm_gep builder in
+          ()
+      ) deconstructed_lst in
 
-        (* Load from the alloca our specific dynamic index. *)
+      (* Load from the alloca our specific dynamic index. *)
 
-        let indices = Array.of_list [idx_val] in
-        let idx_gep = Llvm.build_gep alloca_arr indices "geptmp" builder in
-        let loaded = Llvm.build_load idx_gep "loadarraytmp" builder in
+      let indices = Array.of_list [idx_val] in
+      let idx_gep = Llvm.build_gep alloca_arr indices "geptmp" builder in
+      let loaded = Llvm.build_load idx_gep "loadarraytmp" builder in
 
-        loaded
+      loaded
 
-    | StaticIndexExpr(_, idx, arr_expr) ->
-        let arr_typ = expr_type arr_expr in
-        let arr_sz = begin match arr_typ with
-          | Array(_, sz) -> sz
-          | _ ->
-            begin
-              let pretty_typ = fmt_type arr_typ in
-              let err_msg = (
-                Printf.sprintf
-                  "Indexing into other than static array: %s"
-                  pretty_typ
-              ) in
-              failwith err_msg
-            end
-        end in
+  | StaticIndexExpr(_, idx, arr_expr) ->
+      let arr_typ = expr_type arr_expr in
+      let arr_sz = begin match arr_typ with
+        | Array(_, sz) -> sz
+        | _ ->
+          begin
+            let pretty_typ = fmt_type arr_typ in
+            let err_msg = (
+              Printf.sprintf
+                "Indexing into other than static array: %s"
+                pretty_typ
+            ) in
+            failwith err_msg
+          end
+      end in
 
-        let _ = begin
-          if idx >= 0 && idx < arr_sz
-          then ()
-          else failwith (Printf.sprintf "idx %d OoB for %d" idx arr_sz)
-        end in
+      let _ = begin
+        if idx >= 0 && idx < arr_sz
+        then ()
+        else failwith (Printf.sprintf "idx %d OoB for %d" idx arr_sz)
+      end in
 
-        let llvm_arr_val = _codegen_expr arr_expr in
+      let llvm_arr_val = _codegen_expr arr_expr in
 
-        let extracted = (
-          Llvm.build_extractvalue llvm_arr_val idx "idxtmp" builder
-        ) in
+      let extracted = (
+        Llvm.build_extractvalue llvm_arr_val idx "idxtmp" builder
+      ) in
 
-        extracted
+      extracted
 
-    | TupleExpr(typ, exprs) ->
-        let llvm_expr_vals = List.map _codegen_expr exprs in
-        let llvm_tuple_t = berk_t_to_llvm_t llvm_ctxt typ in
+  | TupleExpr(typ, exprs) ->
+      let llvm_expr_vals = List.map _codegen_expr exprs in
+      let llvm_tuple_t = berk_t_to_llvm_t llvm_ctxt typ in
 
-        let tuple_aggregate = (
-          build_aggregate builder llvm_tuple_t llvm_expr_vals
-        ) in
+      let tuple_aggregate = (
+        build_aggregate builder llvm_tuple_t llvm_expr_vals
+      ) in
 
-        tuple_aggregate
+      tuple_aggregate
 
 
 let initialize_fpm the_fpm =
