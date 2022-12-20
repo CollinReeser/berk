@@ -210,6 +210,7 @@ and codegen_func
   llvm_ctxt the_mod the_fpm builder mod_ctxt
   {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;}
 =
+  (* Generate the LLVM context for defining a new function. *)
   let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
   let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
   let llvm_param_t_lst =
@@ -223,16 +224,18 @@ and codegen_func
   in
   let new_func = Llvm.declare_function f_name func_sig_t the_mod in
 
+  (* Add this new function to our codegen context; doing this now, rather than
+  at the _end_ of function codegen, is what permits self recursion. *)
   let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
   let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
 
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
   let _ = Llvm.position_at_end bb builder in
 
+  (* Push the function arguments into allocas so that they are easier to
+  reference as variables within the function body. *)
   let llvm_params = Array.to_list (Llvm.params new_func) in
-
   let arg_to_param_lst = List.combine f_params llvm_params in
-
   let llvm_param_allocas = List.map (
     fun ((id, _, typ), llvm_param) ->
       let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
@@ -241,20 +244,20 @@ and codegen_func
 
       alloca
   ) arg_to_param_lst in
-
   let arg_to_alloca_lst = List.combine f_params llvm_param_allocas in
-
   let init_vars = List.fold_left (
     fun vars ((id, _, _), param) -> StrMap.add id param vars
   ) StrMap.empty arg_to_alloca_lst
   in
 
+  (* Establish our function-specific codegen context given the above setup. *)
   let func_ctxt = {
     cur_func = new_func;
     cur_vars = init_vars;
     mod_ctxt = mod_ctxt_up
   } in
 
+  (* Codegen the function body statements. *)
   codegen_stmts llvm_ctxt builder func_ctxt f_stmts |> ignore ;
 
   (* TODO: Do better here. Sometimes, generated code ends with an empty basic
@@ -262,6 +265,8 @@ and codegen_func
   one here. *)
   let _ = Llvm.build_unreachable builder in
 
+  (* Various cleanup of codegen. eg, some codegen flows can generate basic
+  blocks with multiple terminators, which is invalid LLVM IR. *)
   clean_up_basic_blocks_of_function new_func ;
 
   (* Validate the generated code, checking for consistency. *)

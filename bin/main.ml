@@ -72,7 +72,7 @@ let main = begin
         DeclStmt(
           "my_float_var", def_var_qual, Undecided,
           BinOp(
-          Undecided, Add,
+            Undecided, Add,
             ValF32(123.456),
             BinOp(
               Undecided, Mul,
@@ -591,7 +591,8 @@ let main = begin
                       Undecided,
                       BinOp(
                         Undecided, Greater,
-                        ValVar(Undecided, "cur_len"), ValVar(Undecided, "max_len")
+                        ValVar(Undecided, "cur_len"),
+                        ValVar(Undecided, "max_len")
                       ),
                       BlockExpr(
                         Undecided, [
