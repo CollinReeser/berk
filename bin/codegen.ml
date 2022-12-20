@@ -514,12 +514,9 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
             "Unexpected expression type in BinOp: %s" (fmt_type typ)
         )
       end
-  | BlockExpr(_, stmts, expr_opt) ->
+  | BlockExpr(_, stmts, exp) ->
       let func_ctxt_up = codegen_stmts llvm_ctxt builder func_ctxt stmts in
-      let block_expr_val = begin match expr_opt with
-        | None -> codegen_expr llvm_ctxt builder func_ctxt_up ValNil
-        | Some(exp) -> codegen_expr llvm_ctxt builder func_ctxt_up exp
-      end in
+      let block_expr_val = codegen_expr llvm_ctxt builder func_ctxt_up exp in
 
       block_expr_val
 

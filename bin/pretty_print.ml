@@ -86,15 +86,11 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       print_bin_op op;
       print_expr ~print_typ:print_typ "" rh;
       Printf.printf ")%s" typ_s
-  | BlockExpr (_, stmts, expr_opt) ->
+  | BlockExpr (_, stmts, exp) ->
       Printf.printf "%s%s{\n" init_ind typ_s_rev;
       List.iter (print_stmt ~print_typ:print_typ (ind ^ "  ")) stmts;
-      let _ = begin match expr_opt with
-      | Some(exp) ->
-          print_expr ~print_typ:print_typ (ind ^ "  ") exp ;
-          Printf.printf "\n" ;
-      | None -> ()
-      end in
+      print_expr ~print_typ:print_typ (ind ^ "  ") exp ;
+      Printf.printf "\n" ;
       Printf.printf "%s}" ind
   | IfThenElseExpr (_, if_cond, then_expr, else_expr) ->
       Printf.printf "%s%sif (" init_ind typ_s_rev;

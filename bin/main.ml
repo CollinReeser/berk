@@ -43,7 +43,7 @@ let main = begin
                   IfThenElseExpr(
                     Undecided,
                     BinOp(Undecided, GreaterEq, ValF64(11.12), ValF32(9.34)),
-                    BlockExpr(Undecided, [], Some(ValI64(9))),
+                    BlockExpr(Undecided, [], ValI64(9)),
                     ValI64(8)
                   )
                 )
@@ -52,19 +52,17 @@ let main = begin
                 "my_inner_var_2", ValVar(Undecided, "my_inner_var_3")
               );
             ],
-            Some(
+            BinOp(
+              Undecided, Add,
+              ValVar(Undecided, "my_inner_var_2"),
               BinOp(
-                Undecided, Add,
-                ValVar(Undecided, "my_inner_var_2"),
+                Undecided, Mul,
                 BinOp(
-                  Undecided, Mul,
-                  BinOp(
-                    Undecided, Sub,
-                    ValI32(11),
-                    ValI64(7)
-                  ),
-                  ValVar(Undecided, "my_inner_var_3")
-                )
+                  Undecided, Sub,
+                  ValI32(11),
+                  ValI64(7)
+                ),
+                ValVar(Undecided, "my_inner_var_3")
               )
             )
           )
@@ -323,7 +321,7 @@ let main = begin
                 )
               );
             ],
-            None
+            ValNil
           )
         )
       in
@@ -454,7 +452,7 @@ let main = begin
                 Undecided, [
                   ReturnStmt(ValVar(Undecided, "len"));
                 ],
-                None
+                ValNil
               ),
               IfThenElseExpr(
                 Undecided,
@@ -487,7 +485,7 @@ let main = begin
                       )
                     );
                   ],
-                  None
+                  ValNil
                 ),
                 BlockExpr(
                   Undecided,
@@ -509,7 +507,7 @@ let main = begin
                       )
                     );
                   ],
-                  None
+                  ValNil
                 )
               )
             )
@@ -566,7 +564,7 @@ let main = begin
                     )
                   )
                 ],
-                None
+                ValNil
               ),
               BlockExpr(
                 Undecided,
@@ -602,7 +600,7 @@ let main = begin
                             )
                           )
                         ],
-                        None
+                        ValNil
                       ),
                       BlockExpr(
                         Undecided, [
@@ -620,12 +618,12 @@ let main = begin
                             )
                           )
                         ],
-                        None
+                        ValNil
                       )
                     )
                   )
                 ],
-                None
+                ValNil
               )
             )
           )

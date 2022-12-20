@@ -46,7 +46,8 @@ and expr =
   | BinOp of berk_t * bin_op * expr * expr
   (* Sequence of statements followed by an expression, where if the expression
   is None, then the BlockExpr resolves to a nil value. *)
-  | BlockExpr of berk_t * stmt list * expr option
+  | BlockExpr of berk_t * stmt list * expr
+  (* if expr, then expr, else expr *)
   | IfThenElseExpr of berk_t * expr * expr * expr
   | FuncCall of berk_t * ident_t * expr list
   | ArrayExpr of (berk_t * expr list)

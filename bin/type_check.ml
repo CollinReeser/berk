@@ -283,16 +283,13 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
           BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
       end
 
-  | BlockExpr(_, stmts, expr_opt) ->
+  | BlockExpr(_, stmts, exp) ->
       let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
-      let (expr_t, expr_opt_typechecked) = begin match expr_opt with
-        | None -> (Nil, None)
-        | Some(exp) ->
-            let expr_typechecked = type_check_expr tc_ctxt_up exp in
-            let expr_t = expr_type expr_typechecked in
-            (expr_t, Some(expr_typechecked))
-      end in
-      BlockExpr(expr_t, stmts_typechecked, expr_opt_typechecked)
+
+      let expr_typechecked = type_check_expr tc_ctxt_up exp in
+      let expr_t = expr_type expr_typechecked in
+
+      BlockExpr(expr_t, stmts_typechecked, expr_typechecked)
 
   | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
       let if_cond_typechecked = type_check_expr tc_ctxt if_cond in

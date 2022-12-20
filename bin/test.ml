@@ -35,8 +35,8 @@ let build_example_ast : func_def_t =
         IfThenElseExpr(
           Undecided,
           ValBool(true),
-          BlockExpr(Undecided, [], Some(ValI64(31))),
-          BlockExpr(Undecided, [], Some(ValI64(32)))
+          BlockExpr(Undecided, [], ValI64(31)),
+          BlockExpr(Undecided, [], ValI64(32))
         )
       );
       DeclStmt(
@@ -44,8 +44,8 @@ let build_example_ast : func_def_t =
         IfThenElseExpr(
           Undecided,
           ValBool(false),
-          BlockExpr(Undecided, [], Some(ValI64(33))),
-          BlockExpr(Undecided, [], Some(ValI64(34)))
+          BlockExpr(Undecided, [], ValI64(33)),
+          BlockExpr(Undecided, [], ValI64(34))
         )
       );
     ];
@@ -79,8 +79,8 @@ let test_suite =
     IfThenElseExpr(
       Undecided,
       ValBool(true),
-      BlockExpr(Undecided, [], None),
-      BlockExpr(Undecided, [], None)
+      BlockExpr(Undecided, [], ValNil),
+      BlockExpr(Undecided, [], ValNil)
     )
   );
 
@@ -88,8 +88,8 @@ let test_suite =
     IfThenElseExpr(
       Undecided,
       ValBool(true),
-      BlockExpr(Undecided, [], Some(ValI32(11))),
-      BlockExpr(Undecided, [], Some(ValI64(12)))
+      BlockExpr(Undecided, [], ValI32(11)),
+      BlockExpr(Undecided, [], ValI64(12))
     )
   );
 
@@ -116,13 +116,13 @@ let test_suite =
             )
           );
         ],
-        Some(ValI64(22))
+        ValI64(22)
       ),
       BlockExpr(
         Undecided, [
           DeclStmt("ijk", def_var_qual, Undecided, ValBool(false));
         ],
-        Some(ValI64(24))
+        ValI64(24)
       )
     )
   );
