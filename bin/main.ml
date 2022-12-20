@@ -43,7 +43,7 @@ let main = begin
                   IfThenElseExpr(
                     Undecided,
                     BinOp(Undecided, GreaterEq, ValF64(11.12), ValF32(9.34)),
-                    BlockExpr(Undecided, [ResolveStmt(ValI64(9))]),
+                    BlockExpr(Undecided, [], Some(ValI64(9))),
                     ValI64(8)
                   )
                 )
@@ -51,22 +51,22 @@ let main = begin
               AssignStmt(
                 "my_inner_var_2", ValVar(Undecided, "my_inner_var_3")
               );
-              ResolveStmt(
+            ],
+            Some(
+              BinOp(
+                Undecided, Add,
+                ValVar(Undecided, "my_inner_var_2"),
                 BinOp(
-                  Undecided, Add,
-                  ValVar(Undecided, "my_inner_var_2"),
+                  Undecided, Mul,
                   BinOp(
-                    Undecided, Mul,
-                    BinOp(
-                      Undecided, Sub,
-                      ValI32(11),
-                      ValI64(7)
-                    ),
-                    ValVar(Undecided, "my_inner_var_3")
-                  )
+                    Undecided, Sub,
+                    ValI32(11),
+                    ValI64(7)
+                  ),
+                  ValVar(Undecided, "my_inner_var_3")
                 )
-              );
-            ]
+              )
+            )
           )
         )
       ) in
@@ -74,7 +74,7 @@ let main = begin
         DeclStmt(
           "my_float_var", def_var_qual, Undecided,
           BinOp(
-            Undecided, Add,
+          Undecided, Add,
             ValF32(123.456),
             BinOp(
               Undecided, Mul,
@@ -236,91 +236,95 @@ let main = begin
         Printf.printf "\n";
 
       let return_stmt_raw =
-        BlockStmt(
-          [
-            DeclDeconStmt(
-              [
-                ("collatz_max_seed", def_var_qual);
-                ("collatz_max_len", def_var_qual);
-              ],
-              Undecided,
-              FuncCall(
-                (* Undecided, "collatz_highest_seed", [ValU64(120)] *)
-                Undecided, "collatz_highest_seed", [ValU64(1000000)]
-              )
-            );
-            DeclStmt(
-              "_", def_var_qual,
-              Undecided,
-              FuncCall(
-                Undecided, "printf", [
-                  ValStr("Hello, world!\n");
-                ]
-              )
-            );
-            DeclStmt(
-              "_", def_var_qual,
-              Undecided,
-              FuncCall(
-                Undecided, "printf", [
-                  ValStr("Hello, world!\n");
-                ]
-              )
-            );
-            DeclStmt(
-              "_", def_var_qual,
-              Undecided,
-              FuncCall(
-                Undecided, "printf", [
-                  ValStr("Max Seed: [%d]\n");
-                  ValVar(Undecided, "collatz_max_seed");
-                ]
-              )
-            );
-            DeclStmt(
-              "_", def_var_qual,
-              Undecided,
-              FuncCall(
-                Undecided, "printf", [
-                  ValStr("Max Len: [%d]\n");
-                  ValVar(Undecided, "collatz_max_len");
-                ]
-              )
-            );
-            DeclStmt(
-              "_", def_var_qual,
-              Undecided,
-              FuncCall(
-                Undecided, "printf", [
-                  ValStr("Max Seed: [%d]\nMax Len: [%d]\n");
-                  ValVar(Undecided, "collatz_max_seed");
-                  ValVar(Undecided, "collatz_max_len");
-                ]
-              )
-            );
-            ReturnStmt(
-              (* BinOp(
-                Undecided, Add,
-                ValVar(Undecided, "my_array_idx_var"),
-                BinOp(
-                  Undecided, Add,
-                  ValCastTrunc(I8, expr_raw),
-                  ValVar(Undecided, "my_recursive_dodge_var")
-                )
-              ) *)
-
-              (* ValCastBitwise(
-                I8,
+        ExprStmt(
+          BlockExpr(
+            Undecided,
+            [
+              DeclDeconStmt(
+                [
+                  ("collatz_max_seed", def_var_qual);
+                  ("collatz_max_len", def_var_qual);
+                ],
+                Undecided,
                 FuncCall(
-                  Undecided, "tailcall_collatz_len", [ValU8(12)]
+                  (* Undecided, "collatz_highest_seed", [ValU64(120)] *)
+                  Undecided, "collatz_highest_seed", [ValU64(1000000)]
                 )
-              ) *)
+              );
+              DeclStmt(
+                "_", def_var_qual,
+                Undecided,
+                FuncCall(
+                  Undecided, "printf", [
+                    ValStr("Hello, world!\n");
+                  ]
+                )
+              );
+              DeclStmt(
+                "_", def_var_qual,
+                Undecided,
+                FuncCall(
+                  Undecided, "printf", [
+                    ValStr("Hello, world!\n");
+                  ]
+                )
+              );
+              DeclStmt(
+                "_", def_var_qual,
+                Undecided,
+                FuncCall(
+                  Undecided, "printf", [
+                    ValStr("Max Seed: [%d]\n");
+                    ValVar(Undecided, "collatz_max_seed");
+                  ]
+                )
+              );
+              DeclStmt(
+                "_", def_var_qual,
+                Undecided,
+                FuncCall(
+                  Undecided, "printf", [
+                    ValStr("Max Len: [%d]\n");
+                    ValVar(Undecided, "collatz_max_len");
+                  ]
+                )
+              );
+              DeclStmt(
+                "_", def_var_qual,
+                Undecided,
+                FuncCall(
+                  Undecided, "printf", [
+                    ValStr("Max Seed: [%d]\nMax Len: [%d]\n");
+                    ValVar(Undecided, "collatz_max_seed");
+                    ValVar(Undecided, "collatz_max_len");
+                  ]
+                )
+              );
+              ReturnStmt(
+                (* BinOp(
+                  Undecided, Add,
+                  ValVar(Undecided, "my_array_idx_var"),
+                  BinOp(
+                    Undecided, Add,
+                    ValCastTrunc(I8, expr_raw),
+                    ValVar(Undecided, "my_recursive_dodge_var")
+                  )
+                ) *)
 
-              ValCastBitwise(
-                I8, ValCastTrunc(U8, ValVar(Undecided, "collatz_max_seed"))
-              )
-            );
-          ]
+                (* ValCastBitwise(
+                  I8,
+                  FuncCall(
+                    Undecided, "tailcall_collatz_len", [ValU8(12)]
+                  )
+                ) *)
+
+                ValCastBitwise(
+                  I8, ValCastTrunc(U8, ValVar(Undecided, "collatz_max_seed"))
+                )
+              );
+            ],
+            None
+          )
         )
       in
 
@@ -442,64 +446,71 @@ let main = begin
           f_params = [("cur", def_var_qual, U64); ("len", def_var_qual, U64)];
         };
         f_stmts = [
-          IfThenElseStmt(
-            BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValU8(1)),
-            BlockStmt(
-              [
-                ReturnStmt(
-                  ValVar(Undecided, "len")
-                );
-              ]
-            ),
-            IfThenElseStmt(
-              BinOp(
-                Undecided, Eq,
-                ValU8(1),
-                BinOp(Undecided, Mod, ValVar(Undecided, "cur"), ValU8(2))
+          ExprStmt(
+            IfThenElseExpr(
+              Undecided,
+              BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValU8(1)),
+              BlockExpr(
+                Undecided, [
+                  ReturnStmt(ValVar(Undecided, "len"));
+                ],
+                None
               ),
-              BlockStmt(
-                [
-                  ReturnStmt(
-                    FuncCall(
-                      Undecided, "tailcall_collatz_len_internal", [
-                        BinOp(
-                          Undecided, Add,
-                          ValU8(1),
+              IfThenElseExpr(
+                Undecided,
+                BinOp(
+                  Undecided, Eq,
+                  ValU8(1),
+                  BinOp(Undecided, Mod, ValVar(Undecided, "cur"), ValU8(2))
+                ),
+                BlockExpr(
+                  Undecided,
+                  [
+                    ReturnStmt(
+                      FuncCall(
+                        Undecided, "tailcall_collatz_len_internal", [
                           BinOp(
-                            Undecided, Mul,
+                            Undecided, Add,
+                            ValU8(1),
+                            BinOp(
+                              Undecided, Mul,
+                              ValVar(Undecided, "cur"),
+                              ValU8(3)
+                            )
+                          );
+                          BinOp(
+                            Undecided, Add,
+                            ValVar(Undecided, "len"),
+                            ValU8(1)
+                          );
+                        ]
+                      )
+                    );
+                  ],
+                  None
+                ),
+                BlockExpr(
+                  Undecided,
+                  [
+                    ReturnStmt(
+                      FuncCall(
+                        Undecided, "tailcall_collatz_len_internal", [
+                          BinOp(
+                            Undecided, Div,
                             ValVar(Undecided, "cur"),
-                            ValU8(3)
-                          )
-                        );
-                        BinOp(
-                          Undecided, Add,
-                          ValVar(Undecided, "len"),
-                          ValU8(1)
-                        );
-                      ]
-                    )
-                  );
-                ]
-              ),
-              BlockStmt(
-                [
-                  ReturnStmt(
-                    FuncCall(
-                      Undecided, "tailcall_collatz_len_internal", [
-                        BinOp(
-                          Undecided, Div,
-                          ValVar(Undecided, "cur"),
-                          ValU8(2)
-                        );
-                        BinOp(
-                          Undecided, Add,
-                          ValVar(Undecided, "len"),
-                          ValU8(1)
-                        );
-                      ]
-                    )
-                  );
-                ]
+                            ValU8(2)
+                          );
+                          BinOp(
+                            Undecided, Add,
+                            ValVar(Undecided, "len"),
+                            ValU8(1)
+                          );
+                        ]
+                      )
+                    );
+                  ],
+                  None
+                )
               )
             )
           );
@@ -536,63 +547,86 @@ let main = begin
           ];
         };
         f_stmts = [
-          IfThenElseStmt(
-            BinOp(
-              Undecided, Greater,
-              ValVar(Undecided, "cur_seed"), ValVar(Undecided, "ceiling")
-            ),
-            ReturnStmt(
-              TupleExpr(
-                Undecided,
-                [
-                  ValVar(Undecided, "max_seed");
-                  ValVar(Undecided, "max_len");
-                ]
-              )
-            ),
-            BlockStmt(
-              [
-                DeclStmt(
-                  "cur_len", def_var_qual, Undecided,
-                  FuncCall(
-                    Undecided, "tailcall_collatz_len", [
-                      ValVar(Undecided, "cur_seed")
-                    ]
-                  )
-                );
-                IfThenElseStmt(
-                  BinOp(
-                    Undecided, Greater,
-                    ValVar(Undecided, "cur_len"), ValVar(Undecided, "max_len")
-                  ),
+          ExprStmt(
+            IfThenElseExpr(
+              Undecided,
+              BinOp(
+                Undecided, Greater,
+                ValVar(Undecided, "cur_seed"), ValVar(Undecided, "ceiling")
+              ),
+              BlockExpr(
+                Undecided, [
                   ReturnStmt(
-                    FuncCall(
-                      Undecided, "collatz_highest_seed_internal", [
-                        ValVar(Undecided, "cur_seed");
-                        ValVar(Undecided, "cur_len");
-                        BinOp(
-                          Undecided, Add,
-                          ValU8(1), ValVar(Undecided, "cur_seed")
-                        );
-                        ValVar(Undecided, "ceiling");
-                      ]
-                    )
-                  ),
-                  ReturnStmt(
-                    FuncCall(
-                      Undecided, "collatz_highest_seed_internal", [
+                    TupleExpr(
+                      Undecided,
+                      [
                         ValVar(Undecided, "max_seed");
                         ValVar(Undecided, "max_len");
-                        BinOp(
-                          Undecided, Add,
-                          ValU8(1), ValVar(Undecided, "cur_seed")
-                        );
-                        ValVar(Undecided, "ceiling");
                       ]
                     )
                   )
-                )
-              ]
+                ],
+                None
+              ),
+              BlockExpr(
+                Undecided,
+                [
+                  DeclStmt(
+                    "cur_len", def_var_qual, Undecided,
+                    FuncCall(
+                      Undecided, "tailcall_collatz_len", [
+                        ValVar(Undecided, "cur_seed")
+                      ]
+                    )
+                  );
+                  ExprStmt(
+                    IfThenElseExpr(
+                      Undecided,
+                      BinOp(
+                        Undecided, Greater,
+                        ValVar(Undecided, "cur_len"), ValVar(Undecided, "max_len")
+                      ),
+                      BlockExpr(
+                        Undecided, [
+                          ReturnStmt(
+                            FuncCall(
+                              Undecided, "collatz_highest_seed_internal", [
+                                ValVar(Undecided, "cur_seed");
+                                ValVar(Undecided, "cur_len");
+                                BinOp(
+                                  Undecided, Add,
+                                  ValU8(1), ValVar(Undecided, "cur_seed")
+                                );
+                                ValVar(Undecided, "ceiling");
+                              ]
+                            )
+                          )
+                        ],
+                        None
+                      ),
+                      BlockExpr(
+                        Undecided, [
+                          ReturnStmt(
+                            FuncCall(
+                              Undecided, "collatz_highest_seed_internal", [
+                                ValVar(Undecided, "max_seed");
+                                ValVar(Undecided, "max_len");
+                                BinOp(
+                                  Undecided, Add,
+                                  ValU8(1), ValVar(Undecided, "cur_seed")
+                                );
+                                ValVar(Undecided, "ceiling");
+                              ]
+                            )
+                          )
+                        ],
+                        None
+                      )
+                    )
+                  )
+                ],
+                None
+              )
             )
           )
         ];

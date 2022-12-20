@@ -17,6 +17,8 @@ type func_gen_context = {
 
 let rec berk_t_to_llvm_t llvm_ctxt typ =
   match typ with
+  | Nil -> Llvm.void_type llvm_ctxt
+
   | U64 | I64 -> Llvm.i64_type llvm_ctxt
   | U32 | I32 -> Llvm.i32_type llvm_ctxt
   | U16 | I16 -> Llvm.i16_type llvm_ctxt
@@ -45,11 +47,9 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
       llvm_tuple_t
 
   | VarArgSentinel -> failwith "Should not need to determine type for var arg"
-  | Nil -> failwith "Should not need to determine type for nil"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
 
-let resolve_alloca_name = "___RESOLVE_ALLOCA"
 let if_expr_alloca_name = "___IF_THEN_ELSE_ALLOCA"
 ;;
 
@@ -358,39 +358,6 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
 
       func_ctxt
 
-  | BlockStmt (stmts) ->
-      let _ = codegen_stmts llvm_ctxt builder func_ctxt stmts in
-
-      func_ctxt
-
-  | IfThenElseStmt (if_cond, then_stmt, else_stmt) ->
-      let bb_then = Llvm.append_block llvm_ctxt "if_then" func_ctxt.cur_func in
-      let bb_else = Llvm.append_block llvm_ctxt "if_else" func_ctxt.cur_func in
-      let bb_if_end = Llvm.append_block llvm_ctxt "if_end" func_ctxt.cur_func in
-
-      let cond_val = codegen_expr llvm_ctxt builder func_ctxt if_cond in
-
-      let _ = Llvm.build_cond_br cond_val bb_then bb_else builder in
-
-      let _ = Llvm.position_at_end bb_then builder in
-      let _ = codegen_stmt llvm_ctxt builder func_ctxt then_stmt in
-      let _ = Llvm.build_br bb_if_end builder in
-
-      let _ = Llvm.position_at_end bb_else builder in
-      let _ = codegen_stmt llvm_ctxt builder func_ctxt else_stmt in
-      let _ = Llvm.build_br bb_if_end builder in
-
-      let _ = Llvm.position_at_end bb_if_end builder in
-
-      func_ctxt
-
-  | ResolveStmt (expr) ->
-      let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
-      let resolve_alloca = StrMap.find resolve_alloca_name func_ctxt.cur_vars in
-      let _ : Llvm.llvalue = Llvm.build_store expr_val resolve_alloca builder in
-
-      func_ctxt
-
 
 and codegen_expr llvm_ctxt builder func_ctxt expr =
   let i64_t = Llvm.i64_type llvm_ctxt in
@@ -407,6 +374,10 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
   let _codegen_expr = codegen_expr llvm_ctxt builder func_ctxt in
 
   match expr with
+  | ValNil ->
+      let llvm_nil_typ = berk_t_to_llvm_t llvm_ctxt Nil in
+      Llvm.undef llvm_nil_typ
+
   | ValU64(n) | ValI64(n) -> Llvm.const_int i64_t n
   | ValU32(n) | ValI32(n) -> Llvm.const_int i32_t n
   | ValU16(n) | ValI16(n) -> Llvm.const_int i16_t n
@@ -543,46 +514,73 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
             "Unexpected expression type in BinOp: %s" (fmt_type typ)
         )
       end
-  | BlockExpr(typ, stmts) ->
-      let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
-      let alloca = Llvm.build_alloca alloca_typ resolve_alloca_name builder in
-      let cur_vars = func_ctxt.cur_vars in
-      let updated_vars = StrMap.add resolve_alloca_name alloca cur_vars in
-      let func_ctxt_up = {func_ctxt with cur_vars = updated_vars} in
+  | BlockExpr(_, stmts, expr_opt) ->
+      let func_ctxt_up = codegen_stmts llvm_ctxt builder func_ctxt stmts in
+      let block_expr_val = begin match expr_opt with
+        | None -> codegen_expr llvm_ctxt builder func_ctxt_up ValNil
+        | Some(exp) -> codegen_expr llvm_ctxt builder func_ctxt_up exp
+      end in
 
-      let _ = codegen_stmts llvm_ctxt builder func_ctxt_up stmts in
-
-      let loaded = Llvm.build_load alloca resolve_alloca_name builder in
-
-      loaded
+      block_expr_val
 
   | IfThenElseExpr(typ, cond_expr, then_expr, else_expr) ->
-      let bb_then = Llvm.append_block llvm_ctxt "if_then" func_ctxt.cur_func in
-      let bb_else = Llvm.append_block llvm_ctxt "if_else" func_ctxt.cur_func in
-      let bb_if_end = Llvm.append_block llvm_ctxt "if_end" func_ctxt.cur_func in
+      (* Generate the core if-then-else logic, conditionally storing the
+      resultant then/else branch values into the if-expr alloca. *)
+      let core_if_then_else_gen maybe_do_store = begin
+        let cond_val = _codegen_expr cond_expr in
 
-      let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
-      let alloca = Llvm.build_alloca alloca_typ if_expr_alloca_name builder in
+        let cur_func = func_ctxt.cur_func in
+        let bb_then = Llvm.append_block llvm_ctxt "if_then" cur_func in
+        let bb_else = Llvm.append_block llvm_ctxt "if_else" cur_func in
+        let bb_if_end = Llvm.append_block llvm_ctxt "if_end" cur_func in
 
-      let cond_val = _codegen_expr cond_expr in
+        let _ = Llvm.build_cond_br cond_val bb_then bb_else builder in
 
-      let _ = Llvm.build_cond_br cond_val bb_then bb_else builder in
+        let _ = Llvm.position_at_end bb_then builder in
+        let then_val = _codegen_expr then_expr in
+        let _ = maybe_do_store then_val in
+        let _ = Llvm.build_br bb_if_end builder in
 
-      let _ = Llvm.position_at_end bb_then builder in
-      let then_val = _codegen_expr then_expr in
-      let _ : Llvm.llvalue = Llvm.build_store then_val alloca builder in
-      let _ = Llvm.build_br bb_if_end builder in
+        let _ = Llvm.position_at_end bb_else builder in
+        let else_val = _codegen_expr else_expr in
+        let _ = maybe_do_store else_val in
+        let _ = Llvm.build_br bb_if_end builder in
 
-      let _ = Llvm.position_at_end bb_else builder in
-      let else_val = _codegen_expr else_expr in
-      let _ : Llvm.llvalue = Llvm.build_store else_val alloca builder in
-      let _ = Llvm.build_br bb_if_end builder in
+        let _ = Llvm.position_at_end bb_if_end builder in
 
-      let _ = Llvm.position_at_end bb_if_end builder in
+        ()
+      end in
 
-      let loaded = Llvm.build_load alloca if_expr_alloca_name builder in
+      (* If this if-expr yields a non-nil value, we want to ensure we yield that
+      value. Otherwise, if this if-expr is ultimately nil, we want to avoid
+      attempting to store an undef value into any alloca. *)
+      let resolved_val = begin match typ with
+        | Nil ->
+            let no_store _ = () in
 
-      loaded
+            let () = core_if_then_else_gen no_store in
+            let nil_val = _codegen_expr ValNil in
+
+            nil_val
+
+        | _ ->
+            let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+            let alloca =
+              Llvm.build_alloca alloca_typ if_expr_alloca_name builder
+            in
+
+            let do_store llvm_val = begin
+              let _ : Llvm.llvalue = Llvm.build_store llvm_val alloca builder in
+              ()
+            end in
+
+            let _ = core_if_then_else_gen do_store in
+            let loaded = Llvm.build_load alloca if_expr_alloca_name builder in
+
+            loaded
+      end in
+
+      resolved_val
 
     | FuncCall(_, ident, exprs) ->
         let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in

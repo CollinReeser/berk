@@ -35,16 +35,8 @@ let build_example_ast : func_def_t =
         IfThenElseExpr(
           Undecided,
           ValBool(true),
-          BlockExpr(
-            Undecided, [
-              ResolveStmt(ValI64(31));
-            ]
-          ),
-          BlockExpr(
-            Undecided, [
-              ResolveStmt(ValI64(32));
-            ]
-          )
+          BlockExpr(Undecided, [], Some(ValI64(31))),
+          BlockExpr(Undecided, [], Some(ValI64(32)))
         )
       );
       DeclStmt(
@@ -52,16 +44,8 @@ let build_example_ast : func_def_t =
         IfThenElseExpr(
           Undecided,
           ValBool(false),
-          BlockExpr(
-            Undecided, [
-              ResolveStmt(ValI64(33));
-            ]
-          ),
-          BlockExpr(
-            Undecided, [
-              ResolveStmt(ValI64(34));
-            ]
-          )
+          BlockExpr(Undecided, [], Some(ValI64(33))),
+          BlockExpr(Undecided, [], Some(ValI64(34)))
         )
       );
     ];
@@ -95,8 +79,8 @@ let test_suite =
     IfThenElseExpr(
       Undecided,
       ValBool(true),
-      BlockExpr(Undecided, []),
-      BlockExpr(Undecided, [])
+      BlockExpr(Undecided, [], None),
+      BlockExpr(Undecided, [], None)
     )
   );
 
@@ -104,16 +88,8 @@ let test_suite =
     IfThenElseExpr(
       Undecided,
       ValBool(true),
-      BlockExpr(
-        Undecided, [
-          ResolveStmt(ValI32(11));
-        ]
-      ),
-      BlockExpr(
-        Undecided, [
-          ResolveStmt(ValI64(12));
-        ]
-      )
+      BlockExpr(Undecided, [], Some(ValI32(11))),
+      BlockExpr(Undecided, [], Some(ValI64(12)))
     )
   );
 
@@ -139,14 +115,14 @@ let test_suite =
               )
             )
           );
-          ResolveStmt(ValI64(22));
-        ]
+        ],
+        Some(ValI64(22))
       ),
       BlockExpr(
         Undecided, [
           DeclStmt("ijk", def_var_qual, Undecided, ValBool(false));
-          ResolveStmt(ValI64(24));
-        ]
+        ],
+        Some(ValI64(24))
       )
     )
   );

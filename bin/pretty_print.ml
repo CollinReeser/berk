@@ -41,6 +41,8 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
     else ("", "")
   in
   match ex with
+  | ValNil -> Printf.printf "%s()%s" init_ind typ_s
+
   | ValU64 (value)
   | ValU32 (value)
   | ValU16 (value)
@@ -84,9 +86,15 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       print_bin_op op;
       print_expr ~print_typ:print_typ "" rh;
       Printf.printf ")%s" typ_s
-  | BlockExpr (_, stmts) ->
+  | BlockExpr (_, stmts, expr_opt) ->
       Printf.printf "%s%s{\n" init_ind typ_s_rev;
       List.iter (print_stmt ~print_typ:print_typ (ind ^ "  ")) stmts;
+      let _ = begin match expr_opt with
+      | Some(exp) ->
+          print_expr ~print_typ:print_typ (ind ^ "  ") exp ;
+          Printf.printf "\n" ;
+      | None -> ()
+      end in
       Printf.printf "%s}" ind
   | IfThenElseExpr (_, if_cond, then_expr, else_expr) ->
       Printf.printf "%s%sif (" init_ind typ_s_rev;
@@ -178,22 +186,6 @@ and print_stmt ?(print_typ = false) ind stmt =
       Printf.printf ";\n"
   | ExprStmt (ex) ->
       Printf.printf "%s" ind;
-      print_expr ~print_typ:print_typ ind ex;
-      Printf.printf ";\n";
-  | BlockStmt (stmts) ->
-      Printf.printf "%s{\n" ind;
-      List.iter (print_stmt ~print_typ:print_typ (ind ^ "  ")) stmts;
-      Printf.printf "%s}\n" ind
-  | IfThenElseStmt (if_cond, then_block, else_block) ->
-      Printf.printf "%sif (" ind;
-      print_expr ~print_typ:print_typ "" if_cond;
-      Printf.printf ") {\n";
-      print_stmt ~print_typ:print_typ (ind ^ "  ") then_block;
-      Printf.printf "%s} else {\n" ind;
-      print_stmt ~print_typ:print_typ (ind ^ "  ") else_block;
-      Printf.printf "%s}\n" ind;
-  | ResolveStmt (ex) ->
-      Printf.printf "%sresolve " ind;
       print_expr ~print_typ:print_typ ind ex;
       Printf.printf ";\n";
   | ReturnStmt (ex) ->

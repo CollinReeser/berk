@@ -21,21 +21,6 @@ let default_tc_ctxt typ = {
   mod_ctxt = default_mod_ctxt;
 }
 
-let get_resolve_type stmts =
-  let resolve_expr_types =
-    List.filter_map (
-        fun stmt ->
-          match stmt with
-          | ResolveStmt(exp) -> Some(expr_type exp)
-          | _ -> None
-      ) stmts
-  in
-  match resolve_expr_types with
-  | [] -> Nil
-  | [x] -> x
-  | x::xs -> List.fold_left (fun x y -> common_type_of_lr x y) x xs
-;;
-
 let populate_ctxt_with_params f_params base_vars =
   let add_param vars (id, qual, typ) = begin
     StrMap.add id (typ, qual) vars
@@ -226,24 +211,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       end
 
   | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt exp))
-  | BlockStmt (stmts) ->
-      let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
-      (tc_ctxt_up, BlockStmt(stmts_typechecked))
 
-  | IfThenElseStmt (if_cond, then_stmt, else_stmt) ->
-      let if_cond_typechecked = type_check_expr tc_ctxt if_cond in
-      let (_, then_stmt_typechecked) = type_check_stmt tc_ctxt then_stmt in
-      let (_, else_stmt_typechecked) = type_check_stmt tc_ctxt else_stmt in
-      (
-        tc_ctxt,
-        IfThenElseStmt(
-          if_cond_typechecked,
-          then_stmt_typechecked,
-          else_stmt_typechecked
-        )
-      )
-
-  | ResolveStmt(exp) -> (tc_ctxt, ResolveStmt(type_check_expr tc_ctxt exp))
   | ReturnStmt(exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
@@ -261,6 +229,8 @@ and type_check_stmts tc_ctxt stmts =
 
 and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
   match exp with
+  | ValNil -> ValNil
+
   | ValU64(i) -> ValU64(i)
   | ValU32(i) -> ValU32(i)
   | ValU16(i) -> ValU16(i)
@@ -313,10 +283,16 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
           BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
       end
 
-  | BlockExpr(_, stmts) ->
-      let (_, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
-      let stmts_resolve_t = get_resolve_type stmts_typechecked in
-      BlockExpr(stmts_resolve_t, stmts_typechecked)
+  | BlockExpr(_, stmts, expr_opt) ->
+      let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
+      let (expr_t, expr_opt_typechecked) = begin match expr_opt with
+        | None -> (Nil, None)
+        | Some(exp) ->
+            let expr_typechecked = type_check_expr tc_ctxt_up exp in
+            let expr_t = expr_type expr_typechecked in
+            (expr_t, Some(expr_typechecked))
+      end in
+      BlockExpr(expr_t, stmts_typechecked, expr_opt_typechecked)
 
   | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
       let if_cond_typechecked = type_check_expr tc_ctxt if_cond in

@@ -26,6 +26,7 @@ and maybe_bounds_check =
   | Undecided
 
 and expr =
+  | ValNil
   | ValU64 of int
   | ValU32 of int
   | ValU16 of int
@@ -43,7 +44,9 @@ and expr =
   | ValCastTrunc of berk_t * expr
   | ValCastBitwise of berk_t * expr
   | BinOp of berk_t * bin_op * expr * expr
-  | BlockExpr of berk_t * stmt list
+  (* Sequence of statements followed by an expression, where if the expression
+  is None, then the BlockExpr resolves to a nil value. *)
+  | BlockExpr of berk_t * stmt list * expr option
   | IfThenElseExpr of berk_t * expr * expr * expr
   | FuncCall of berk_t * ident_t * expr list
   | ArrayExpr of (berk_t * expr list)
@@ -59,14 +62,12 @@ and stmt =
   | AssignStmt of ident_t * expr
   | AssignDeconStmt of ident_t list * expr
   | ExprStmt of expr
-  | BlockStmt of stmt list
-  | IfThenElseStmt of expr * stmt * stmt
-  | ResolveStmt of expr
   | ReturnStmt of expr
 ;;
 
 let expr_type typ =
   match typ with
+  | ValNil -> Nil
   | ValU64(_) -> U64
   | ValU32(_) -> U32
   | ValU16(_) -> U16
@@ -84,7 +85,7 @@ let expr_type typ =
   | ValCastTrunc(typ, _) -> typ
   | ValCastBitwise(typ, _) -> typ
   | BinOp(typ, _, _, _) -> typ
-  | BlockExpr(typ, _) -> typ
+  | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
