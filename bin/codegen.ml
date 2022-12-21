@@ -46,6 +46,51 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
       let llvm_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
       llvm_tuple_t
 
+  | Variant(_, variants) ->
+      let llvm_nonempty_tuple_t_lst = List.filter_map (
+        fun (_, types) ->
+          match types with
+          | [] -> None
+          | _ ->
+            let llvm_t_lst = List.map (berk_t_to_llvm_t llvm_ctxt) types in
+            let llvm_t_arr = Array.of_list llvm_t_lst in
+            let llvm_variant_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+
+            Some(llvm_variant_tuple_t)
+      ) variants in
+
+      let tuple_sizes = List.map (
+        fun llvm_tuple ->
+          let llvm_sizeof = Llvm.size_of llvm_tuple in
+          let var_tuple_sz = begin match (Llvm.int64_of_const llvm_sizeof) with
+            | None -> failwith "Unexpectedly not int64 from LLVM sizeof op"
+            | Some(i) -> Int64.to_int i
+          end in
+
+          var_tuple_sz
+      ) llvm_nonempty_tuple_t_lst in
+
+      let largest = List.fold_left max 0 tuple_sizes in
+      let llvm_variant_t = begin
+        if largest = 0
+        then
+          let llvm_union_tag = Llvm.i8_type llvm_ctxt in
+          let llvm_t_arr = Array.of_list [llvm_union_tag] in
+          let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+
+          llvm_union_t
+        else
+          let llvm_union_tag = Llvm.i8_type llvm_ctxt in
+          let llvm_union_dummy = Llvm.i8_type llvm_ctxt in
+          let llvm_union_vals = Llvm.array_type llvm_union_dummy largest in
+          let llvm_t_arr = Array.of_list [llvm_union_tag; llvm_union_vals] in
+          let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+
+          llvm_union_t
+      end in
+
+      llvm_variant_t
+
   | VarArgSentinel -> failwith "Should not need to determine type for var arg"
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 

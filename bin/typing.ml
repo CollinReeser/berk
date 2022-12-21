@@ -16,6 +16,7 @@ type berk_t =
   | Nil
   | Array of berk_t * int
   | Tuple of berk_t list
+  | Variant of string * (string * berk_t list) list
   | VarArgSentinel
   | Undecided
 
@@ -47,6 +48,15 @@ and fmt_type berk_type =
       let sz_s = Printf.sprintf "%d" sz in
       "[" ^ (fmt_type typ) ^ " x " ^ sz_s ^ "]"
   | Tuple (types) -> "(" ^ (fmt_join_types ", " types) ^ ")"
+  | Variant (type_name, variants) ->
+      let variant_fmts = List.map (
+        fun (var_name, berk_t_list) ->
+          Printf.sprintf "| %s(%s)" var_name (fmt_join_types ", " berk_t_list)
+      ) variants in
+      let variants_fmt = List.fold_left (^) "" variant_fmts in
+
+      Printf.sprintf "variant %s {%s}" type_name variants_fmt
+
   | VarArgSentinel -> "..."
   | Undecided -> "<?undecided?>"
 ;;
