@@ -63,7 +63,7 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
   | ValStr (str) ->
     begin
       let escaped = String.escaped str in
-      Printf.printf "%s%s%s" init_ind escaped typ_s
+      Printf.printf "%s\"%s\"%s" init_ind escaped typ_s
     end
 
   | ValVar (_, id) -> Printf.printf "%s%s%s" init_ind id typ_s
@@ -93,7 +93,7 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
   | BlockExpr (_, stmts, exp) ->
       Printf.printf "%s%s{\n" init_ind typ_s_rev;
       List.iter (print_stmt ~print_typ:print_typ (ind ^ "  ")) stmts;
-      print_expr ~print_typ:print_typ (ind ^ "  ") exp ;
+      print_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") exp ;
       Printf.printf "\n" ;
       Printf.printf "%s}" ind
   | IfThenElseExpr (_, if_cond, then_expr, else_expr) ->
