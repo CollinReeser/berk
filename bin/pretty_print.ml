@@ -105,7 +105,7 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       print_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") else_expr;
       Printf.printf "\n%s}" ind
   | WhileExpr (_, while_cond, then_stmts, finally_expr) ->
-      Printf.printf "%s%sif (" init_ind typ_s_rev;
+      Printf.printf "%s%swhile (" init_ind typ_s_rev;
       print_expr ~print_typ:print_typ "" while_cond;
       Printf.printf ") {\n";
       List.iter (print_stmt ~print_typ:print_typ (ind ^ "  ")) then_stmts;
