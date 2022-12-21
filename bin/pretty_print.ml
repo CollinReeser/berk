@@ -138,6 +138,11 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       print_join_exprs ~print_typ:print_typ ind ", " exprs;
       Printf.printf ")"
 
+  | VariantCtorExpr(_, ctor_name, expr) ->
+      Printf.printf "%s%s(" init_ind ctor_name ;
+      print_expr ~print_typ:print_typ "" expr ;
+      Printf.printf ")"
+
 and print_join_idents_quals delim idents_quals =
   match idents_quals with
   | [] -> ()

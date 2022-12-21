@@ -809,6 +809,9 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       tuple_aggregate
 
+  | VariantCtorExpr(_ (* typ *), _ (* ctor_name *), _ (* exp *)) ->
+      failwith "Unimplemented"
+
 
 let initialize_fpm the_fpm =
   (*

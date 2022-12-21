@@ -441,4 +441,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
 
         TupleExpr(tuple_t, exprs_typechecked)
 
+    | VariantCtorExpr(_, _ (* ctor_name *), _ (* exp *)) ->
+        failwith "Unimplemented"
+
 ;;

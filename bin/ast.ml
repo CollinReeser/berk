@@ -58,6 +58,7 @@ and expr =
   (* int is index, expr is array *)
   | StaticIndexExpr of (berk_t * int * expr)
   | TupleExpr of berk_t * expr list
+  | VariantCtorExpr of berk_t * string * expr
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -96,6 +97,7 @@ let expr_type typ =
   | IndexExpr(typ, _, _) -> typ
   | StaticIndexExpr(typ, _, _) -> typ
   | TupleExpr(typ, _) -> typ
+  | VariantCtorExpr(typ, _, _) -> typ
 ;;
 
 type module_decl =
