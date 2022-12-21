@@ -48,15 +48,10 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
 
   | Variant(_, variants) ->
       let llvm_nonempty_tuple_t_lst = List.filter_map (
-        fun (_, types) ->
-          match types with
-          | [] -> None
-          | _ ->
-            let llvm_t_lst = List.map (berk_t_to_llvm_t llvm_ctxt) types in
-            let llvm_t_arr = Array.of_list llvm_t_lst in
-            let llvm_variant_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
-
-            Some(llvm_variant_tuple_t)
+        fun (_, typ) ->
+          match typ with
+          | Nil -> None
+          | _ -> Some((berk_t_to_llvm_t llvm_ctxt typ))
       ) variants in
 
       let tuple_sizes = List.map (
