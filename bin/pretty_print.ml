@@ -60,7 +60,11 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
 
   | ValBool (value) -> Printf.printf "%s%B%s" init_ind value typ_s
 
-  | ValStr (str)    -> Printf.printf "%s%s%s" init_ind str   typ_s
+  | ValStr (str) ->
+    begin
+      let escaped = String.escaped str in
+      Printf.printf "%s%s%s" init_ind escaped typ_s
+    end
 
   | ValVar (_, id) -> Printf.printf "%s%s%s" init_ind id typ_s
 
