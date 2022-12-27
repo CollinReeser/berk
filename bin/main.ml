@@ -431,7 +431,7 @@ let main = begin
       let collatz_len_func_def = {
         f_decl = {
           f_name = "collatz_len";
-          f_ret_t = U64;
+          f_ret_t = Undecided;
           f_params = ["start", def_var_qual, U64];
         };
         f_stmts = [

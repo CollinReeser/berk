@@ -12,12 +12,14 @@ let default_mod_ctxt = {func_sigs = StrMap.empty}
 type typecheck_context = {
   vars: (berk_t * var_qual) StrMap.t;
   ret_t: berk_t;
+  ret_t_candidates: berk_t list;
   mod_ctxt: module_context;
 }
 
 let default_tc_ctxt typ = {
   vars = StrMap.empty;
   ret_t = typ;
+  ret_t_candidates = [];
   mod_ctxt = default_mod_ctxt;
 }
 
@@ -89,9 +91,21 @@ and type_check_func mod_ctxt func_def =
       mod_ctxt = mod_ctxt
   } in
 
-  let (_, f_stmts_typechecked) = type_check_stmts tc_ctxt_init f_stmts in
+  let (tc_ctxt_final, f_stmts_typechecked) =
+    type_check_stmts tc_ctxt_init f_stmts
+  in
 
-  {func_def with f_stmts = f_stmts_typechecked}
+  (* If the function declaration did not specify a return type, then we try to
+  resolve that return type here. *)
+  let resolved_ret_t = begin match f_ret_t with
+    | Undecided -> common_type_of_lst tc_ctxt_final.ret_t_candidates
+    | _ -> f_ret_t
+  end in
+
+  {
+    f_stmts = f_stmts_typechecked;
+    f_decl = {func_def.f_decl with f_ret_t = resolved_ret_t};
+  }
 
 and update_vars_with_idents_quals vars_init idents_quals types =
   let idents_quals_types = List.combine idents_quals types in
@@ -215,9 +229,20 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
   | ReturnStmt(exp) ->
       let exp_typechecked = type_check_expr tc_ctxt exp in
       let exp_t = expr_type exp_typechecked in
-      if type_convertible_to exp_t tc_ctxt.ret_t
-        then (tc_ctxt, ReturnStmt(exp_typechecked))
-        else failwith "Expr for return does not typecheck with func ret_t"
+      let ret_tuple = begin match tc_ctxt.ret_t with
+        | Undecided ->
+            let ret_t_candidates_up = exp_t :: tc_ctxt.ret_t_candidates in
+            let tc_ctxt_up = {
+              tc_ctxt with ret_t_candidates = ret_t_candidates_up
+            } in
+            (tc_ctxt_up, ReturnStmt(exp_typechecked))
+        | _ ->
+            if type_convertible_to exp_t tc_ctxt.ret_t
+              then (tc_ctxt, ReturnStmt(exp_typechecked))
+              else failwith "Expr for return does not typecheck with func ret_t"
+      end in
+
+      ret_tuple
 
 and type_check_stmts tc_ctxt stmts =
   match stmts with

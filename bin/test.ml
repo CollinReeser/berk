@@ -55,7 +55,10 @@ let build_example_ast : func_def_t =
 
 let test_typecheck ?(
   tc_ctxt : typecheck_context = {
-    vars = StrMap.empty; ret_t = Undecided; mod_ctxt = default_mod_ctxt
+    vars = StrMap.empty;
+    ret_t = Undecided;
+    ret_t_candidates = [];
+    mod_ctxt = default_mod_ctxt
   }
 ) ast =
   Printf.printf "Expression [";
