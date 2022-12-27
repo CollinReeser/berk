@@ -127,6 +127,11 @@ and type_check_mod_decl mod_ctxt mod_decl =
   match mod_decl with
   | FuncExternDecl(f_decl_ast) ->
       let {f_name; f_params; f_ret_t;} = f_decl_ast in
+      let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
+        | None -> ()
+        | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
+      in
+
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
       else
@@ -139,6 +144,11 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
   | FuncDef(f_ast) ->
       let {f_decl = {f_name; f_params; f_ret_t;}; _} = f_ast in
+      let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
+        | None -> ()
+        | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
+      in
+
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
       else
