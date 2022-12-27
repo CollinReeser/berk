@@ -164,6 +164,10 @@ let rec type_convertible_to from_t to_t =
           List.fold_left (==) true agreements
         end
 
+  | Array(lhs_elem_typ, lhs_sz), Array(rhs_elem_typ, rhs_sz) ->
+      lhs_sz = rhs_sz &&
+      type_convertible_to lhs_elem_typ rhs_elem_typ
+
   | Variant(lhs_v_name, lhs_ctors), Variant(rhs_v_name, rhs_ctors) ->
       if lhs_v_name = rhs_v_name
       then
