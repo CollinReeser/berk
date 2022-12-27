@@ -223,6 +223,8 @@ and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
   | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
 
+  | VariantDecl(_) -> failwith "Unimplemented"
+
 
 and codegen_func_decl
   llvm_ctxt the_mod mod_ctxt {f_name; f_params; f_ret_t}

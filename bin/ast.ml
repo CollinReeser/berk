@@ -103,6 +103,14 @@ let expr_type typ =
 type module_decl =
   | FuncExternDecl of func_decl_t
   | FuncDef of func_def_t
+  | VariantDecl of variant_decl_t
+
+and v_ctor = (string * berk_t)
+
+and variant_decl_t = {
+  v_name: string;
+  v_ctors: v_ctor list;
+}
 
 and f_param = (ident_t * var_qual * berk_t)
 

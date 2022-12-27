@@ -808,6 +808,8 @@ let main = begin
             print_func_ast f_ast_typechecked ;
             print_func_ast ~print_typ:true f_ast_typechecked ;
           end
+
+          | VariantDecl(_) -> failwith "Unimplemented"
       ) mod_decls_typechecked in
 
       Printf.printf "%!";

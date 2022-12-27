@@ -164,6 +164,23 @@ let rec type_convertible_to from_t to_t =
           List.fold_left (==) true agreements
         end
 
+  | Variant(lhs_v_name, lhs_ctors), Variant(rhs_v_name, rhs_ctors) ->
+      if lhs_v_name = rhs_v_name
+      then
+        if List.length lhs_ctors = List.length rhs_ctors
+        then
+          let agreements =
+            List.map2 (
+              fun (lhs_name, lhs_typ) (rhs_name, rhs_typ) ->
+                if lhs_name = rhs_name
+                then type_convertible_to lhs_typ rhs_typ
+                else false
+            ) lhs_ctors rhs_ctors
+          in
+          List.fold_left (==) true agreements
+        else false
+      else false
+
   | _ ->
       let from_t_s = fmt_type from_t in
       let to_t_s = fmt_type to_t in

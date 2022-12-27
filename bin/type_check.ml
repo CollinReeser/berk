@@ -5,9 +5,13 @@ module StrMap = Map.Make(String)
 
 type module_context = {
   func_sigs: func_decl_t StrMap.t;
+  variants: variant_decl_t StrMap.t;
 }
 
-let default_mod_ctxt = {func_sigs = StrMap.empty}
+let default_mod_ctxt = {
+  func_sigs = StrMap.empty;
+  variants = StrMap.empty;
+}
 
 type typecheck_context = {
   vars: (berk_t * var_qual) StrMap.t;
@@ -30,6 +34,69 @@ let populate_ctxt_with_params f_params base_vars =
   let added_vars = List.fold_left add_param base_vars f_params in
   added_vars
 
+let variant_decl_to_variant_type {v_name; v_ctors} =
+  Variant(v_name, v_ctors)
+
+(* Try to yield the top-level variant type for the given constructor name and
+associated list of types. If the constructor and its associated types
+unambiguously match a particular variant, that variant type is returned. If
+there are no matching variants, this function will fail. If no other mechanism
+of disambiguation is provided and there are multiple matching variants, this
+function will fail.
+
+Optionally, a disambiguator string can be provided to assist in disambiguating
+between multiple matching variants. If a disambiguator is provided, and the
+constructor matches a particular variant, and the disambiguator eliminates that
+variant as an option, then this function will fail.
+*)
+let variant_ctor_to_variant_type
+  ?(disambiguator = "") mod_ctxt ctor_name typ
+=
+  (* Given a variant declaration, return whether that variant contains the
+  target constructor (via constructor name and associated type) *)
+  let has_ctor {v_ctors; _} =
+    let matching_ctor = List.find_opt (
+        fun (candidate_name, candidate_typ) ->
+          ctor_name = candidate_name &&
+          type_convertible_to typ candidate_typ
+      ) v_ctors
+    in
+    begin match matching_ctor with
+      | None -> false
+      | Some(_) -> true
+    end
+  in
+
+  let variants = mod_ctxt.variants in
+
+  let matching_variants =
+    StrMap.filter (
+      fun variant_name v_decl_t ->
+        if disambiguator = ""
+        then has_ctor v_decl_t
+        else variant_name = disambiguator && has_ctor v_decl_t
+    ) variants
+  in
+
+  let variant_typ =
+    if StrMap.cardinal matching_variants = 1
+    then
+      (* Take the one variant-name -> variant-decl binding there is. *)
+      let (_, matching_variant_t) = StrMap.choose matching_variants in
+
+      variant_decl_to_variant_type matching_variant_t
+    else
+      if StrMap.cardinal matching_variants = 0
+      then failwith "No matching variants"
+      else failwith (
+        "Disambiguator " ^ disambiguator ^
+        " yielded multiple matching variants"
+      )
+  in
+
+  variant_typ
+
+
 let rec type_check_mod_decls mod_decls =
   let mod_ctxt = default_mod_ctxt in
 
@@ -45,6 +112,7 @@ let rec type_check_mod_decls mod_decls =
 
   mod_decls_typechecked
 
+(* Handle module-level declarations, ie, function decls/defs, type decls, etc *)
 and type_check_mod_decl mod_ctxt mod_decl =
   (* Make sure that var-arg parameter declarations are only at the end of the
   function signature, if they exist at all. *)
@@ -65,7 +133,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
         let func_sigs_up = begin
           StrMap.add f_name {f_name; f_params; f_ret_t} mod_ctxt.func_sigs
         end in
-        let mod_ctxt_up = {func_sigs = func_sigs_up} in
+        let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
 
         (mod_ctxt_up, FuncExternDecl(f_decl_ast))
 
@@ -77,10 +145,21 @@ and type_check_mod_decl mod_ctxt mod_decl =
         let func_sigs_up = begin
           StrMap.add f_name {f_name; f_params; f_ret_t} mod_ctxt.func_sigs
         end in
-        let mod_ctxt_up = {func_sigs = func_sigs_up} in
+        let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
         let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
 
         (mod_ctxt_up, FuncDef(func_ast_typechecked))
+
+  | VariantDecl({v_name; v_ctors} as v_decl_ast) ->
+      let _ = match (StrMap.find_opt v_name mod_ctxt.variants) with
+        | None -> ()
+        | Some(_) -> failwith ("Multiple declarations of variant " ^ v_name)
+      in
+
+      let variants_up = StrMap.add v_name {v_name; v_ctors} mod_ctxt.variants in
+      let mod_ctxt_up = {mod_ctxt with variants = variants_up} in
+
+      (mod_ctxt_up, VariantDecl(v_decl_ast))
 
 (* Given a module-typechecking context and a function-definition AST, typecheck
 the function definition and return its typechecked form. *)
