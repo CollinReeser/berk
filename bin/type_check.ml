@@ -4,7 +4,7 @@ open Ast
 module StrMap = Map.Make(String)
 
 type module_context = {
-  func_sigs: (berk_t * (ident_t * var_qual * berk_t) list) StrMap.t;
+  func_sigs: func_decl_t StrMap.t;
 }
 
 let default_mod_ctxt = {func_sigs = StrMap.empty}
@@ -46,6 +46,8 @@ let rec type_check_mod_decls mod_decls =
   mod_decls_typechecked
 
 and type_check_mod_decl mod_ctxt mod_decl =
+  (* Make sure that var-arg parameter declarations are only at the end of the
+  function signature, if they exist at all. *)
   let rec confirm_at_most_trailing_var_arg f_params =
     begin match f_params with
     | [] -> true
@@ -61,7 +63,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
       then failwith "Only zero-or-one trailing var-args permitted"
       else
         let func_sigs_up = begin
-          StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
+          StrMap.add f_name {f_name; f_params; f_ret_t} mod_ctxt.func_sigs
         end in
         let mod_ctxt_up = {func_sigs = func_sigs_up} in
 
@@ -73,13 +75,15 @@ and type_check_mod_decl mod_ctxt mod_decl =
       then failwith "Only zero-or-one trailing var-args permitted"
       else
         let func_sigs_up = begin
-          StrMap.add f_name (f_ret_t, f_params) mod_ctxt.func_sigs
+          StrMap.add f_name {f_name; f_params; f_ret_t} mod_ctxt.func_sigs
         end in
         let mod_ctxt_up = {func_sigs = func_sigs_up} in
         let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
 
         (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
+(* Given a module-typechecking context and a function-definition AST, typecheck
+the function definition and return its typechecked form. *)
 and type_check_func mod_ctxt func_def =
   let {f_decl = {f_params; f_ret_t; _;}; f_stmts;} = func_def in
   let tc_ctxt_base = default_tc_ctxt f_ret_t in
@@ -362,8 +366,10 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
       )
 
     | FuncCall(_, f_name, exprs) ->
-        let (ret_t, params) = StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs in
-        let (params_non_variadic, is_var_arg) = get_static_f_params params in
+        let {f_name; f_params; f_ret_t} =
+          StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs
+        in
+        let (params_non_variadic, is_var_arg) = get_static_f_params f_params in
 
         let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
         let exprs_t = List.map expr_type exprs_typechecked in
@@ -404,7 +410,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
             else failwith "Could not convert expr type to arg type"
         ) exprs_t_non_variadic params_non_variadic in
 
-        FuncCall(ret_t, f_name, exprs_typechecked)
+        FuncCall(f_ret_t, f_name, exprs_typechecked)
 
     | ArrayExpr(_, exprs) ->
         let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
