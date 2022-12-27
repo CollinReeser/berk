@@ -14,8 +14,8 @@ type berk_t =
   | Bool
   | String
   | Nil
-  | Array of berk_t * int
   | Tuple of berk_t list
+  | Array of berk_t * int
   | Variant of string * (string * berk_t) list
   | VarArgSentinel
   | Undecided
