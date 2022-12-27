@@ -561,7 +561,13 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
 
         TupleExpr(tuple_t, exprs_typechecked)
 
-    | VariantCtorExpr(_, _ (* ctor_name *), _ (* exp *)) ->
-        failwith "Unimplemented"
+    | VariantCtorExpr(_, ctor_name, ctor_exp) ->
+        let ctor_exp_typechecked = type_check_expr tc_ctxt ctor_exp in
+        let ctor_exp_typ = expr_type ctor_exp_typechecked in
+        let variant_t =
+          variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
+        in
+
+        VariantCtorExpr(variant_t, ctor_name, ctor_exp_typechecked)
 
 ;;
