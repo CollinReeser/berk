@@ -157,7 +157,7 @@ let rec type_convertible_to from_t to_t =
   | (Nil, Nil) -> true
 
   | (Tuple(lhs_types), Tuple(rhs_types)) ->
-      if (List.length lhs_types) != (List.length rhs_types)
+      if (List.length lhs_types) <> (List.length rhs_types)
         then false
         else begin
           let agreements = List.map2 type_convertible_to lhs_types rhs_types in
