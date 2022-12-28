@@ -775,6 +775,46 @@ let main = begin
       } in
 
       let mod_decls = [
+        VariantDecl(
+          {
+            v_name = "LeftOrRight";
+            v_ctors = [
+              ("Left", Nil);
+              ("Right", Nil);
+            ];
+            v_typ_vars = [];
+          }
+        );
+        VariantDecl(
+          {
+            v_name = "BooleanResult";
+            v_ctors = [
+              ("Ok", Bool);
+              ("Err", String);
+            ];
+            v_typ_vars = [];
+          }
+        );
+        VariantDecl(
+          {
+            v_name = "PointOrNothing";
+            v_ctors = [
+              ("Point", Tuple([F64; F64; F64]));
+              ("Nothing", Nil);
+            ];
+            v_typ_vars = [];
+          }
+        );
+        VariantDecl(
+          {
+            v_name = "Option";
+            v_ctors = [
+              ("None", Nil);
+              ("Some", Unbound("`a"));
+            ];
+            v_typ_vars = ["`a"];
+          }
+        );
         FuncExternDecl(
           {
             f_name = "printf";
@@ -809,7 +849,10 @@ let main = begin
             print_func_ast ~print_typ:true f_ast_typechecked ;
           end
 
-          | VariantDecl(_) -> failwith "Unimplemented"
+          | VariantDecl(v_ast_typechecked) ->
+            begin
+              print_variant_decl ~pretty_unbound:true v_ast_typechecked ;
+            end
       ) mod_decls_typechecked in
 
       Printf.printf "%!";

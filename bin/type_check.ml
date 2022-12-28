@@ -34,8 +34,22 @@ let populate_ctxt_with_params f_params base_vars =
   let added_vars = List.fold_left add_param base_vars f_params in
   added_vars
 
-let variant_decl_to_variant_type {v_name; v_ctors} =
-  Variant(v_name, v_ctors)
+(* Given a variant declaration that may contain some arbitrary number of unbound
+types, a variant constructor name that exists in the given variant declaration,
+and the corresponding value type of the constructor, yield an
+as-concrete-as-possible Variant type. *)
+let variant_decl_to_variant_type {v_name; v_ctors; _} ctor_name typ =
+  let (_, ctor_typ) = List.find (fun (name, _) -> name = ctor_name) v_ctors in
+
+  let tvars_to_types = map_tvars_to_types ctor_typ typ in
+  let init_variant_t = Variant(v_name, v_ctors) in
+
+  let variant_t_concretified =
+    concretify_unbound_types tvars_to_types init_variant_t
+  in
+
+  variant_t_concretified
+;;
 
 (* Try to yield the top-level variant type for the given constructor name and
 associated list of types. If the constructor and its associated types
@@ -49,9 +63,7 @@ between multiple matching variants. If a disambiguator is provided, and the
 constructor matches a particular variant, and the disambiguator eliminates that
 variant as an option, then this function will fail.
 *)
-let variant_ctor_to_variant_type
-  ?(disambiguator = "") mod_ctxt ctor_name typ
-=
+let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor_name typ =
   (* Given a variant declaration, return whether that variant contains the
   target constructor (via constructor name and associated type) *)
   let has_ctor {v_ctors; _} =
@@ -78,23 +90,23 @@ let variant_ctor_to_variant_type
     ) variants
   in
 
-  let variant_typ =
-    if StrMap.cardinal matching_variants = 1
-    then
-      (* Take the one variant-name -> variant-decl binding there is. *)
-      let (_, matching_variant_t) = StrMap.choose matching_variants in
+  let _ =
+    if StrMap.cardinal matching_variants = 0
+    then failwith "No matching variants"
+    else failwith (
+      "Disambiguator " ^ disambiguator ^
+      " yielded multiple matching variants"
+    )
+  in
 
-      variant_decl_to_variant_type matching_variant_t
-    else
-      if StrMap.cardinal matching_variants = 0
-      then failwith "No matching variants"
-      else failwith (
-        "Disambiguator " ^ disambiguator ^
-        " yielded multiple matching variants"
-      )
+  (* Take the one variant-name -> variant-decl binding there is. *)
+  let (_, matching_variant_t) = StrMap.choose matching_variants in
+  let variant_typ =
+    variant_decl_to_variant_type matching_variant_t ctor_name typ
   in
 
   variant_typ
+;;
 
 
 let rec type_check_mod_decls mod_decls =
@@ -160,13 +172,24 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
         (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
-  | VariantDecl({v_name; v_ctors} as v_decl_ast) ->
+  | VariantDecl({v_name; v_ctors; v_typ_vars} as v_decl_ast) ->
       let _ = match (StrMap.find_opt v_name mod_ctxt.variants) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of variant " ^ v_name)
       in
 
-      let variants_up = StrMap.add v_name {v_name; v_ctors} mod_ctxt.variants in
+      let var_t = Variant(v_name, v_ctors) in
+      let real_tvars = get_tvars var_t in
+      let declared_tvars = List.sort compare v_typ_vars in
+      let _ =
+        if List.equal (=) real_tvars declared_tvars
+        then ()
+        else failwith (
+            "Actual type vars don't match declared in variant " ^ v_name
+          )
+      in
+
+      let variants_up = StrMap.add v_name v_decl_ast mod_ctxt.variants in
       let mod_ctxt_up = {mod_ctxt with variants = variants_up} in
 
       (mod_ctxt_up, VariantDecl(v_decl_ast))
@@ -564,7 +587,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
     | VariantCtorExpr(_, ctor_name, ctor_exp) ->
         let ctor_exp_typechecked = type_check_expr tc_ctxt ctor_exp in
         let ctor_exp_typ = expr_type ctor_exp_typechecked in
-        let variant_t =
+        let variant_t : berk_t =
           variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
         in
 

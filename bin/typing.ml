@@ -17,7 +17,11 @@ type berk_t =
   | Tuple of berk_t list
   | Array of berk_t * int
   | Variant of string * (string * berk_t) list
+      (*
+        Variant("Option", [("Some", Unbound("`a")); (None, Nil)])
+      *)
   | VarArgSentinel
+  | Unbound of string
   | Undecided
 
 let rec fmt_join_types delim types =
@@ -28,7 +32,7 @@ let rec fmt_join_types delim types =
       let lhs = fmt_type x in
       lhs ^ delim ^ (fmt_join_types delim xs)
 
-and fmt_type berk_type =
+and fmt_type ?(pretty_unbound=false) berk_type =
   match berk_type with
   | U64 -> "u64"
   | U32 -> "u32"
@@ -58,6 +62,10 @@ and fmt_type berk_type =
       Printf.sprintf "variant %s {%s}" type_name variants_fmt
 
   | VarArgSentinel -> "..."
+  | Unbound (type_var) ->
+      if pretty_unbound
+      then type_var
+      else "<?unbound:" ^ type_var ^ "?>"
   | Undecided -> "<?undecided?>"
 ;;
 
@@ -123,6 +131,8 @@ and common_type_of_lst lst =
 
 let rec type_convertible_to from_t to_t =
   match (from_t, to_t) with
+  | (_, Unbound(_)) -> true
+
   | (I64, I64)
   | (I32, I64)
   | (I16, I64)
@@ -299,4 +309,123 @@ let is_indexable_type arr_t =
       let not_arr_s = fmt_type arr_t in
       Printf.printf "Type [%s] is not indexable indexable\n" not_arr_s;
       false
+;;
+
+module StrMap = Map.Make(String)
+
+(* Make concrete the given type, to the extent possible, via the mappings in the
+given string-type-variable-to-type mapping. *)
+let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
+  match typ with
+  | U64  | U32 | U16 | U8
+  | I64  | I32 | I16 | I8
+  | F128 | F64 | F32
+  | Bool
+  | String
+  | Nil
+  | VarArgSentinel
+  | Undecided -> typ
+
+  | Unbound(tvar) ->
+    begin match (StrMap.find_opt tvar tvar_to_t) with
+      | None -> Unbound(tvar)
+      | Some(t) -> t
+    end
+  | Tuple(tuple_typs) ->
+      let typs_concretified =
+        List.map (concretify_unbound_types tvar_to_t) tuple_typs
+      in
+      Tuple(typs_concretified)
+  | Array(arr_typ, sz) ->
+      let arr_typ_concretified = concretify_unbound_types tvar_to_t arr_typ in
+      Array(arr_typ_concretified, sz)
+  | Variant(v_name, v_ctors) ->
+      let v_ctors_concretified =
+        List.map (
+          fun (ctor_name, ctor_typ) ->
+            let ctor_typ_concretified =
+              concretify_unbound_types tvar_to_t ctor_typ
+            in
+            (ctor_name, ctor_typ_concretified)
+        ) v_ctors
+      in
+
+      Variant(v_name, v_ctors_concretified)
+;;
+
+(* Given an assumed less-concrete type containing some count of unbound
+type-variables, an assumed more-concrete type, return a mapping from the
+string-type-variables to their corresponding concrete types.
+
+Fails if the given types are not structurally identical. *)
+let map_tvars_to_types templated_typ concrete_typ =
+  let rec _map_tvars_to_types map_so_far templated_typ concrete_typ =
+    match templated_typ, concrete_typ with
+    | (U64, U64)   | (U32, U32) | (U16, U16) | (U8, U8)
+    | (I64, I64)   | (I32, I32) | (I16, I16) | (I8, I8)
+    | (F128, F128) | (F64, F64) | (F32, F32)
+    | (Bool, Bool)
+    | (String, String)
+    | (Nil, Nil)
+    | (VarArgSentinel, VarArgSentinel)
+    | (Undecided, Undecided) -> map_so_far
+
+    | (Unbound(tvar), concrete) ->
+        begin match (StrMap.find_opt tvar map_so_far) with
+          | None -> StrMap.add tvar concrete map_so_far
+          | Some(already_concrete) ->
+              if concrete = already_concrete
+              then map_so_far
+              else failwith ("Cannot map multiple types to type var " ^ tvar)
+        end
+
+    | (Tuple(lhs_typs), Tuple(rhs_typs)) ->
+        List.fold_left2 _map_tvars_to_types map_so_far lhs_typs rhs_typs
+
+    | (Array(lhs_typ, _), Array(rhs_typ, _)) ->
+        _map_tvars_to_types map_so_far lhs_typ rhs_typ
+
+    | (Variant(_, lhs_ctors), Variant(_, rhs_ctors)) ->
+        List.fold_left2 (
+          fun so_far (_, lhs_typ) (_, rhs_typ) ->
+            _map_tvars_to_types so_far lhs_typ rhs_typ
+        ) map_so_far lhs_ctors rhs_ctors
+
+    | _ -> failwith "Called with non-structurally-identical types"
+
+  in
+  _map_tvars_to_types StrMap.empty templated_typ concrete_typ
+;;
+
+(* Given a type, return a list of all of the string type variables. *)
+let get_tvars typ =
+  let rec _get_tvars so_far typ =
+    match typ with
+    | Unbound(tvar) -> tvar :: so_far
+
+    | U64  | U32 | U16 | U8
+    | I64  | I32 | I16 | I8
+    | F128 | F64 | F32
+    | Bool
+    | String
+    | Nil
+    | VarArgSentinel
+    | Undecided -> so_far
+
+    | Tuple(tuple_typs) ->
+        List.fold_left _get_tvars so_far tuple_typs
+
+    | Array(typ, _) ->
+        _get_tvars so_far typ
+
+    | Variant(_, ctors) ->
+        List.fold_left (
+          fun so_far (_, typ) ->
+            _get_tvars so_far typ
+        ) so_far ctors
+  in
+
+  let tvars = _get_tvars [] typ in
+
+  List.sort_uniq compare tvars
 ;;

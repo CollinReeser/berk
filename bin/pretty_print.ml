@@ -155,13 +155,13 @@ and print_join_idents_quals delim idents_quals =
       Printf.printf "%s%s%s" (fmt_var_qual qual) ident delim;
       print_join_idents_quals delim xs
 
-and print_join_idents delim idents =
+and print_join_strs delim idents =
   match idents with
   | [] -> ()
   | [ident] -> Printf.printf "%s" ident
   | ident::xs ->
       Printf.printf "%s%s" ident delim;
-      print_join_idents delim xs
+      print_join_strs delim xs
 
 and print_stmt ?(print_typ = false) ind stmt =
   match stmt with
@@ -192,7 +192,7 @@ and print_stmt ?(print_typ = false) ind stmt =
       Printf.printf ";\n"
   | AssignDeconStmt (idents, ex) ->
       Printf.printf "%s(" ind;
-      print_join_idents ", " idents;
+      print_join_strs ", " idents;
       Printf.printf ")";
       Printf.printf " = ";
       print_expr ~print_typ:print_typ ind ex;
@@ -247,4 +247,33 @@ let print_func_ast ?(print_typ = false) {f_decl; f_stmts;} =
   Printf.printf " {\n" ;
   List.iter (print_stmt ~print_typ:print_typ "  ") f_stmts ;
   Printf.printf "}\n"
+;;
+
+
+let print_variant_ctor ?(pretty_unbound=false) (ctor_name, ctor_typ) =
+  let fmt_typ = begin
+    match ctor_typ with
+    | Nil -> ""
+    | _ ->
+        let typ_formatted = fmt_type ~pretty_unbound:pretty_unbound ctor_typ in
+        Printf.sprintf " of %s" typ_formatted
+  end in
+
+  Printf.printf "  | %s%s\n" ctor_name fmt_typ
+;;
+
+let print_variant_decl ?(pretty_unbound=false) {v_name; v_ctors; v_typ_vars} =
+  Printf.printf "%s " v_name ;
+  let _ = begin
+    match v_typ_vars with
+      | [] -> ()
+      | xs ->
+          Printf.printf "<" ;
+          print_join_strs ", " xs ;
+          Printf.printf "> " ;
+  end in
+
+  Printf.printf "{\n" ;
+  List.iter (print_variant_ctor ~pretty_unbound:pretty_unbound) v_ctors ;
+  Printf.printf "}\n" ;
 ;;

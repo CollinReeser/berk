@@ -58,6 +58,7 @@ and expr =
   (* int is index, expr is array *)
   | StaticIndexExpr of (berk_t * int * expr)
   | TupleExpr of berk_t * expr list
+  (* Top-level variant type, ctor name, ctor expr,  *)
   | VariantCtorExpr of berk_t * string * expr
 
 and stmt =
@@ -110,6 +111,7 @@ and v_ctor = (string * berk_t)
 and variant_decl_t = {
   v_name: string;
   v_ctors: v_ctor list;
+  v_typ_vars: string list;
 }
 
 and f_param = (ident_t * var_qual * berk_t)

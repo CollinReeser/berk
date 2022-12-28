@@ -51,7 +51,7 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
         fun (_, typ) ->
           match typ with
           | Nil -> None
-          | _ -> Some((berk_t_to_llvm_t llvm_ctxt typ))
+          | _ -> Some(berk_t_to_llvm_t llvm_ctxt typ)
       ) variants in
 
       let tuple_sizes = List.map (
@@ -87,6 +87,11 @@ let rec berk_t_to_llvm_t llvm_ctxt typ =
       llvm_variant_t
 
   | VarArgSentinel -> failwith "Should not need to determine type for var arg"
+  | Unbound(template) ->
+      failwith (
+        "Cannot determine llvm type for unbound type template " ^
+        template
+      )
   | Undecided -> failwith "Cannot determine llvm type for undecided type"
 
 
@@ -223,7 +228,7 @@ and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
   | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
 
-  | VariantDecl(_) -> failwith "Unimplemented"
+  | VariantDecl(_) -> Printf.printf "Variant codegen unimplemented\n"; mod_ctxt
 
 
 and codegen_func_decl
