@@ -468,7 +468,7 @@ and type_check_stmts tc_ctxt stmts =
       (tc_ctxt_final, stmt_tced :: stmts_tced)
 
 and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
-  let _type_check_expr exp =
+  let rec _type_check_expr exp =
     begin match exp with
     | ValNil -> ValNil
 
@@ -495,14 +495,14 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         ValVar(var_t, id)
 
     | ValCastTrunc(target_t, exp) ->
-        let exp_typechecked = type_check_expr tc_ctxt exp in
+        let exp_typechecked = _type_check_expr exp in
         let exp_t = expr_type exp_typechecked in
         if type_truncatable_to exp_t target_t
           then ValCastTrunc(target_t, exp_typechecked)
           else failwith "Cannot truncate-cast incompatible types"
 
     | ValCastBitwise(target_t, exp) ->
-        let exp_typechecked = type_check_expr tc_ctxt exp in
+        let exp_typechecked = _type_check_expr exp in
         let exp_t = expr_type exp_typechecked in
         if type_bitwise_to exp_t target_t
           then ValCastBitwise(target_t, exp_typechecked)
@@ -511,16 +511,16 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
     | BinOp(_, op, lhs, rhs) ->
         begin match op with
         | Add | Sub | Mul | Div | Mod ->
-            let lhs_typechecked = type_check_expr tc_ctxt lhs in
-            let rhs_typechecked = type_check_expr tc_ctxt rhs in
+            let lhs_typechecked = _type_check_expr lhs in
+            let rhs_typechecked = _type_check_expr rhs in
             let lhs_t = expr_type lhs_typechecked in
             let rhs_t = expr_type rhs_typechecked in
             let common_t = common_type_of_lr lhs_t rhs_t in
             BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
 
         | Eq | NotEq | Less | LessEq | Greater | GreaterEq ->
-            let lhs_typechecked = type_check_expr tc_ctxt lhs in
-            let rhs_typechecked = type_check_expr tc_ctxt rhs in
+            let lhs_typechecked = _type_check_expr lhs in
+            let rhs_typechecked = _type_check_expr rhs in
             BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
         end
 
@@ -533,13 +533,13 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         BlockExpr(expr_t, stmts_typechecked, expr_typechecked)
 
     | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
-        let if_cond_typechecked = type_check_expr tc_ctxt if_cond in
+        let if_cond_typechecked = _type_check_expr if_cond in
         let if_cond_t = expr_type if_cond_typechecked in
 
-        let then_expr_typechecked = type_check_expr tc_ctxt then_expr in
+        let then_expr_typechecked = _type_check_expr then_expr in
         let then_expr_t = expr_type then_expr_typechecked in
 
-        let else_expr_typechecked = type_check_expr tc_ctxt else_expr in
+        let else_expr_typechecked = _type_check_expr else_expr in
         let else_expr_t = expr_type else_expr_typechecked in
 
         let _ = match if_cond_t with
@@ -557,12 +557,12 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         )
 
     | WhileExpr(_, while_cond, then_stmts, finally_expr) ->
-        let while_cond_typechecked = type_check_expr tc_ctxt while_cond in
+        let while_cond_typechecked = _type_check_expr while_cond in
         let while_cond_t = expr_type while_cond_typechecked in
 
         let (_, then_stmts_typechecked) = type_check_stmts tc_ctxt then_stmts in
 
-        let finally_expr_typechecked = type_check_expr tc_ctxt finally_expr in
+        let finally_expr_typechecked = _type_check_expr finally_expr in
         let finally_expr_t = expr_type finally_expr_typechecked in
 
         let _ = match while_cond_t with
@@ -583,7 +583,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         in
         let (params_non_variadic, is_var_arg) = get_static_f_params f_params in
 
-        let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
+        let exprs_typechecked = List.map _type_check_expr exprs in
         let exprs_t = List.map expr_type exprs_typechecked in
 
         let cmp_non_variadic_params_to_exprs =
@@ -625,7 +625,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         FuncCall(f_ret_t, f_name, exprs_typechecked)
 
     | ArrayExpr(_, exprs) ->
-        let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
+        let exprs_typechecked = List.map _type_check_expr exprs in
         let expr_t_lst = List.map expr_type exprs_typechecked in
         let common_t = common_type_of_lst expr_t_lst in
         let arr_t = Array(common_t, List.length exprs) in
@@ -633,8 +633,8 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         ArrayExpr(arr_t, exprs_typechecked)
 
     | IndexExpr(_, idx, arr) ->
-        let idx_typechecked = type_check_expr tc_ctxt idx in
-        let arr_typechecked = type_check_expr tc_ctxt arr in
+        let idx_typechecked = _type_check_expr idx in
+        let arr_typechecked = _type_check_expr arr in
         let idx_t = expr_type idx_typechecked in
         let arr_t = expr_type arr_typechecked in
         if is_index_type idx_t && is_indexable_type arr_t
@@ -662,7 +662,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
           else failwith "Unexpected components of index operation"
 
     | StaticIndexExpr(_, idx, arr) ->
-        let arr_typechecked = type_check_expr tc_ctxt arr in
+        let arr_typechecked = _type_check_expr arr in
         let arr_t = expr_type arr_typechecked in
         let static_idx_typechecked = begin
           match arr_t with
@@ -678,14 +678,14 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         static_idx_typechecked
 
     | TupleExpr(_, exprs) ->
-        let exprs_typechecked = List.map (type_check_expr tc_ctxt) exprs in
+        let exprs_typechecked = List.map _type_check_expr exprs in
         let exprs_t_lst = List.map expr_type exprs_typechecked in
         let tuple_t = Tuple(exprs_t_lst) in
 
         TupleExpr(tuple_t, exprs_typechecked)
 
     | VariantCtorExpr(expected_v_t, ctor_name, ctor_exp) ->
-        let ctor_exp_typechecked = type_check_expr tc_ctxt ctor_exp in
+        let ctor_exp_typechecked = _type_check_expr ctor_exp in
         let ctor_exp_typ = expr_type ctor_exp_typechecked in
         let resolved_v_t : berk_t =
           variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
