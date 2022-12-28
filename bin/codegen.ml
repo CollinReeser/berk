@@ -278,7 +278,9 @@ and codegen_mod_decl llvm_ctxt the_fpm builder mod_ctxt mod_decl =
   | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_fpm builder mod_ctxt f_ast
 
-  | VariantDecl(_) -> Printf.printf "Variant codegen unimplemented\n"; mod_ctxt
+  | VariantDecl(_) ->
+      (* There is nothing to do for explicit codegen for variant decls. *)
+      mod_ctxt
 
 
 and codegen_func_decl mod_ctxt {f_name; f_params; f_ret_t} =

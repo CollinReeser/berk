@@ -339,7 +339,19 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       | _ ->
         if type_convertible_to exp_t decl_t
         then decl_t
-        else failwith "Explicitly declared type disagrees with expr"
+        else
+          begin
+            Printf.printf (
+                "Explicitly declared type [[ %s ]] " ^^
+                "disagrees with deduced type [[ %s ]] "
+              )
+              (fmt_type decl_t)
+              (fmt_type exp_t) ;
+            Printf.printf "over expression [[ " ;
+            print_expr ~print_typ:true "" exp_typechecked ;
+            Printf.printf " ]]\n%!" ;
+            failwith "Explicitly declared type disagrees with expr"
+          end
       in
 
       let vars_up = StrMap.add ident (resolved_t, qual) tc_ctxt.vars in

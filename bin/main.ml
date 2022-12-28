@@ -791,9 +791,23 @@ let main = begin
             VariantCtorExpr(Undecided, "None", ValNil)
           );
           DeclStmt(
-            "dummy_integral_none", def_var_qual,
+            "dummy_float_none", def_var_qual,
             Variant("Option", [("Some", F128); ("None", Nil)]),
             VariantCtorExpr(Undecided, "None", ValNil)
+          );
+          DeclStmt(
+            "dummy_float_some", def_var_qual,
+            Variant("Option", [("Some", F128); ("None", Nil)]),
+            VariantCtorExpr(Undecided, "Some", ValF128("1234.56789"))
+          );
+          DeclStmt(
+            "dummy_trilean_zilch", def_var_qual,
+            Variant(
+              "Trilean", [
+                ("Left", U64); ("Right", I16); ("Ziltch", Nil)
+              ]
+            ),
+            VariantCtorExpr(Undecided, "Right", ValI16(2222))
           );
           ReturnStmt(
             VariantCtorExpr(Undecided, "Some", ValBool(true))
@@ -840,6 +854,17 @@ let main = begin
               ("None", Nil);
             ];
             v_typ_vars = ["`a"];
+          }
+        );
+        VariantDecl(
+          {
+            v_name = "Trilean";
+            v_ctors = [
+              ("Left",  Unbound("`a"));
+              ("Right", Unbound("`b"));
+              ("Ziltch", Nil);
+            ];
+            v_typ_vars = ["`a"; "`b"];
           }
         );
         FuncExternDecl(
