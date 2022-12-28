@@ -432,7 +432,13 @@ let map_tvars_to_types templated_typ concrete_typ =
             _map_tvars_to_types so_far lhs_typ rhs_typ
         ) map_so_far lhs_ctors rhs_ctors
 
-    | _ -> failwith "Called with non-structurally-identical types"
+    | _ ->
+        let templ_fmt = fmt_type templated_typ in
+        let concr_fmt = fmt_type concrete_typ in
+        failwith (
+          "Called with non-structurally-identical types: [[ " ^
+          templ_fmt ^ " ]] vs [[ " ^ concr_fmt ^ " ]]"
+        )
 
   in
   _map_tvars_to_types StrMap.empty templated_typ concrete_typ

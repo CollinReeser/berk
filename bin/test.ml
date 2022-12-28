@@ -64,7 +64,7 @@ let test_typecheck ?(
   Printf.printf "Expression [";
   print_expr "" ast;
   Printf.printf "] typechecks to: ";
-  let expr_typechecked = type_check_expr tc_ctxt ast in
+  let expr_typechecked = type_check_expr tc_ctxt Undecided ast in
   let expr_t = expr_type expr_typechecked in
   Printf.printf "%s" (fmt_type expr_t);
   Printf.printf "\n"

@@ -226,11 +226,11 @@ let main = begin
       let (tc_ctxt_up, _) = type_check_stmt tc_ctxt decl_stmt_raw in
         test_typecheck ~tc_ctxt:tc_ctxt_up expr_raw;
         Printf.printf "Expr type: %s\n" (
-          type_check_expr tc_ctxt_up expr_raw |> expr_type |> fmt_type
+          type_check_expr tc_ctxt_up Undecided expr_raw |> expr_type |> fmt_type
         );
         print_expr "" expr_raw;
         Printf.printf "\n";
-        print_expr "" (type_check_expr tc_ctxt_up expr_raw);
+        print_expr "" (type_check_expr tc_ctxt_up Undecided expr_raw);
         Printf.printf "\n";
 
       let collatz_seq_stmt_raw =
@@ -785,13 +785,14 @@ let main = begin
             "dummy_some", def_var_qual, Undecided,
             VariantCtorExpr(Undecided, "Some", ValBool(true))
           );
-          (* DeclStmt(
+          DeclStmt(
             "dummy_none", def_var_qual,
             Variant("Option", [("Some", Bool); ("None", Nil)]),
             VariantCtorExpr(Undecided, "None", ValNil)
-          ); *)
+          );
           DeclStmt(
-            "dummy_none", def_var_qual, Undecided,
+            "dummy_integral_none", def_var_qual,
+            Variant("Option", [("Some", F128); ("None", Nil)]),
             VariantCtorExpr(Undecided, "None", ValNil)
           );
           ReturnStmt(
@@ -835,12 +836,10 @@ let main = begin
           {
             v_name = "Option";
             v_ctors = [
+              ("Some", Unbound("`a"));
               ("None", Nil);
-              (* ("Some", Unbound("`a")); *)
-              ("Some", Bool);
             ];
-            (* v_typ_vars = ["`a"]; *)
-            v_typ_vars = [];
+            v_typ_vars = ["`a"];
           }
         );
         FuncExternDecl(

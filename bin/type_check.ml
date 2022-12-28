@@ -332,7 +332,7 @@ and update_vars_with_idents_quals vars_init idents_quals types =
 and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
   match stmt with
   | DeclStmt(ident, qual, decl_t, exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_typechecked = type_check_expr tc_ctxt decl_t exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
       | Undecided -> exp_t
@@ -348,7 +348,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       (tc_ctxt_up, DeclStmt(ident, qual, resolved_t, exp_typechecked))
 
   | DeclDeconStmt(idents_quals, decl_t, exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_typechecked = type_check_expr tc_ctxt decl_t exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
       | Undecided -> exp_t
@@ -382,10 +382,10 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       (tc_ctxt_up, DeclDeconStmt(idents_quals, resolved_t, exp_typechecked))
 
   | AssignStmt(ident, exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt exp in
-      let exp_t = expr_type exp_typechecked in
-
       let (var_t, {mut}) = StrMap.find ident tc_ctxt.vars in
+
+      let exp_typechecked = type_check_expr tc_ctxt var_t exp in
+      let exp_t = expr_type exp_typechecked in
 
       let _ =
         if mut
@@ -398,7 +398,28 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         else failwith "Expr for assignment does not typecheck"
 
   | AssignDeconStmt(idents, exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let assign_types = List.map (
+          fun id ->
+            let (var_t, _) = StrMap.find id tc_ctxt.vars in
+
+            var_t
+        ) idents
+      in
+
+      let expected_t = begin match exp with
+        | TupleExpr(_, _) ->
+            Tuple(assign_types)
+
+        | ArrayExpr(_, _) ->
+            let array_len = List.length idents in
+            let elem_t = List.hd assign_types in
+            Array(elem_t, array_len)
+
+        | _ -> failwith "Cannot deconstruct non-tuple/array"
+        end
+      in
+
+      let exp_typechecked = type_check_expr tc_ctxt expected_t exp in
       let exp_t = expr_type exp_typechecked in
 
       let typecheck_id_typ_pairs idents types =
@@ -439,10 +460,10 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         | _ -> failwith "Cannot deconstruct non-aggregate type into ids"
       end
 
-  | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt exp))
+  | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt Undecided exp))
 
   | ReturnStmt(exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt exp in
+      let exp_typechecked = type_check_expr tc_ctxt tc_ctxt.ret_t exp in
       let exp_t = expr_type exp_typechecked in
       let ret_tuple = begin match tc_ctxt.ret_t with
         | Undecided ->
@@ -467,7 +488,14 @@ and type_check_stmts tc_ctxt stmts =
       let (tc_ctxt_final, stmts_tced) = type_check_stmts tc_ctxt_updated xs in
       (tc_ctxt_final, stmt_tced :: stmts_tced)
 
-and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
+(* expected_t is what type the expression is expected to evaluate to. We
+normally don't care about this, because the stmt-level typecheck will ensure the
+expression is the right type. However, in cases of eg variants/structs that
+might have type variables that the expression cannot infer, this information
+can provide the needed type info. *)
+and type_check_expr
+  (tc_ctxt : typecheck_context) (expected_t : berk_t) (exp : expr)
+=
   let rec _type_check_expr exp =
     begin match exp with
     | ValNil -> ValNil
@@ -527,7 +555,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
     | BlockExpr(_, stmts, exp) ->
         let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
 
-        let expr_typechecked = type_check_expr tc_ctxt_up exp in
+        let expr_typechecked = type_check_expr tc_ctxt_up expected_t exp in
         let expr_t = expr_type expr_typechecked in
 
         BlockExpr(expr_t, stmts_typechecked, expr_typechecked)
@@ -581,13 +609,31 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         let {f_name; f_params; f_ret_t} =
           StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs
         in
-        let (params_non_variadic, is_var_arg) = get_static_f_params f_params in
+        let (params_non_variadic_t_lst, is_var_arg) =
+          get_static_f_params f_params
+        in
 
-        let exprs_typechecked = List.map _type_check_expr exprs in
+        let params_t_lst_padded = begin
+            let len_diff =
+              (List.length exprs) - (List.length params_non_variadic_t_lst)
+            in
+            if len_diff = 0 then
+              params_non_variadic_t_lst
+            else if len_diff > 0 then
+              let padding = List.init len_diff (fun _ -> Undecided) in
+              params_non_variadic_t_lst @ padding
+            else
+              failwith "Unexpected shorter expr list than non-variadic params"
+          end
+        in
+
+        let exprs_typechecked =
+          List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
+        in
         let exprs_t = List.map expr_type exprs_typechecked in
 
         let cmp_non_variadic_params_to_exprs =
-          List.compare_lengths params_non_variadic exprs_t
+          List.compare_lengths params_non_variadic_t_lst exprs_t
         in
         let _ =
           if (
@@ -612,7 +658,7 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         in
 
         let exprs_t_non_variadic =
-          take exprs_t (List.length params_non_variadic)
+          take exprs_t (List.length params_non_variadic_t_lst)
         in
 
         let _ = List.iter2 (
@@ -620,12 +666,20 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
             if type_convertible_to expr_t param_t
             then ()
             else failwith "Could not convert expr type to arg type"
-        ) exprs_t_non_variadic params_non_variadic in
+        ) exprs_t_non_variadic params_non_variadic_t_lst in
 
         FuncCall(f_ret_t, f_name, exprs_typechecked)
 
     | ArrayExpr(_, exprs) ->
-        let exprs_typechecked = List.map _type_check_expr exprs in
+        let elem_expected_t = begin match expected_t with
+          | Array(elem_t, _) -> elem_t
+          | Undecided -> Undecided
+          | _ -> failwith "Unexpectedly expecting non-array type in array expr"
+        end in
+
+        let exprs_typechecked =
+          List.map (type_check_expr tc_ctxt elem_expected_t) exprs
+        in
         let expr_t_lst = List.map expr_type exprs_typechecked in
         let common_t = common_type_of_lst expr_t_lst in
         let arr_t = Array(common_t, List.length exprs) in
@@ -678,28 +732,39 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
         static_idx_typechecked
 
     | TupleExpr(_, exprs) ->
-        let exprs_typechecked = List.map _type_check_expr exprs in
+        let elem_expected_t_lst = begin match expected_t with
+          | Tuple(typs) -> typs
+          | Undecided ->
+              let tuple_len = List.length exprs in
+              List.init tuple_len (fun _ -> Undecided)
+          | _ -> failwith "Unexpectedly expecting non-array type in array expr"
+        end in
+
+        let exprs_typechecked =
+          List.map2 (type_check_expr tc_ctxt) elem_expected_t_lst exprs
+        in
         let exprs_t_lst = List.map expr_type exprs_typechecked in
         let tuple_t = Tuple(exprs_t_lst) in
 
         TupleExpr(tuple_t, exprs_typechecked)
 
-    | VariantCtorExpr(expected_v_t, ctor_name, ctor_exp) ->
+    | VariantCtorExpr(_, ctor_name, ctor_exp) ->
         let ctor_exp_typechecked = _type_check_expr ctor_exp in
         let ctor_exp_typ = expr_type ctor_exp_typechecked in
         let resolved_v_t : berk_t =
           variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
         in
 
-        let final_v_t = begin match expected_v_t with
+        let final_v_t = begin match expected_t with
           | Undecided -> resolved_v_t
-          | _ ->
-            if not (is_concrete_type expected_v_t) then
+          | Variant(_, _) ->
+            if not (is_concrete_type expected_t) then
               failwith "Variant expression given explicit but unresolved type"
-            else if type_convertible_to resolved_v_t expected_v_t then
-              expected_v_t
             else
-              failwith "Resolved variant type not convertible to given type"
+              let tvars_to_t = map_tvars_to_types resolved_v_t expected_t in
+              concretify_unbound_types tvars_to_t resolved_v_t
+          | _ ->
+            failwith "Unexpected non-variant type expected in variant ctor expr"
         end in
 
         VariantCtorExpr(final_v_t, ctor_name, ctor_exp_typechecked)
