@@ -774,6 +774,32 @@ let main = begin
         ];
       } in
 
+      let return_some_func_def = {
+        f_decl = {
+          f_name = "return_some";
+          f_ret_t = Variant("Option", [("Some", Bool); ("None", Nil)]);
+          f_params = [];
+        };
+        f_stmts = [
+          DeclStmt(
+            "dummy_some", def_var_qual, Undecided,
+            VariantCtorExpr(Undecided, "Some", ValBool(true))
+          );
+          (* DeclStmt(
+            "dummy_none", def_var_qual,
+            Variant("Option", [("Some", Bool); ("None", Nil)]),
+            VariantCtorExpr(Undecided, "None", ValNil)
+          ); *)
+          DeclStmt(
+            "dummy_none", def_var_qual, Undecided,
+            VariantCtorExpr(Undecided, "None", ValNil)
+          );
+          ReturnStmt(
+            VariantCtorExpr(Undecided, "Some", ValBool(true))
+          )
+        ];
+      } in
+
       let mod_decls = [
         VariantDecl(
           {
@@ -810,9 +836,11 @@ let main = begin
             v_name = "Option";
             v_ctors = [
               ("None", Nil);
-              ("Some", Unbound("`a"));
+              (* ("Some", Unbound("`a")); *)
+              ("Some", Bool);
             ];
-            v_typ_vars = ["`a"];
+            (* v_typ_vars = ["`a"]; *)
+            v_typ_vars = [];
           }
         );
         FuncExternDecl(
@@ -834,6 +862,7 @@ let main = begin
         FuncDef(collatz_highest_seed_func_def);
         FuncDef(return_tuple_func_def);
         FuncDef(collatz_print_seq_func_def);
+        FuncDef(return_some_func_def);
         FuncDef(main_func_def);
       ] in
 

@@ -1,4 +1,6 @@
 
+module StrMap = Map.Make(String)
+
 type berk_t =
   | U64
   | U32
@@ -311,8 +313,6 @@ let is_indexable_type arr_t =
       false
 ;;
 
-module StrMap = Map.Make(String)
-
 (* Make concrete the given type, to the extent possible, via the mappings in the
 given string-type-variable-to-type mapping. *)
 let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
@@ -351,6 +351,47 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
       in
 
       Variant(v_name, v_ctors_concretified)
+;;
+
+(* Returns true if the type is entirely resolved to a concrete (instantiable)
+type, else false. *)
+let rec is_concrete_type ?(verbose=false) typ =
+  let _is_concrete_type typ = is_concrete_type ~verbose:verbose typ in
+
+  let res = begin match typ with
+  | Undecided  -> false
+  | Unbound(_) -> false
+
+  | U64  | U32 | U16 | U8
+  | I64  | I32 | I16 | I8
+  | F128 | F64 | F32
+  | Bool
+  | String
+  | Nil -> true
+
+  | VarArgSentinel -> true
+
+  | Tuple(tuple_typs) ->
+      List.fold_left (&&) true (List.map _is_concrete_type tuple_typs)
+
+  | Array(elem_typ, _) ->
+      _is_concrete_type elem_typ
+
+  | Variant(_, v_ctors) ->
+      List.fold_left (&&) true (
+        List.map (
+          fun (_, typ) -> _is_concrete_type typ
+        ) v_ctors
+      )
+  end in
+
+  let _ = if verbose then
+    Printf.printf "is_concrete_type[[ %s ]] == %B\n%!" (fmt_type typ) res
+  else
+    ()
+  in
+
+  res
 ;;
 
 (* Given an assumed less-concrete type containing some count of unbound
@@ -428,4 +469,20 @@ let get_tvars typ =
   let tvars = _get_tvars [] typ in
 
   List.sort_uniq compare tvars
+;;
+
+(* Get the index of the given ctor name in the given list of variant ctors *)
+let get_variant_ctor_tag_index v_ctors ctor_name =
+  let rec _get_variant_ctor_tag_index accum v_ctors_tail =
+    begin match v_ctors_tail with
+    | [] -> failwith ("Failed to find " ^ ctor_name ^ " within variant")
+    | (v_ctor_name, _)::xs ->
+        if v_ctor_name = ctor_name then
+          accum
+        else
+          _get_variant_ctor_tag_index (accum + 1) xs
+    end
+  in
+
+  _get_variant_ctor_tag_index 0 v_ctors
 ;;

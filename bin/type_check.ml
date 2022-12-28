@@ -1,5 +1,6 @@
-open Typing
 open Ast
+open Pretty_print
+open Typing
 
 module StrMap = Map.Make(String)
 
@@ -51,6 +52,104 @@ let variant_decl_to_variant_type {v_name; v_ctors; _} ctor_name typ =
   variant_t_concretified
 ;;
 
+
+(* Given a statement/expression, return true if all involved types are
+concretely bound/decided, false otherwise. *)
+
+let rec is_concrete_stmt ?(verbose=false) stmt =
+  let _is_concrete_expr expr = is_concrete_expr ~verbose:verbose expr in
+  let _is_concrete_type typ  = is_concrete_type ~verbose:verbose typ in
+
+  let res = begin match stmt with
+  | ExprStmt(expr)
+  | ReturnStmt(expr)
+  | AssignStmt(_, expr)
+  | AssignDeconStmt(_, expr) ->
+      _is_concrete_expr expr
+
+  | DeclStmt(_, _, typ, expr)
+  | DeclDeconStmt(_, typ, expr) ->
+      (_is_concrete_expr expr) && (_is_concrete_type typ)
+  end in
+
+  let _ = if verbose then
+    begin
+      Printf.printf "is_concrete_stmt[[ " ;
+      print_stmt ~print_typ:true "" stmt ;
+      Printf.printf " ]] == %B\n%!" res
+    end
+  else
+    ()
+  in
+
+  res
+
+and is_concrete_expr ?(verbose=false) expr =
+  let _is_concrete_expr expr = is_concrete_expr ~verbose:verbose expr in
+  let _is_concrete_stmt stmt = is_concrete_stmt ~verbose:verbose stmt in
+  let _is_concrete_type typ  = is_concrete_type ~verbose:verbose typ in
+
+  let res = begin match expr with
+  | ValU64(_)  | ValU32(_) | ValU16(_) | ValU8(_)
+  | ValI64(_)  | ValI32(_) | ValI16(_) | ValI8(_)
+  | ValF128(_) | ValF64(_) | ValF32(_)
+  | ValBool(_)
+  | ValStr(_)
+  | ValNil -> true
+
+  | ValVar(typ, _) -> _is_concrete_type typ
+
+  | ValCastTrunc(typ, expr)
+  | ValCastBitwise(typ, expr)
+  | StaticIndexExpr(typ, _, expr)
+  | VariantCtorExpr(typ, _, expr) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr expr)
+
+  | BinOp(typ, _, expr_1, expr_2)
+  | IndexExpr(typ, expr_1, expr_2) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr expr_1) &&
+        (_is_concrete_expr expr_2)
+
+  | IfThenElseExpr(typ, expr_1, expr_2, expr_3) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr expr_1) &&
+        (_is_concrete_expr expr_2) &&
+        (_is_concrete_expr expr_3)
+
+  | BlockExpr(typ, stmts, expr) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr expr) &&
+        (List.fold_left (&&) true (List.map _is_concrete_stmt stmts))
+
+  | WhileExpr(typ, expr_1, stmts, expr_2) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr expr_1) &&
+        (_is_concrete_expr expr_2) &&
+        (List.fold_left (&&) true (List.map _is_concrete_stmt stmts))
+
+  | ArrayExpr(typ, exprs)
+  | TupleExpr(typ, exprs)
+  | FuncCall(typ, _, exprs) ->
+      (_is_concrete_type typ) &&
+        (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
+  end in
+
+  let _ = if verbose then
+    begin
+      Printf.printf "is_concrete_stmt[[ " ;
+      print_expr ~print_typ:true "" expr ;
+      Printf.printf " ]] == %B\n%!" res
+    end
+  else
+    ()
+  in
+
+  res
+;;
+
+
 (* Try to yield the top-level variant type for the given constructor name and
 associated list of types. If the constructor and its associated types
 unambiguously match a particular variant, that variant type is returned. If
@@ -90,19 +189,19 @@ let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor_name typ =
     ) variants
   in
 
-  let _ =
-    if StrMap.cardinal matching_variants = 0
-    then failwith "No matching variants"
-    else failwith (
+  let variant_typ = if StrMap.cardinal matching_variants = 1 then
+    (* Take the one variant-name -> variant-decl binding there is. *)
+    let (_, matching_variant_t) = StrMap.choose matching_variants in
+
+    variant_decl_to_variant_type matching_variant_t ctor_name typ
+
+  else if StrMap.cardinal matching_variants = 0 then
+    failwith "No matching variants"
+  else
+    failwith (
       "Disambiguator " ^ disambiguator ^
       " yielded multiple matching variants"
     )
-  in
-
-  (* Take the one variant-name -> variant-decl binding there is. *)
-  let (_, matching_variant_t) = StrMap.choose matching_variants in
-  let variant_typ =
-    variant_decl_to_variant_type matching_variant_t ctor_name typ
   in
 
   variant_typ
@@ -369,113 +468,114 @@ and type_check_stmts tc_ctxt stmts =
       (tc_ctxt_final, stmt_tced :: stmts_tced)
 
 and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
-  match exp with
-  | ValNil -> ValNil
+  let _type_check_expr exp =
+    begin match exp with
+    | ValNil -> ValNil
 
-  | ValU64(i) -> ValU64(i)
-  | ValU32(i) -> ValU32(i)
-  | ValU16(i) -> ValU16(i)
-  | ValU8 (i) -> ValU8 (i)
+    | ValU64(i) -> ValU64(i)
+    | ValU32(i) -> ValU32(i)
+    | ValU16(i) -> ValU16(i)
+    | ValU8 (i) -> ValU8 (i)
 
-  | ValI64(i) -> ValI64(i)
-  | ValI32(i) -> ValI32(i)
-  | ValI16(i) -> ValI16(i)
-  | ValI8 (i) -> ValI8 (i)
+    | ValI64(i) -> ValI64(i)
+    | ValI32(i) -> ValI32(i)
+    | ValI16(i) -> ValI16(i)
+    | ValI8 (i) -> ValI8 (i)
 
-  | ValF128(str) -> ValF128(str)
-  | ValF64(f)    -> ValF64(f)
-  | ValF32(f)    -> ValF32(f)
+    | ValF128(str) -> ValF128(str)
+    | ValF64(f)    -> ValF64(f)
+    | ValF32(f)    -> ValF32(f)
 
-  | ValBool(b) -> ValBool(b)
+    | ValBool(b) -> ValBool(b)
 
-  | ValStr(s) -> ValStr(s)
+    | ValStr(s) -> ValStr(s)
 
-  | ValVar(_, id) ->
-      let (var_t, _) = StrMap.find id tc_ctxt.vars in
-      ValVar(var_t, id)
+    | ValVar(_, id) ->
+        let (var_t, _) = StrMap.find id tc_ctxt.vars in
+        ValVar(var_t, id)
 
-  | ValCastTrunc(target_t, exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt exp in
-      let exp_t = expr_type exp_typechecked in
-      if type_truncatable_to exp_t target_t
-        then ValCastTrunc(target_t, exp_typechecked)
-        else failwith "Cannot truncate-cast incompatible types"
+    | ValCastTrunc(target_t, exp) ->
+        let exp_typechecked = type_check_expr tc_ctxt exp in
+        let exp_t = expr_type exp_typechecked in
+        if type_truncatable_to exp_t target_t
+          then ValCastTrunc(target_t, exp_typechecked)
+          else failwith "Cannot truncate-cast incompatible types"
 
-  | ValCastBitwise(target_t, exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt exp in
-      let exp_t = expr_type exp_typechecked in
-      if type_bitwise_to exp_t target_t
-        then ValCastBitwise(target_t, exp_typechecked)
-        else failwith "Cannot bitwise-cast incompatible types"
+    | ValCastBitwise(target_t, exp) ->
+        let exp_typechecked = type_check_expr tc_ctxt exp in
+        let exp_t = expr_type exp_typechecked in
+        if type_bitwise_to exp_t target_t
+          then ValCastBitwise(target_t, exp_typechecked)
+          else failwith "Cannot bitwise-cast incompatible types"
 
-  | BinOp(_, op, lhs, rhs) ->
-      begin match op with
-      | Add | Sub | Mul | Div | Mod ->
-          let lhs_typechecked = type_check_expr tc_ctxt lhs in
-          let rhs_typechecked = type_check_expr tc_ctxt rhs in
-          let lhs_t = expr_type lhs_typechecked in
-          let rhs_t = expr_type rhs_typechecked in
-          let common_t = common_type_of_lr lhs_t rhs_t in
-          BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
+    | BinOp(_, op, lhs, rhs) ->
+        begin match op with
+        | Add | Sub | Mul | Div | Mod ->
+            let lhs_typechecked = type_check_expr tc_ctxt lhs in
+            let rhs_typechecked = type_check_expr tc_ctxt rhs in
+            let lhs_t = expr_type lhs_typechecked in
+            let rhs_t = expr_type rhs_typechecked in
+            let common_t = common_type_of_lr lhs_t rhs_t in
+            BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
 
-      | Eq | NotEq | Less | LessEq | Greater | GreaterEq ->
-          let lhs_typechecked = type_check_expr tc_ctxt lhs in
-          let rhs_typechecked = type_check_expr tc_ctxt rhs in
-          BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
-      end
+        | Eq | NotEq | Less | LessEq | Greater | GreaterEq ->
+            let lhs_typechecked = type_check_expr tc_ctxt lhs in
+            let rhs_typechecked = type_check_expr tc_ctxt rhs in
+            BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
+        end
 
-  | BlockExpr(_, stmts, exp) ->
-      let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
+    | BlockExpr(_, stmts, exp) ->
+        let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
 
-      let expr_typechecked = type_check_expr tc_ctxt_up exp in
-      let expr_t = expr_type expr_typechecked in
+        let expr_typechecked = type_check_expr tc_ctxt_up exp in
+        let expr_t = expr_type expr_typechecked in
 
-      BlockExpr(expr_t, stmts_typechecked, expr_typechecked)
+        BlockExpr(expr_t, stmts_typechecked, expr_typechecked)
 
-  | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
-      let if_cond_typechecked = type_check_expr tc_ctxt if_cond in
-      let if_cond_t = expr_type if_cond_typechecked in
+    | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
+        let if_cond_typechecked = type_check_expr tc_ctxt if_cond in
+        let if_cond_t = expr_type if_cond_typechecked in
 
-      let then_expr_typechecked = type_check_expr tc_ctxt then_expr in
-      let then_expr_t = expr_type then_expr_typechecked in
+        let then_expr_typechecked = type_check_expr tc_ctxt then_expr in
+        let then_expr_t = expr_type then_expr_typechecked in
 
-      let else_expr_typechecked = type_check_expr tc_ctxt else_expr in
-      let else_expr_t = expr_type else_expr_typechecked in
+        let else_expr_typechecked = type_check_expr tc_ctxt else_expr in
+        let else_expr_t = expr_type else_expr_typechecked in
 
-      let _ = match if_cond_t with
-      | Bool -> ()
-      | _ -> failwith "if-expr condition must resolve to Bool"
-      in
+        let _ = match if_cond_t with
+        | Bool -> ()
+        | _ -> failwith "if-expr condition must resolve to Bool"
+        in
 
-      let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
+        let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
 
-      IfThenElseExpr(
-        then_else_agreement_t,
-        if_cond_typechecked,
-        then_expr_typechecked,
-        else_expr_typechecked
-      )
+        IfThenElseExpr(
+          then_else_agreement_t,
+          if_cond_typechecked,
+          then_expr_typechecked,
+          else_expr_typechecked
+        )
 
-  | WhileExpr(_, while_cond, then_stmts, finally_expr) ->
-      let while_cond_typechecked = type_check_expr tc_ctxt while_cond in
-      let while_cond_t = expr_type while_cond_typechecked in
+    | WhileExpr(_, while_cond, then_stmts, finally_expr) ->
+        let while_cond_typechecked = type_check_expr tc_ctxt while_cond in
+        let while_cond_t = expr_type while_cond_typechecked in
 
-      let (_, then_stmts_typechecked) = type_check_stmts tc_ctxt then_stmts in
+        let (_, then_stmts_typechecked) = type_check_stmts tc_ctxt then_stmts in
 
-      let finally_expr_typechecked = type_check_expr tc_ctxt finally_expr in
-      let finally_expr_t = expr_type finally_expr_typechecked in
+        let finally_expr_typechecked = type_check_expr tc_ctxt finally_expr in
+        let finally_expr_t = expr_type finally_expr_typechecked in
 
-      let _ = match while_cond_t with
-      | Bool -> ()
-      | _ -> failwith "if-expr condition must resolve to Bool"
-      in
+        let _ = match while_cond_t with
+        | Bool -> ()
+        | _ -> failwith "if-expr condition must resolve to Bool"
+        in
 
-      WhileExpr(
-        finally_expr_t,
-        while_cond_typechecked,
-        then_stmts_typechecked,
-        finally_expr_typechecked
-      )
+        WhileExpr(
+          finally_expr_t,
+          while_cond_typechecked,
+          then_stmts_typechecked,
+          finally_expr_typechecked
+        )
 
     | FuncCall(_, f_name, exprs) ->
         let {f_name; f_params; f_ret_t} =
@@ -584,13 +684,39 @@ and type_check_expr (tc_ctxt : typecheck_context) (exp : expr) =
 
         TupleExpr(tuple_t, exprs_typechecked)
 
-    | VariantCtorExpr(_, ctor_name, ctor_exp) ->
+    | VariantCtorExpr(expected_v_t, ctor_name, ctor_exp) ->
         let ctor_exp_typechecked = type_check_expr tc_ctxt ctor_exp in
         let ctor_exp_typ = expr_type ctor_exp_typechecked in
-        let variant_t : berk_t =
+        let resolved_v_t : berk_t =
           variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
         in
 
-        VariantCtorExpr(variant_t, ctor_name, ctor_exp_typechecked)
+        let final_v_t = begin match expected_v_t with
+          | Undecided -> resolved_v_t
+          | _ ->
+            if not (is_concrete_type expected_v_t) then
+              failwith "Variant expression given explicit but unresolved type"
+            else if type_convertible_to resolved_v_t expected_v_t then
+              expected_v_t
+            else
+              failwith "Resolved variant type not convertible to given type"
+        end in
 
+        VariantCtorExpr(final_v_t, ctor_name, ctor_exp_typechecked)
+  end in
+
+  let exp_typechecked = _type_check_expr exp in
+
+  let _ = if is_concrete_expr exp_typechecked then
+      ()
+    else
+      begin
+        Printf.printf "[" ;
+        print_expr ~print_typ:true "" exp_typechecked ;
+        Printf.printf "]\n%!" ;
+        failwith "Non-concrete expr!"
+      end
+    in
+
+  exp_typechecked
 ;;

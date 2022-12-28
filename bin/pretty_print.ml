@@ -73,7 +73,7 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       let target_t_s = fmt_type target_t in
       Printf.printf "cast_trunc<%s>(" target_t_s;
       print_expr ~print_typ:print_typ "" exp;
-      Printf.printf ")"
+      Printf.printf ")%s" typ_s
     end
 
   | ValCastBitwise (target_t, exp) ->
@@ -81,7 +81,7 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
       let target_t_s = fmt_type target_t in
       Printf.printf "cast_bitwise<%s>(" target_t_s;
       print_expr ~print_typ:print_typ "" exp;
-      Printf.printf ")"
+      Printf.printf ")%s" typ_s
     end
 
   | BinOp (_, op, lh, rh) ->
@@ -121,31 +121,31 @@ and print_expr ?(init_ind = false) ?(print_typ = false) ind ex =
   | ArrayExpr(_, exprs) ->
       Printf.printf "%s[" init_ind;
       print_join_exprs ~print_typ:print_typ ind ", " exprs;
-      Printf.printf "]"
+      Printf.printf "]%s" typ_s
 
   | StaticIndexExpr(_, idx, arr) ->
       Printf.printf "%s" init_ind;
       print_expr ~print_typ:print_typ "" arr;
       Printf.printf "[";
       Printf.printf "%d" idx;
-      Printf.printf "]";
+      Printf.printf "]->%s" typ_s
 
   | IndexExpr(_, idx, arr) ->
       Printf.printf "%s" init_ind;
       print_expr ~print_typ:print_typ "" arr;
       Printf.printf "[";
       print_expr ~print_typ:print_typ "" idx;
-      Printf.printf "]";
+      Printf.printf "]->%s" typ_s
 
   | TupleExpr(_, exprs) ->
       Printf.printf "%s(" init_ind;
       print_join_exprs ~print_typ:print_typ ind ", " exprs;
-      Printf.printf ")"
+      Printf.printf ")%s" typ_s
 
   | VariantCtorExpr(_, ctor_name, expr) ->
       Printf.printf "%s%s(" init_ind ctor_name ;
       print_expr ~print_typ:print_typ "" expr ;
-      Printf.printf ")"
+      Printf.printf ")%s" typ_s
 
 and print_join_idents_quals delim idents_quals =
   match idents_quals with

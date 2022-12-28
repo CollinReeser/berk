@@ -6,6 +6,9 @@ module StrMap = Map.Make(String)
 type module_gen_context = {
   func_sigs: Llvm.llvalue StrMap.t;
   llvm_mod: Llvm.llmodule;
+  data_layout_mod: Llvm_target.DataLayout.t;
+  berk_t_to_llvm_t: berk_t -> Llvm.lltype;
+  llvm_sizeof: Llvm.lltype -> int;
 }
 
 type func_gen_context = {
@@ -15,84 +18,115 @@ type func_gen_context = {
 }
 
 
-let rec berk_t_to_llvm_t llvm_ctxt typ =
-  match typ with
-  | Nil -> Llvm.void_type llvm_ctxt
+let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
+  let rec _berk_t_to_llvm_t typ =
+    (* Printf.printf "berk_t_to_llvm_t: [[ %s ]]\n%!" (fmt_type typ) ; *)
+    begin match typ with
+    | Nil -> Llvm.void_type llvm_ctxt
 
-  | U64 | I64 -> Llvm.i64_type llvm_ctxt
-  | U32 | I32 -> Llvm.i32_type llvm_ctxt
-  | U16 | I16 -> Llvm.i16_type llvm_ctxt
-  | U8  | I8  -> Llvm.i8_type  llvm_ctxt
+    | U64 | I64 -> Llvm.i64_type llvm_ctxt
+    | U32 | I32 -> Llvm.i32_type llvm_ctxt
+    | U16 | I16 -> Llvm.i16_type llvm_ctxt
+    | U8  | I8  -> Llvm.i8_type  llvm_ctxt
 
-  | F128 -> Llvm.fp128_type  llvm_ctxt
-  | F64  -> Llvm.double_type llvm_ctxt
-  | F32  -> Llvm.float_type  llvm_ctxt
+    | F128 -> Llvm.fp128_type  llvm_ctxt
+    | F64  -> Llvm.double_type llvm_ctxt
+    | F32  -> Llvm.float_type  llvm_ctxt
 
-  | Bool -> Llvm.i1_type llvm_ctxt
+    | Bool -> Llvm.i1_type llvm_ctxt
 
-  | String ->
-      let llvm_char_t = Llvm.i8_type llvm_ctxt in
-      let llvm_str_t = Llvm.pointer_type llvm_char_t in
-      llvm_str_t
+    | String ->
+        let llvm_char_t = Llvm.i8_type llvm_ctxt in
+        let llvm_str_t = Llvm.pointer_type llvm_char_t in
+        llvm_str_t
 
-  | Array(elem_typ, sz) ->
-      let llvm_elem_t = berk_t_to_llvm_t llvm_ctxt elem_typ in
-      let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
-      llvm_arr_t
+    | Array(elem_typ, sz) ->
+        let llvm_elem_t = _berk_t_to_llvm_t elem_typ in
+        let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
+        llvm_arr_t
 
-  | Tuple(types) ->
-      let llvm_t_lst = List.map (berk_t_to_llvm_t llvm_ctxt) types in
-      let llvm_t_arr = Array.of_list llvm_t_lst in
-      let llvm_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
-      llvm_tuple_t
+    | Tuple(types) ->
+        let llvm_t_lst = List.map (_berk_t_to_llvm_t) types in
+        let llvm_t_arr = Array.of_list llvm_t_lst in
+        let llvm_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+        llvm_tuple_t
 
-  | Variant(_, variants) ->
-      let llvm_nonempty_tuple_t_lst = List.filter_map (
-        fun (_, typ) ->
-          match typ with
-          | Nil -> None
-          | _ -> Some(berk_t_to_llvm_t llvm_ctxt typ)
-      ) variants in
+    | Variant(_, ctors) ->
+        let llvm_nonempty_typs = List.filter_map (
+          fun (_, typ) ->
+            match typ with
+            | Nil -> None
+            | _ -> Some(_berk_t_to_llvm_t typ)
+        ) ctors in
 
-      let tuple_sizes = List.map (
-        fun llvm_tuple ->
-          let llvm_sizeof = Llvm.size_of llvm_tuple in
-          let var_tuple_sz = begin match (Llvm.int64_of_const llvm_sizeof) with
-            | None -> failwith "Unexpectedly not int64 from LLVM sizeof op"
-            | Some(i) -> Int64.to_int i
-          end in
+        let typ_sizes = List.map (
+          fun llvm_typ ->
+            Printf.printf "LLVM type: [%s]\n%!" (Llvm.string_of_lltype llvm_typ) ;
 
-          var_tuple_sz
-      ) llvm_nonempty_tuple_t_lst in
+            llvm_sizeof llvm_typ
+        ) llvm_nonempty_typs in
 
-      let largest = List.fold_left max 0 tuple_sizes in
-      let llvm_variant_t = begin
-        if largest = 0
-        then
-          let llvm_union_tag = Llvm.i8_type llvm_ctxt in
-          let llvm_t_arr = Array.of_list [llvm_union_tag] in
-          let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+        let largest = List.fold_left max 0 typ_sizes in
+        let llvm_variant_t = begin
+          if largest = 0
+          then
+            let llvm_union_tag = Llvm.i8_type llvm_ctxt in
+            let llvm_t_arr = Array.of_list [llvm_union_tag] in
+            let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
 
-          llvm_union_t
-        else
-          let llvm_union_tag = Llvm.i8_type llvm_ctxt in
-          let llvm_union_dummy = Llvm.i8_type llvm_ctxt in
-          let llvm_union_vals = Llvm.array_type llvm_union_dummy largest in
-          let llvm_t_arr = Array.of_list [llvm_union_tag; llvm_union_vals] in
-          let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+            llvm_union_t
+          else
+            let llvm_union_tag = Llvm.i8_type llvm_ctxt in
+            let llvm_union_dummy = Llvm.i8_type llvm_ctxt in
+            let llvm_union_vals = Llvm.array_type llvm_union_dummy largest in
+            let llvm_t_arr = Array.of_list [llvm_union_tag; llvm_union_vals] in
+            let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
 
-          llvm_union_t
-      end in
+            llvm_union_t
+        end in
 
-      llvm_variant_t
+        llvm_variant_t
 
-  | VarArgSentinel -> failwith "Should not need to determine type for var arg"
-  | Unbound(template) ->
-      failwith (
-        "Cannot determine llvm type for unbound type template " ^
-        template
-      )
-  | Undecided -> failwith "Cannot determine llvm type for undecided type"
+    | VarArgSentinel -> failwith "Should not need to determine type for var arg"
+    | Unbound(template) ->
+        failwith (
+          "Cannot determine llvm type for unbound type template " ^
+          template
+        )
+    | Undecided -> failwith "Cannot determine llvm type for undecided type"
+  end in
+
+  _berk_t_to_llvm_t
+;;
+
+
+(* Given an initial offset from a universally-aligned address, and a type,
+return the resolved integer index from that universal initial address that the
+type wants to be aligned to. *)
+let get_aligned_offset_from mod_ctxt init_offset llvm_typ =
+  let preferred_alignment =
+    Llvm_target.DataLayout.stack_align llvm_typ mod_ctxt.data_layout_mod
+  in
+
+  (* The target offset is the first offset at or after the initial offset that
+    is aligned to the target alignment.
+
+    Ex: init_offset = 13, preferred_alignment = 8, target_offset = 16:
+    -> 13 mod 8 = 5
+    ->  8  -  5 = 3
+    -> 13  +  3 = 16
+
+    Ex: init_offset = 1, preferred_alignment = 4, target_offset = 4:
+    -> 1 mod 4 = 1
+    -> 4  -  1 = 3
+    -> 1  +  3 = 4
+  *)
+  let init_offset_align_overrun = init_offset mod preferred_alignment in
+  let alignment_padding = preferred_alignment - init_offset_align_overrun in
+  let target_offset = init_offset + alignment_padding in
+
+  target_offset
+;;
 
 
 let if_expr_alloc_name = "___IF_THEN_ELSE_ALLOCA"
@@ -211,33 +245,47 @@ let rec combine3 lhs mid rhs =
 
 
 let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
-  let mod_ctxt = {func_sigs = StrMap.empty; llvm_mod = the_mod} in
+  let data_layout_str = Llvm.data_layout the_mod in
+  let data_layout_mod = Llvm_target.DataLayout.of_string data_layout_str in
+
+  let llvm_sizeof typ =
+    let llvm_sizeof_int64 =
+      Llvm_target.DataLayout.store_size typ data_layout_mod
+    in
+    Int64.to_int llvm_sizeof_int64
+  in
+
+  let mod_ctxt = {
+    func_sigs = StrMap.empty;
+    llvm_mod = the_mod;
+    data_layout_mod = data_layout_mod;
+    berk_t_to_llvm_t = berk_t_to_llvm_t llvm_sizeof llvm_ctxt;
+    llvm_sizeof = llvm_sizeof;
+  } in
   let _codegen_mod_decl =
     fun ctxt decl ->
-      codegen_mod_decl llvm_ctxt the_mod the_fpm builder ctxt decl
+      codegen_mod_decl llvm_ctxt the_fpm builder ctxt decl
   in
   let _ = List.fold_left _codegen_mod_decl mod_ctxt mod_decls in
   ()
 
 
-and codegen_mod_decl llvm_ctxt the_mod the_fpm builder mod_ctxt mod_decl =
+and codegen_mod_decl llvm_ctxt the_fpm builder mod_ctxt mod_decl =
   match mod_decl with
   | FuncExternDecl(f_decl_ast) ->
-      codegen_func_decl llvm_ctxt the_mod mod_ctxt f_decl_ast
+      codegen_func_decl mod_ctxt f_decl_ast
 
   | FuncDef(f_ast) ->
-      codegen_func llvm_ctxt the_mod the_fpm builder mod_ctxt f_ast
+      codegen_func llvm_ctxt the_fpm builder mod_ctxt f_ast
 
   | VariantDecl(_) -> Printf.printf "Variant codegen unimplemented\n"; mod_ctxt
 
 
-and codegen_func_decl
-  llvm_ctxt the_mod mod_ctxt {f_name; f_params; f_ret_t}
-=
-  let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
+and codegen_func_decl mod_ctxt {f_name; f_params; f_ret_t} =
+  let llvm_ret_t = mod_ctxt.berk_t_to_llvm_t f_ret_t in
   let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
   let llvm_param_t_lst =
-    List.map (berk_t_to_llvm_t llvm_ctxt) f_params_non_variadic
+    List.map (mod_ctxt.berk_t_to_llvm_t) f_params_non_variadic
   in
   let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
   let func_sig_t =
@@ -245,7 +293,7 @@ and codegen_func_decl
     then Llvm.var_arg_function_type llvm_ret_t llvm_param_t_arr
     else Llvm.function_type llvm_ret_t llvm_param_t_arr
   in
-  let new_func = Llvm.declare_function f_name func_sig_t the_mod in
+  let new_func = Llvm.declare_function f_name func_sig_t mod_ctxt.llvm_mod in
 
   let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
   let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
@@ -254,14 +302,14 @@ and codegen_func_decl
 
 
 and codegen_func
-  llvm_ctxt the_mod the_fpm builder mod_ctxt
+  llvm_ctxt the_fpm builder mod_ctxt
   {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;}
 =
   (* Generate the LLVM context for defining a new function. *)
-  let llvm_ret_t = berk_t_to_llvm_t llvm_ctxt f_ret_t in
+  let llvm_ret_t = mod_ctxt.berk_t_to_llvm_t f_ret_t in
   let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
   let llvm_param_t_lst =
-    List.map (berk_t_to_llvm_t llvm_ctxt) f_params_non_variadic
+    List.map (mod_ctxt.berk_t_to_llvm_t) f_params_non_variadic
   in
   let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
   let func_sig_t =
@@ -269,7 +317,7 @@ and codegen_func
     then Llvm.var_arg_function_type llvm_ret_t llvm_param_t_arr
     else Llvm.function_type llvm_ret_t llvm_param_t_arr
   in
-  let new_func = Llvm.declare_function f_name func_sig_t the_mod in
+  let new_func = Llvm.declare_function f_name func_sig_t mod_ctxt.llvm_mod in
 
   (* Add this new function to our codegen context; doing this now, rather than
   at the _end_ of function codegen, is what permits self recursion. *)
@@ -285,7 +333,7 @@ and codegen_func
   let arg_to_param_lst = List.combine f_params llvm_params in
   let llvm_param_allocas = List.map (
     fun ((id, _, typ), llvm_param) ->
-      let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+      let alloca_typ = mod_ctxt.berk_t_to_llvm_t typ in
       let alloca = Llvm.build_alloca alloca_typ id builder in
       let _ : Llvm.llvalue = Llvm.build_store llvm_param alloca builder in
 
@@ -343,11 +391,11 @@ and codegen_stmts llvm_ctxt builder func_ctxt stmts =
       codegen_stmts llvm_ctxt builder func_ctxt_updated xs
 
 
-and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
+and codegen_stmt llvm_ctxt builder func_ctxt stmt : func_gen_context =
   match stmt with
   | DeclStmt (ident, _, typ, expr) ->
       let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
-      let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+      let alloca_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t typ in
       let alloca = Llvm.build_alloca alloca_typ ident builder in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
@@ -370,7 +418,7 @@ and codegen_stmt (llvm_ctxt) (builder) (func_ctxt) (stmt) : func_gen_context =
 
       let updated_vars = List.fold_left (
         fun vars (typ, ident, exp) ->
-          let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+          let alloca_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t typ in
           let alloca = Llvm.build_alloca alloca_typ ident builder in
           let _ : Llvm.llvalue = Llvm.build_store exp alloca builder in
 
@@ -431,7 +479,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
   match expr with
   | ValNil ->
-      let llvm_nil_typ = berk_t_to_llvm_t llvm_ctxt Nil in
+      let llvm_nil_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t Nil in
       Llvm.undef llvm_nil_typ
 
   | ValU64(n) | ValI64(n) -> Llvm.const_int i64_t n
@@ -465,13 +513,13 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       loaded
   | ValCastTrunc(target_t, exp) ->
     begin
-      let llvm_t = berk_t_to_llvm_t llvm_ctxt target_t in
+      let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in
       let exp_val = _codegen_expr exp in
       Llvm.build_trunc exp_val llvm_t "trunctmp" builder
     end
   | ValCastBitwise(target_t, exp) ->
     begin
-      let llvm_t = berk_t_to_llvm_t llvm_ctxt target_t in
+      let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in
       let exp_val = _codegen_expr exp in
       Llvm.build_bitcast exp_val llvm_t "bitcasttmp" builder
     end
@@ -481,7 +529,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       let lhs_t = expr_type lhs in
       let rhs_t = expr_type rhs in
       let comm_t = common_type_of_lr lhs_t rhs_t in
-      let llvm_t = berk_t_to_llvm_t llvm_ctxt comm_t in
+      let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t comm_t in
       begin match comm_t with
       | Bool ->
           begin match op with
@@ -617,7 +665,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
             nil_val
 
         | _ ->
-            let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+            let alloca_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t typ in
             let alloca =
               Llvm.build_alloca alloca_typ if_expr_alloc_name builder
             in
@@ -677,7 +725,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
             nil_val
 
         | _ ->
-            let alloca_typ = berk_t_to_llvm_t llvm_ctxt typ in
+            let alloca_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t typ in
             let alloca =
               Llvm.build_alloca alloca_typ while_expr_alloc_name builder
             in
@@ -712,7 +760,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
   | ArrayExpr(typ, exprs) ->
       let llvm_expr_vals = List.map _codegen_expr exprs in
-      let llvm_arr_t = berk_t_to_llvm_t llvm_ctxt typ in
+      let llvm_arr_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t typ in
 
       let arr_aggregate = (
         build_aggregate builder llvm_arr_t llvm_expr_vals
@@ -750,7 +798,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
         deconstruct_aggregate_sz builder arr_sz arr_val
       ) in
 
-      let llvm_alloca_typ = berk_t_to_llvm_t llvm_ctxt arr_typ in
+      let llvm_alloca_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t arr_typ in
       let llvm_arr_sz = Llvm.const_int i32_t arr_sz in
 
       let alloca_arr = (
@@ -808,7 +856,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
   | TupleExpr(typ, exprs) ->
       let llvm_expr_vals = List.map _codegen_expr exprs in
-      let llvm_tuple_t = berk_t_to_llvm_t llvm_ctxt typ in
+      let llvm_tuple_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t typ in
 
       let tuple_aggregate = (
         build_aggregate builder llvm_tuple_t llvm_expr_vals
@@ -816,8 +864,118 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       tuple_aggregate
 
-  | VariantCtorExpr(_ (* typ *), _ (* ctor_name *), _ (* exp *)) ->
-      failwith "Unimplemented"
+  | VariantCtorExpr(variant_t, ctor_name, exp) ->
+      (* See also:
+        https://mapping-high-level-constructs-to-llvm-ir.readthedocs.io/en/latest/basic-constructs/unions.html
+      *)
+
+      (* Sanity check we're working with a variant, and extract some info while
+      we're at it. *)
+      let (v_name, v_ctors) = begin match variant_t with
+      | Variant(v_name, v_ctors) ->
+          Printf.printf "VariantCtorExpr of variant [%s]" v_name ;
+          (v_name, v_ctors)
+      | _ -> failwith "Unexpected non-variant type in variant-ctor-expr"
+      end in
+
+      (* Convert the berk variant to an LLVM struct type. *)
+      let llvm_variant_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t variant_t in
+
+      let variant_ssa_alloca_name = "variant_" ^ v_name ^ "_allocatmp" in
+      let variant_ssa_gep_name = "variant_" ^ v_name ^ "_geptmp" in
+      let variant_ssa_load_name = "variant_" ^ v_name ^ "_loadtmp" in
+      let ctor_ssa_gep_name = "variant_ctor_" ^ ctor_name ^ "_geptmp" in
+      let ctor_ssa_bitcast_name = "variant_ctor_" ^ ctor_name ^ "_bitcasttmp" in
+
+      let alloca =
+        Llvm.build_alloca llvm_variant_t variant_ssa_alloca_name builder
+      in
+
+      Printf.printf "Alloca: [[ %s ]]\n%!" (Llvm.string_of_llvalue alloca) ;
+
+      (* Which "tag" is this variant constructor supposed to be? Find it, then
+      assign it to the tag field in the LLVM variant struct. *)
+      let ctor_tag_index = get_variant_ctor_tag_index v_ctors ctor_name in
+      let llvm_ctor_tag_index = Llvm.const_int i8_t ctor_tag_index in
+
+      let indices = Array.of_list [
+        Llvm.const_int i32_t 0;
+        Llvm.const_int i32_t 0;
+      ] in
+      let llvm_gep =
+        Llvm.build_gep alloca indices ctor_ssa_gep_name builder
+      in
+      let _ = Llvm.build_store llvm_ctor_tag_index llvm_gep builder in
+
+      (* Determine an "alias" type for this particular variant constructor, so
+      we can bitcast our toplevel variant to this constructor type and
+      manipulate the constructor fields. *)
+      let get_ctor_llvm_type llvm_ctor_expr_t =
+        let llvm_ctor_tag = Llvm.i8_type llvm_ctxt in
+        let llvm_t_arr = Array.of_list [llvm_ctor_tag; llvm_ctor_expr_t] in
+        let llvm_ctor_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+
+        llvm_ctor_t
+      in
+
+      (* Only if this constructor actually has non-nil data do we generate code
+      for that expression and store that result into the LLVM variant struct. *)
+      let expr_t = expr_type exp in
+      let _ = begin match expr_t with
+        | Nil -> ()
+        | _ ->
+          begin
+            Printf.printf "Berk ctor Expr: [[ %s ]]\n%!" (fmt_type expr_t) ;
+
+            let llvm_expr_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t expr_t in
+            let llvm_ctor_t = get_ctor_llvm_type llvm_expr_t in
+            let llvm_ctor_t_ptr = Llvm.pointer_type llvm_ctor_t in
+
+            Printf.printf "LLVM ctor type: [[ %s ]]\n%!" (Llvm.string_of_lltype llvm_ctor_t) ;
+
+            let llvm_expr_val = _codegen_expr exp in
+
+            (* We'll need to treat the LLVM variant struct as though it were
+            instead of the constructor type, so we can manipulate fields. *)
+            let bitcast_alloca =
+              Llvm.build_bitcast
+                alloca
+                llvm_ctor_t_ptr
+                ctor_ssa_bitcast_name
+                builder
+            in
+
+            Printf.printf "Bitcasted alloca: [[ %s ]]\n%!" (Llvm.string_of_llvalue bitcast_alloca) ;
+
+            (* Since the arbitrarily-complex constructor expression is still
+            just "one type", its offset is simply index 1, right after the
+            variant constructor tag that we assigned above. *)
+            let indices = Array.of_list [
+              Llvm.const_int i32_t 0;
+              Llvm.const_int i32_t 1;
+            ] in
+
+            let llvm_gep =
+              Llvm.build_gep bitcast_alloca indices ctor_ssa_gep_name builder
+            in
+            let _ = Llvm.build_store llvm_expr_val llvm_gep builder in
+
+            ()
+          end
+      end in
+
+      (* The actual type of this variant constructor is "direct data", not a
+      pointer, so we need to load the totality of the variant.*)
+      let indices = Array.of_list [
+        Llvm.const_int i32_t 0;
+      ] in
+      let variant_gep =
+        Llvm.build_gep alloca indices variant_ssa_gep_name builder
+      in
+      let loaded = Llvm.build_load variant_gep variant_ssa_load_name builder in
+
+      loaded
+;;
 
 
 let initialize_fpm the_fpm =

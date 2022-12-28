@@ -101,12 +101,7 @@ let expr_type typ =
   | VariantCtorExpr(typ, _, _) -> typ
 ;;
 
-type module_decl =
-  | FuncExternDecl of func_decl_t
-  | FuncDef of func_def_t
-  | VariantDecl of variant_decl_t
-
-and v_ctor = (string * berk_t)
+type v_ctor = (string * berk_t)
 
 and variant_decl_t = {
   v_name: string;
@@ -114,7 +109,7 @@ and variant_decl_t = {
   v_typ_vars: string list;
 }
 
-and f_param = (ident_t * var_qual * berk_t)
+type f_param = (ident_t * var_qual * berk_t)
 
 and func_decl_t = {
   f_name: string;
@@ -126,6 +121,11 @@ and func_def_t = {
   f_decl: func_decl_t;
   f_stmts: stmt list;
 }
+
+type module_decl =
+  | FuncExternDecl of func_decl_t
+  | FuncDef of func_def_t
+  | VariantDecl of variant_decl_t
 
 (* Return the pair of all the non-variadic function parameter types, and whether
 the parameter list ends with a variadic-args sentinel. Fails if ill-formed. *)
