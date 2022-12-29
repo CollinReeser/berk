@@ -850,6 +850,25 @@ let main = begin
               )
             )
           );
+          DeclStmt(
+            "dummy_quatern_branch", def_var_qual, Undecided,
+            IfThenElseExpr(
+              Undecided,
+              ValBool(false),
+              VariantCtorExpr(Undecided, "East", ValF32(1.23)),
+              IfThenElseExpr(
+                Undecided,
+                ValBool(true),
+                VariantCtorExpr(Undecided, "West", ValI32(-12)),
+                IfThenElseExpr(
+                  Undecided,
+                  ValBool(true),
+                  VariantCtorExpr(Undecided, "North", ValU32(12)),
+                  VariantCtorExpr(Undecided, "South", ValStr("Quatern world!"))
+                )
+              )
+            )
+          );
           ReturnStmt(
             VariantCtorExpr(Undecided, "Some", ValBool(true))
           )
@@ -906,6 +925,18 @@ let main = begin
               ("Ziltch", Nil);
             ];
             v_typ_vars = ["`a"; "`b"];
+          }
+        );
+        VariantDecl(
+          {
+            v_name = "Quatern";
+            v_ctors = [
+              ("East", Unbound("`a"));
+              ("West",  Unbound("`b"));
+              ("North", Unbound("`c"));
+              ("South", Unbound("`d"));
+            ];
+            v_typ_vars = ["`a"; "`b"; "`c"; "`d"];
           }
         );
         FuncExternDecl(
