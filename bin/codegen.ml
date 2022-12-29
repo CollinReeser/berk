@@ -875,7 +875,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       we're at it. *)
       let (v_name, v_ctors) = begin match variant_t with
       | Variant(v_name, v_ctors) ->
-          Printf.printf "VariantCtorExpr of variant [%s]" v_name ;
+          Printf.printf "VariantCtorExpr of variant [%s]\n" v_name ;
           (v_name, v_ctors)
       | _ -> failwith "Unexpected non-variant type in variant-ctor-expr"
       end in
