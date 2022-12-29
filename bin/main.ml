@@ -758,7 +758,7 @@ let main = begin
       let return_tuple_func_def = {
         f_decl = {
           f_name = "return_tuple";
-          f_ret_t = Tuple([U8; U16; F32]);
+          f_ret_t = Undecided;
           f_params = [];
         };
         f_stmts = [
