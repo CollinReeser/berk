@@ -838,32 +838,41 @@ and type_check_expr
           variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
         in
 
-        let final_v_t = begin match expected_t with
-          | Undecided -> resolved_v_t
-          | Variant(_, _) ->
-              let tvars_to_t = map_tvars_to_types resolved_v_t expected_t in
-              concretify_unbound_types tvars_to_t resolved_v_t
-          | _ ->
-            failwith "Unexpected non-variant type expected in variant ctor expr"
-        end in
-
-        Printf.printf "final_v_t: [[ %s ]]\n%!" (fmt_type final_v_t) ;
-
-        VariantCtorExpr(final_v_t, ctor_name, ctor_exp_typechecked)
+        VariantCtorExpr(resolved_v_t, ctor_name, ctor_exp_typechecked)
   end in
 
   let exp_typechecked = _type_check_expr exp in
 
-  let _ = if is_concrete_expr exp_typechecked then
-      ()
-    else
-      begin
-        Printf.printf "[" ;
-        print_expr ~print_typ:true "" exp_typechecked ;
-        Printf.printf "]\n%!" ;
-        failwith "Non-concrete expr!"
-      end
-    in
+  let exp_typechecked_final = if is_concrete_expr exp_typechecked then
+    exp_typechecked
+  else
+    begin match expected_t with
+      | Undecided -> exp_typechecked
+      | _ ->
+          let exp_typechecked_t = expr_type exp_typechecked in
+          Printf.printf
+            "Type not yet concrete: [[ %s ]]\n%!" (fmt_type exp_typechecked_t) ;
+          let tvars_to_t = map_tvars_to_types exp_typechecked_t expected_t in
+          let concrete_t =
+            concretify_unbound_types tvars_to_t exp_typechecked_t
+          in
+          let exp_typechecked_final =
+            inject_type_into_expr concrete_t exp_typechecked
+          in
+          if is_concrete_expr exp_typechecked_final then
+            begin
+              Printf.printf
+                "Type made concrete: [[ %s ]]\n%!" (fmt_type concrete_t) ;
+              exp_typechecked_final
+            end
+          else begin
+            Printf.printf "[" ;
+            print_expr ~print_typ:true "" exp_typechecked ;
+            Printf.printf "]\n%!" ;
+            failwith "Non-concrete expr!"
+          end
+    end
+  in
 
-  exp_typechecked
+  exp_typechecked_final
 ;;

@@ -101,6 +101,38 @@ let expr_type exp =
   | VariantCtorExpr(typ, _, _) -> typ
 ;;
 
+let inject_type_into_expr typ exp =
+  match exp with
+  | ValNil
+  | ValU64 (_)
+  | ValU32 (_)
+  | ValU16 (_)
+  | ValU8  (_)
+  | ValI64 (_)
+  | ValI32 (_)
+  | ValI16 (_)
+  | ValI8  (_)
+  | ValF128(_)
+  | ValF64 (_)
+  | ValF32 (_)
+  | ValBool(_)
+  | ValStr (_) -> exp
+
+  | ValVar         (_, a)       -> ValVar         (typ, a)
+  | ArrayExpr      (_, a)       -> ArrayExpr      (typ, a)
+  | TupleExpr      (_, a)       -> TupleExpr      (typ, a)
+  | ValCastTrunc   (_, a)       -> ValCastTrunc   (typ, a)
+  | ValCastBitwise (_, a)       -> ValCastBitwise (typ, a)
+  | FuncCall       (_, a, b)    -> FuncCall       (typ, a, b)
+  | BlockExpr      (_, a, b)    -> BlockExpr      (typ, a, b)
+  | IndexExpr      (_, a, b)    -> IndexExpr      (typ, a, b)
+  | StaticIndexExpr(_, a, b)    -> StaticIndexExpr(typ, a, b)
+  | VariantCtorExpr(_, a, b)    -> VariantCtorExpr(typ, a, b)
+  | BinOp          (_, a, b, c) -> BinOp          (typ, a, b, c)
+  | WhileExpr      (_, a, b, c) -> WhileExpr      (typ, a, b, c)
+  | IfThenElseExpr (_, a, b, c) -> IfThenElseExpr (typ, a, b, c)
+;;
+
 type v_ctor = (string * berk_t)
 
 and variant_decl_t = {
