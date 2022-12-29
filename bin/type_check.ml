@@ -506,6 +506,9 @@ and type_check_stmts tc_ctxt stmts =
       let (tc_ctxt_final, stmts_tced) = type_check_stmts tc_ctxt_updated xs in
       (tc_ctxt_final, stmt_tced :: stmts_tced)
 
+(* Given a list of expressions, attempt to collapse/"unify" the types each
+expression claims to have, with the expectation that they all ultimately agree
+with each other, with respect to type variable mappings. *)
 and collapse_expr_type_alternates_n tc_ctxt expr_lst =
   let expr_t_lst = List.map expr_type expr_lst in
   let expr_t_2_tuples = list_to_2_tuples expr_t_lst in
