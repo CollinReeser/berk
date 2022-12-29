@@ -70,8 +70,8 @@ and stmt =
   | ReturnStmt of expr
 ;;
 
-let expr_type typ =
-  match typ with
+let expr_type exp =
+  match exp with
   | ValNil -> Nil
   | ValU64(_) -> U64
   | ValU32(_) -> U32
