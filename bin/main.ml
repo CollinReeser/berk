@@ -809,6 +809,15 @@ let main = begin
             ),
             VariantCtorExpr(Undecided, "Right", ValI16(2222))
           );
+          DeclStmt(
+            "dummy_trilean_abstract", def_var_qual,
+            Variant(
+              "Trilean", [
+                ("Left", U64); ("Right", Unbound("`b")); ("Ziltch", Nil)
+              ]
+            ),
+            VariantCtorExpr(Undecided, "Right", ValI16(2222))
+          );
           ReturnStmt(
             VariantCtorExpr(Undecided, "Some", ValBool(true))
           )

@@ -394,14 +394,14 @@ let rec is_concrete_type ?(verbose=false) typ =
   res
 ;;
 
-(* Given an assumed less-concrete type containing some count of unbound
-type-variables, an assumed more-concrete type, return a mapping from the
-string-type-variables to their corresponding concrete types.
+(* Given two types, each possibly some degree short of concrete, return a
+mapping from the string-type-variables in one to their corresponding concrete
+types in the other.
 
 Fails if the given types are not structurally identical. *)
-let map_tvars_to_types templated_typ concrete_typ =
-  let rec _map_tvars_to_types map_so_far templated_typ concrete_typ =
-    match templated_typ, concrete_typ with
+let map_tvars_to_types lhs_typ rhs_typ =
+  let rec _map_tvars_to_types map_so_far lhs_typ rhs_typ =
+    match lhs_typ, rhs_typ with
     | (U64, U64)   | (U32, U32) | (U16, U16) | (U8, U8)
     | (I64, I64)   | (I32, I32) | (I16, I16) | (I8, I8)
     | (F128, F128) | (F64, F64) | (F32, F32)
@@ -411,7 +411,8 @@ let map_tvars_to_types templated_typ concrete_typ =
     | (VarArgSentinel, VarArgSentinel)
     | (Undecided, Undecided) -> map_so_far
 
-    | (Unbound(tvar), concrete) ->
+    | (Unbound(tvar), concrete)
+    | (concrete, Unbound(tvar)) ->
         begin match (StrMap.find_opt tvar map_so_far) with
           | None -> StrMap.add tvar concrete map_so_far
           | Some(already_concrete) ->
@@ -433,15 +434,15 @@ let map_tvars_to_types templated_typ concrete_typ =
         ) map_so_far lhs_ctors rhs_ctors
 
     | _ ->
-        let templ_fmt = fmt_type templated_typ in
-        let concr_fmt = fmt_type concrete_typ in
+        let lhs_fmt = fmt_type lhs_typ in
+        let rhs_fmt = fmt_type rhs_typ in
         failwith (
           "Called with non-structurally-identical types: [[ " ^
-          templ_fmt ^ " ]] vs [[ " ^ concr_fmt ^ " ]]"
+          lhs_fmt ^ " ]] vs [[ " ^ rhs_fmt ^ " ]]"
         )
 
   in
-  _map_tvars_to_types StrMap.empty templated_typ concrete_typ
+  _map_tvars_to_types StrMap.empty lhs_typ rhs_typ
 ;;
 
 (* Given a type, return a list of all of the string type variables. *)

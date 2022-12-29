@@ -337,8 +337,13 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       let resolved_t = match decl_t with
       | Undecided -> exp_t
       | _ ->
-        if type_convertible_to exp_t decl_t
-        then decl_t
+        (* The expression's resolved type must be usable as the explicitly
+        declared type. That said, the explicitly declared type may not have been
+        fully resolved itself, but the expression's type ultimately should be
+        (though it may have needed to use the explicitly-declared type's
+        typevar info to fully resolve itself). *)
+        if type_convertible_to exp_t decl_t then
+           exp_t
         else
           begin
             Printf.printf (
@@ -770,14 +775,13 @@ and type_check_expr
         let final_v_t = begin match expected_t with
           | Undecided -> resolved_v_t
           | Variant(_, _) ->
-            if not (is_concrete_type expected_t) then
-              failwith "Variant expression given explicit but unresolved type"
-            else
               let tvars_to_t = map_tvars_to_types resolved_v_t expected_t in
               concretify_unbound_types tvars_to_t resolved_v_t
           | _ ->
             failwith "Unexpected non-variant type expected in variant ctor expr"
         end in
+
+        Printf.printf "final_v_t: [[ %s ]]\n%!" (fmt_type final_v_t) ;
 
         VariantCtorExpr(final_v_t, ctor_name, ctor_exp_typechecked)
   end in
