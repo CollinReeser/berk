@@ -774,6 +774,24 @@ let main = begin
         ];
       } in
 
+      let return_smart_infer_option_func_def = {
+        f_decl = {
+          f_name = "return_smart_infer_option";
+          f_ret_t = Undecided;
+          f_params = [];
+        };
+        f_stmts = [
+          ReturnStmt(
+            IfThenElseExpr(
+              Undecided,
+              ValBool(true),
+              VariantCtorExpr(Undecided, "None", ValNil),
+              VariantCtorExpr(Undecided, "Some", ValU8(17))
+            )
+          )
+        ];
+      } in
+
       let return_some_func_def = {
         f_decl = {
           f_name = "return_some";
@@ -895,6 +913,7 @@ let main = begin
         FuncDef(collatz_highest_seed_func_def);
         FuncDef(return_tuple_func_def);
         FuncDef(collatz_print_seq_func_def);
+        FuncDef(return_smart_infer_option_func_def);
         FuncDef(return_some_func_def);
         FuncDef(main_func_def);
       ] in

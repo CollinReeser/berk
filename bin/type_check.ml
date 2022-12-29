@@ -1,6 +1,7 @@
 open Ast
 open Pretty_print
 open Typing
+open Utility
 
 module StrMap = Map.Make(String)
 
@@ -505,6 +506,62 @@ and type_check_stmts tc_ctxt stmts =
       let (tc_ctxt_final, stmts_tced) = type_check_stmts tc_ctxt_updated xs in
       (tc_ctxt_final, stmt_tced :: stmts_tced)
 
+and collapse_expr_type_alternates_n tc_ctxt expr_lst =
+  let expr_t_lst = List.map expr_type expr_lst in
+  let expr_t_2_tuples = list_to_2_tuples expr_t_lst in
+  let (tvars_to_types, _) =
+    List.fold_left_map (
+      fun map_so_far (lhs_t, rhs_t) ->
+        let map_up = map_tvars_to_types ~init_map:map_so_far lhs_t rhs_t in
+        (map_up, ())
+    ) StrMap.empty expr_t_2_tuples
+  in
+  let expr_t_concretified_lst =
+    List.map (concretify_unbound_types tvars_to_types) expr_t_lst
+  in
+  let expr_resolved_lst =
+    List.map2 (type_check_expr tc_ctxt) expr_t_concretified_lst expr_lst
+  in
+  let expr_t_resolved_lst = List.map expr_type expr_resolved_lst in
+
+  let _ = begin
+    let all_concrete =
+      List.fold_left (&&) true (
+        List.map is_concrete_type expr_t_lst
+      )
+    in
+    if all_concrete then
+      ()
+    else begin
+      Printf.printf "Attempted to collapse non-concrete expressions to concrete, from:\n" ;
+      print_join_exprs ~print_typ:true "" "..]!![.." expr_lst ;
+      Printf.printf "\nTo:\n" ;
+      print_join_exprs ~print_typ:true "" "..]!![.." expr_resolved_lst ;
+      Printf.printf "\n"
+    end
+  end in
+
+  let agreement_t = common_type_of_lst expr_t_resolved_lst in
+
+  (
+    agreement_t,
+    expr_resolved_lst
+  )
+
+and collapse_expr_type_alternates_2 tc_ctxt lhs_expr rhs_expr =
+  let (agreement_t, collapsed) =
+    collapse_expr_type_alternates_n tc_ctxt [lhs_expr; rhs_expr]
+  in
+  match collapsed with
+  | [lhs_expr_collapsed; rhs_expr_collapsed] ->
+    (
+      agreement_t,
+      lhs_expr_collapsed,
+      rhs_expr_collapsed
+    )
+  | _ -> failwith "Collapse did not yield same-size list on output"
+
+
 (* expected_t is what type the expression is expected to evaluate to. We
 normally don't care about this, because the stmt-level typecheck will ensure the
 expression is the right type. However, in cases of eg variants/structs that
@@ -581,24 +638,33 @@ and type_check_expr
         let if_cond_typechecked = _type_check_expr if_cond in
         let if_cond_t = expr_type if_cond_typechecked in
 
-        let then_expr_typechecked = _type_check_expr then_expr in
-        let then_expr_t = expr_type then_expr_typechecked in
-
-        let else_expr_typechecked = _type_check_expr else_expr in
-        let else_expr_t = expr_type else_expr_typechecked in
-
         let _ = match if_cond_t with
         | Bool -> ()
         | _ -> failwith "if-expr condition must resolve to Bool"
         in
 
-        let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
+        let then_expr_typechecked = _type_check_expr then_expr in
+        let else_expr_typechecked = _type_check_expr else_expr in
+
+        (* Opportunistic additional type inference intelligence. If one branch
+        was able to determine its type, but the other side was not, then we
+        assume the other side was supposed to match, and retry typechecking
+        that branch. *)
+
+        let (
+          then_else_agreement_t,
+          then_expr_typechecked_final,
+          else_expr_typechecked_final
+        ) =
+          collapse_expr_type_alternates_2
+            tc_ctxt then_expr_typechecked else_expr_typechecked
+        in
 
         IfThenElseExpr(
           then_else_agreement_t,
           if_cond_typechecked,
-          then_expr_typechecked,
-          else_expr_typechecked
+          then_expr_typechecked_final,
+          else_expr_typechecked_final
         )
 
     | WhileExpr(_, while_cond, then_stmts, finally_expr) ->

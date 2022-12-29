@@ -86,34 +86,55 @@ let def_var_qual = {mut = false}
 let rec common_type_of_lr lhs rhs =
   let _common_type_of_lr lhs rhs =
     match (lhs, rhs) with
-    | (I64, I64)
-    | (I32, I64)
-    | (I16, I64)
-    | (I8,  I64) -> Some(I64)
-    | (I32, I32)
-    | (I16, I32)
-    | (I8,  I32) -> Some(I32)
-    | (I16, I16)
-    | (I8,  I16) -> Some(I16)
-    | (I8,  I8)  -> Some(I8)
-    | (U64, U64)
-    | (U32, U64)
-    | (U16, U64)
-    | (U8,  U64) -> Some(U64)
-    | (U32, U32)
-    | (U16, U32)
-    | (U8,  U32) -> Some(U32)
-    | (U16, U16)
-    | (U8,  U16) -> Some(U16)
-    | (U8,  U8)  -> Some(U8)
-    | (F128, F128)
-    | (F64, F128)
-    | (F32, F128) -> Some(F128)
-    | (F64, F64)
-    | (F32, F64)  -> Some(F64)
-    | (F32, F32)  -> Some(F32)
-    | (Bool, Bool) -> Some(Bool)
-    | (Nil, Nil) -> Some(Nil)
+    | (Undecided,  Undecided) -> Some(Undecided)
+    | (Nil,              Nil) -> Some(Nil)
+    | ((I64|I32|I16|I8), I64) -> Some(I64)
+    | ((I32|I16|I8),     I32) -> Some(I32)
+    | ((I16|I8),         I16) -> Some(I16)
+    | (I8,               I8 ) -> Some(I8)
+    | ((U64|U32|U16|U8), U64) -> Some(U64)
+    | ((U32|U16|U8),     U32) -> Some(U32)
+    | ((U16|U8),         U16) -> Some(U16)
+    | (U8,               U8 ) -> Some(U8)
+    | ((F128|F64|F32),  F128) -> Some(F128)
+    | ((F64|F32),       F64 ) -> Some(F64)
+    | (F32,             F32 ) -> Some(F32)
+    | (Bool,            Bool) -> Some(Bool)
+
+    | (Unbound(lhs), Unbound(rhs)) ->
+        if lhs = rhs then
+          Some(Unbound(lhs))
+        else
+          None
+
+    | (Tuple(lhs_typs), Tuple(rhs_typs)) ->
+        let common_tup_typs = List.map2 common_type_of_lr lhs_typs rhs_typs in
+        Some(Tuple(common_tup_typs))
+
+    | (Array(lhs_elem_typ, lhs_sz), Array(rhs_elem_typ, rhs_sz)) ->
+        if lhs_sz = rhs_sz then
+          let common_elem_typ = common_type_of_lr lhs_elem_typ rhs_elem_typ in
+          Some(Array(common_elem_typ, lhs_sz))
+        else
+          None
+
+    | (Variant(lhs_name, lhs_ctor_lst), Variant(rhs_name, rhs_ctor_lst)) ->
+        if lhs_name = rhs_name then
+          if (List.compare_lengths lhs_ctor_lst rhs_ctor_lst) = 0 then
+            let common_ctors = List.map2 (
+                fun (lhs_ctor_name, lhs_typ) (rhs_ctor_name, rhs_typ) ->
+                  if lhs_ctor_name = rhs_ctor_name then
+                    let common_ctor_typ = common_type_of_lr lhs_typ rhs_typ in
+                    (lhs_ctor_name, common_ctor_typ)
+                  else
+                    failwith "Mismatched ctor names"
+              ) lhs_ctor_lst rhs_ctor_lst
+            in
+            Some(Variant(lhs_name, common_ctors))
+          else
+            None
+        else
+          None
 
     | _ -> None
   in
@@ -398,28 +419,49 @@ let rec is_concrete_type ?(verbose=false) typ =
 mapping from the string-type-variables in one to their corresponding concrete
 types in the other.
 
-Fails if the given types are not structurally identical. *)
-let map_tvars_to_types lhs_typ rhs_typ =
+Fails if the given types are not structurally identical, ie, matching aggregrate
+structure and component types at least one-way convertible. *)
+let map_tvars_to_types ?(init_map=StrMap.empty) lhs_typ rhs_typ =
   let rec _map_tvars_to_types map_so_far lhs_typ rhs_typ =
     match lhs_typ, rhs_typ with
-    | (U64, U64)   | (U32, U32) | (U16, U16) | (U8, U8)
-    | (I64, I64)   | (I32, I32) | (I16, I16) | (I8, I8)
-    | (F128, F128) | (F64, F64) | (F32, F32)
-    | (Bool, Bool)
-    | (String, String)
-    | (Nil, Nil)
-    | (VarArgSentinel, VarArgSentinel)
-    | (Undecided, Undecided) -> map_so_far
+    | (Unbound(lhs_tvar), Unbound(rhs_tvar)) ->
+        (* Sanity check: These mappings from type-variable to concrete type are
+        only sane if there is agreement between the two types on structurally
+        _where_ specific type variables could exist. *)
+        if lhs_tvar = rhs_tvar then
+          map_so_far
+        else
+          failwith "Types disagree on structural location of tvars"
+
+    | (Unbound(_), Undecided)
+    | (Undecided, Unbound(_)) ->
+        (* Don't record a mapping from a type variable to an undecided type. *)
+        map_so_far
 
     | (Unbound(tvar), concrete)
     | (concrete, Unbound(tvar)) ->
-        begin match (StrMap.find_opt tvar map_so_far) with
+        (*  The critical pattern: If one type has an unbound type variable and
+        the other has a concrete type, then we can add that mapping to our
+        collection. *)
+        begin if is_concrete_type concrete then
+          match (StrMap.find_opt tvar map_so_far) with
           | None -> StrMap.add tvar concrete map_so_far
           | Some(already_concrete) ->
               if concrete = already_concrete
               then map_so_far
               else failwith ("Cannot map multiple types to type var " ^ tvar)
+        else
+          map_so_far
         end
+
+    | ( (U64|U32|U16|U8), (U64|U32|U16|U8))
+    | ( (I64|I32|I16|I8), (I64|I32|I16|I8))
+    | ((F128|F64|F32),   (F128|F64|F32))
+    | (Bool, Bool)
+    | (String, String)
+    | (Nil, Nil)
+    | (VarArgSentinel, VarArgSentinel)
+    | (Undecided, Undecided) -> map_so_far
 
     | (Tuple(lhs_typs), Tuple(rhs_typs)) ->
         List.fold_left2 _map_tvars_to_types map_so_far lhs_typs rhs_typs
@@ -442,7 +484,7 @@ let map_tvars_to_types lhs_typ rhs_typ =
         )
 
   in
-  _map_tvars_to_types StrMap.empty lhs_typ rhs_typ
+  _map_tvars_to_types init_map lhs_typ rhs_typ
 ;;
 
 (* Given a type, return a list of all of the string type variables. *)
