@@ -86,7 +86,10 @@ let def_var_qual = {mut = false}
 let rec common_type_of_lr lhs rhs =
   let _common_type_of_lr lhs rhs =
     match (lhs, rhs) with
-    | (Undecided,  Undecided) -> Some(Undecided)
+    | (Undecided, Undecided) -> Some(Undecided)
+    | (_,         Undecided) -> Some(lhs)
+    | (Undecided,         _) -> Some(rhs)
+
     | (Nil,              Nil) -> Some(Nil)
     | ((I64|I32|I16|I8), I64) -> Some(I64)
     | ((I32|I16|I8),     I32) -> Some(I32)
@@ -100,12 +103,16 @@ let rec common_type_of_lr lhs rhs =
     | ((F64|F32),       F64 ) -> Some(F64)
     | (F32,             F32 ) -> Some(F32)
     | (Bool,            Bool) -> Some(Bool)
+    | (String,        String) -> Some(String)
 
-    | (Unbound(lhs), Unbound(rhs)) ->
-        if lhs = rhs then
-          Some(Unbound(lhs))
+    | (Unbound(lhs_typevar), Unbound(rhs_typevar)) ->
+        if lhs_typevar = rhs_typevar then
+          Some(Unbound(lhs_typevar))
         else
           None
+
+    | (Unbound(_), _) -> Some(rhs)
+    | (_, Unbound(_)) -> Some(rhs)
 
     | (Tuple(lhs_typs), Tuple(rhs_typs)) ->
         let common_tup_typs = List.map2 common_type_of_lr lhs_typs rhs_typs in
@@ -143,7 +150,12 @@ let rec common_type_of_lr lhs rhs =
   | None ->
     match _common_type_of_lr rhs lhs with
     | Some(t) -> t
-    | None -> failwith "No common type"
+    | None ->
+        let lhs_fmt = fmt_type lhs in
+        let rhs_fmt = fmt_type rhs in
+        failwith (
+          "No common type between [[" ^ lhs_fmt ^ "]] [[" ^ rhs_fmt ^ "]]"
+        )
 
 and common_type_of_lst lst =
   match lst with
@@ -155,6 +167,7 @@ and common_type_of_lst lst =
 let rec type_convertible_to from_t to_t =
   match (from_t, to_t) with
   | (_, Unbound(_)) -> true
+  | (Unbound(_), _) -> true
 
   | (I64, I64)
   | (I32, I64)
