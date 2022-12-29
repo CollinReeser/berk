@@ -876,7 +876,8 @@ and type_check_expr
             Printf.printf "[" ;
             print_expr ~print_typ:true "" exp_typechecked ;
             Printf.printf "]\n%!" ;
-            failwith "Non-concrete expr!"
+            Printf.printf "Non-concrete expr!\n%!" ;
+            exp_typechecked_final
           end
     end
   in

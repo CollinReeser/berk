@@ -836,6 +836,20 @@ let main = begin
             ),
             VariantCtorExpr(Undecided, "Right", ValI16(2222))
           );
+          DeclStmt(
+            "dummy_trilean_tri_branch", def_var_qual, Undecided,
+            IfThenElseExpr(
+              Undecided,
+              ValBool(false),
+              VariantCtorExpr(Undecided, "Right", ValF32(1.23)),
+              IfThenElseExpr(
+                Undecided,
+                ValBool(true),
+                VariantCtorExpr(Undecided, "Ziltch", ValNil),
+                VariantCtorExpr(Undecided, "Left", ValStr("Hello, World!"))
+              )
+            )
+          );
           ReturnStmt(
             VariantCtorExpr(Undecided, "Some", ValBool(true))
           )
