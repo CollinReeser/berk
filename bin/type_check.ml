@@ -856,6 +856,10 @@ and type_check_expr
           let concrete_t =
             concretify_unbound_types tvars_to_t exp_typechecked_t
           in
+          (* FIXME: This seems almost certainly buggy. eg, if we're injecting a
+          resolved type into an if-expression, that doesn't mean that injection
+          propagates to the then/else branch expressions, so there are still
+          unresolved types. *)
           let exp_typechecked_final =
             inject_type_into_expr concrete_t exp_typechecked
           in
