@@ -868,6 +868,59 @@ let main = begin
               )
             )
           );
+          DeclStmt(
+            "dummy_ReUseAgreement", def_var_qual, Undecided,
+            IfThenElseExpr(
+              Undecided,
+              ValBool(false),
+              VariantCtorExpr(
+                Undecided, "OneTup",
+                TupleExpr(Undecided, [ValU64(10)])
+              ),
+              IfThenElseExpr(
+                Undecided,
+                ValBool(true),
+                VariantCtorExpr(
+                  Undecided, "TwoTup",
+                  TupleExpr(Undecided, [ValU32(20); ValI8(30)])
+                ),
+                VariantCtorExpr(
+                  Undecided, "TriTup",
+                  TupleExpr(Undecided, [ValU64(20); ValI16(30); ValStr("Tri!")])
+                )
+              )
+            )
+          );
+          DeclStmt(
+            "dummy_ReUseAgreement_Force", def_var_qual,
+            Variant(
+              "ReUseAgreement", [
+                ("OneTup", Tuple([U64]));
+                ("TwoTup", Tuple([U64; I64]));
+                ("TriTup", Tuple([U64; I64; I32]))
+              ]
+            ),
+            IfThenElseExpr(
+              Undecided,
+              ValBool(false),
+              VariantCtorExpr(
+                Undecided, "OneTup",
+                TupleExpr(Undecided, [ValU32(10)])
+              ),
+              IfThenElseExpr(
+                Undecided,
+                ValBool(true),
+                VariantCtorExpr(
+                  Undecided, "TwoTup",
+                  TupleExpr(Undecided, [ValU16(20); ValI8(30)])
+                ),
+                VariantCtorExpr(
+                  Undecided, "TriTup",
+                  TupleExpr(Undecided, [ValU8(20); ValI16(30); ValI32(70)])
+                )
+              )
+            )
+          );
           ReturnStmt(
             VariantCtorExpr(Undecided, "Some", ValBool(true))
           )
@@ -936,6 +989,17 @@ let main = begin
               ("South", Unbound("`d"));
             ];
             v_typ_vars = ["`a"; "`b"; "`c"; "`d"];
+          }
+        );
+        VariantDecl(
+          {
+            v_name = "ReUseAgreement";
+            v_ctors = [
+              ("OneTup", Tuple([Unbound("`a")]));
+              ("TwoTup", Tuple([Unbound("`a"); Unbound("`b")]));
+              ("TriTup", Tuple([Unbound("`a"); Unbound("`b"); Unbound("`c")]));
+            ];
+            v_typ_vars = ["`a"; "`b"; "`c"];
           }
         );
         FuncExternDecl(

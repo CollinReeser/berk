@@ -521,10 +521,32 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
   let expr_t_concretified_lst =
     List.map (concretify_unbound_types tvars_to_types) expr_t_lst
   in
-  let expr_resolved_lst =
-    List.map2 (type_check_expr tc_ctxt) expr_t_concretified_lst expr_lst
+  let agreement_candidate_t = common_type_of_lst expr_t_concretified_lst in
+
+  Printf.printf "Common CANDIDATE agreement type is: [[ %s ]]\n" (fmt_type agreement_candidate_t) ;
+
+  let expr_resolved_injected_lst =
+    List.map (inject_type_into_expr agreement_candidate_t) expr_lst
   in
-  let expr_t_resolved_lst = List.map expr_type expr_resolved_lst in
+
+  let expr_resolved_lst =
+    List.map (type_check_expr tc_ctxt agreement_candidate_t) expr_resolved_injected_lst
+  in
+
+  Printf.printf "expr_resolved_lst: \n" ;
+
+  List.iter (
+    fun exp ->
+      Printf.printf "  [[ " ;
+      print_expr ~print_typ:true "" exp ;
+      Printf.printf " ]] \n"
+  ) expr_resolved_lst ;
+
+  let expr_t_resolved_lst = List.map expr_type expr_resolved_injected_lst in
+
+  List.iter (
+    fun t -> Printf.printf "expr_t_resolved: [[ %s ]]\n" (fmt_type t)
+  ) expr_t_resolved_lst;
 
   let _ = begin
     let all_concrete =
@@ -840,7 +862,24 @@ and type_check_expr
         TupleExpr(tuple_t, exprs_typechecked)
 
     | VariantCtorExpr(_, ctor_name, ctor_exp) ->
-        let ctor_exp_typechecked = _type_check_expr ctor_exp in
+        let ctor_exp_expected_t = begin match expected_t with
+          | Undecided -> Undecided
+          | Variant(_, ctors) ->
+              let (_, ctor_exp_t) = List.find (
+                  fun (name, _) -> name = ctor_name
+                ) ctors
+              in
+              ctor_exp_t
+          | _ ->
+              failwith (
+                "Unexpectedly expecting non-variant type in " ^
+                "variant expression: " ^ (fmt_type expected_t)
+              )
+        end in
+
+        let ctor_exp_typechecked =
+          type_check_expr tc_ctxt ctor_exp_expected_t ctor_exp
+        in
         let ctor_exp_typ = expr_type ctor_exp_typechecked in
         let resolved_v_t : berk_t =
           variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
@@ -849,43 +888,41 @@ and type_check_expr
         VariantCtorExpr(resolved_v_t, ctor_name, ctor_exp_typechecked)
   end in
 
+  (* First, allow the typechecker to try to infer types as much as possible. *)
   let exp_typechecked = _type_check_expr exp in
 
-  let exp_typechecked_final = if is_concrete_expr exp_typechecked then
-    exp_typechecked
-  else
-    begin match expected_t with
-      | Undecided -> exp_typechecked
-      | _ ->
-          let exp_typechecked_t = expr_type exp_typechecked in
-          Printf.printf
-            "Type not yet concrete: [[ %s ]]\n%!" (fmt_type exp_typechecked_t) ;
-          let tvars_to_t = map_tvars_to_types exp_typechecked_t expected_t in
-          let concrete_t =
-            concretify_unbound_types tvars_to_t exp_typechecked_t
-          in
-          (* FIXME: This seems almost certainly buggy. eg, if we're injecting a
-          resolved type into an if-expression, that doesn't mean that injection
-          propagates to the then/else branch expressions, so there are still
-          unresolved types. *)
-          let exp_typechecked_final =
-            inject_type_into_expr concrete_t exp_typechecked
-          in
-          if is_concrete_expr exp_typechecked_final then
-            begin
-              Printf.printf
-                "Type made concrete: [[ %s ]]\n%!" (fmt_type concrete_t) ;
-              exp_typechecked_final
-            end
-          else begin
-            Printf.printf "[" ;
-            print_expr ~print_typ:true "" exp_typechecked ;
-            Printf.printf "]\n%!" ;
-            Printf.printf "Non-concrete expr!\n%!" ;
+  (* Then, inject the expected type, which may require implicit conversions
+  from subset to superset types, but should otherwise apply cleanly if the
+  explicitly declared type is compatible with the inferred types. This is also
+  necessary to make types resolved in alternate branches of a single expression
+  (eg, if-expr) agree with each other. *)
+  let exp_typechecked_final = begin match expected_t with
+    | Undecided -> exp_typechecked
+    | _ ->
+        let exp_typechecked_t = expr_type exp_typechecked in
+        Printf.printf
+          "Type not yet concrete: [[ %s ]]\n%!" (fmt_type exp_typechecked_t) ;
+        let tvars_to_t = map_tvars_to_types exp_typechecked_t expected_t in
+        let concrete_t =
+          concretify_unbound_types tvars_to_t exp_typechecked_t
+        in
+        let exp_typechecked_final =
+          inject_type_into_expr concrete_t exp_typechecked
+        in
+        if is_concrete_expr exp_typechecked_final then
+          begin
+            Printf.printf
+              "Type made concrete: [[ %s ]]\n%!" (fmt_type concrete_t) ;
             exp_typechecked_final
           end
-    end
-  in
+        else begin
+          Printf.printf "[" ;
+          print_expr ~print_typ:true "" exp_typechecked ;
+          Printf.printf "]\n%!" ;
+          Printf.printf "Non-concrete expr!\n%!" ;
+          exp_typechecked_final
+        end
+  end in
 
   exp_typechecked_final
 ;;
