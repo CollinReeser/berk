@@ -896,9 +896,13 @@ and type_check_expr
     | Undecided -> exp_typechecked_t
     | _ ->
         let inject_t = begin
-          (* If the expected type is concrete, that should be all we need. *)
+          (* If the expected type is concrete, that should be all we need. If
+          injecting this type doesn't typecheck, then the user needs to
+          re-assess their explicit type declaration or what they expect the
+          expression to evaluate to. *)
           if is_concrete_type expected_t then
             expected_t
+
           (* If the expected type is not concrete, then maybe the inferred type
           has enough information to create an overall-concrete, or
           more-concrete, type. *)
@@ -928,12 +932,15 @@ and type_check_expr
         inject_t
   end in
 
-  (*  *)
+  (* Inject the evaluated type back into the expression, which can in particular
+  be helpful to normalize types between alternate branches in expressions like
+  if-expr. *)
   let exp_typechecked_final = begin
     let already_concrete = begin
       if is_concrete_expr exp_typechecked then
         true
       else
+        (* DEBUG output *)
         let _ = Printf.printf
           "Expr not yet concrete: [[ %s ]]\n%!" (fmt_type exp_typechecked_t)
         in
@@ -944,6 +951,7 @@ and type_check_expr
       inject_type_into_expr inject_t exp_typechecked
     in
 
+    (* DEBUG output *)
     let _ =
       if not already_concrete then
         if is_concrete_expr exp_typechecked_injected then
