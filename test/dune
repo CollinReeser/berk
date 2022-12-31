@@ -1,7 +1,7 @@
 (executables
  (names test_berk test_utility)
  (libraries
-    berk_ocaml
+    berk
     alcotest
   )
 )

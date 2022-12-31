@@ -2,6 +2,6 @@
  (public_name berk)
  (name main)
  (libraries
-   berk_ocaml
+   berk
  )
 )

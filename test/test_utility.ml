@@ -1,4 +1,4 @@
-open Berk_ocaml.Utility
+open Berk.Utility
 
 let test_tuplify () =
   Alcotest.(check (list (pair int int))) "tuplify"

@@ -1,5 +1,5 @@
 (library
- (name berk_ocaml)
+ (name berk)
  (libraries
     ctypes.foreign
     llvm
