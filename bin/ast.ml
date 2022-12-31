@@ -320,10 +320,6 @@ and print_stmt ?(print_typ = false) ind stmt =
 
 (* Force-apply a top-level type to the given expression, recursively. *)
 let rec inject_type_into_expr ?(ind="") typ exp =
-  Printf.printf "%sInjecting: [[ %s ]] into expr [[ " ind (fmt_type typ) ;
-  print_expr ~print_typ:true ind exp ;
-  Printf.printf "%s ]]\n" ind ;
-
   let exp_t = expr_type exp in
   let tvars_to_t = map_tvars_to_types typ exp_t in
 
@@ -336,9 +332,8 @@ let rec inject_type_into_expr ?(ind="") typ exp =
       "type [[" ^ (fmt_type exp_t) ^ "]]"
     )
   else
-    let exp_up = begin match (typ, exp) with
-    | (Undecided, _) ->
-        failwith "Refuse to inject undecided type into expr"
+    match (typ, exp) with
+    | (Undecided, _) -> failwith "Refuse to inject undecided type into expr"
 
     | (Unbound(a), _) ->
         let exp_t = expr_type exp in
@@ -502,12 +497,6 @@ let rec inject_type_into_expr ?(ind="") typ exp =
         print_expr ~print_typ:true "" exp ;
         Printf.printf "%s ]]\n" ind ;
         failwith ("Cannot inject type [[ " ^ (fmt_type typ) ^ " ]] into expr")
-
-    end in
-    Printf.printf "%s  Injected [[ %s ]] to yield expr [[ " ind (fmt_type typ) ;
-    print_expr ~print_typ:true (ind ^ "  ") exp_up ;
-    Printf.printf "%s ]]\n" ind ;
-    exp_up
 ;;
 
 type v_ctor = (string * berk_t)

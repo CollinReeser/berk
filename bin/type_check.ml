@@ -523,9 +523,6 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
   in
   let agreement_candidate_t = common_type_of_lst expr_t_concretified_lst in
 
-  (* DEBUG *)
-  Printf.printf "Common CANDIDATE agreement type is: [[ %s ]]\n" (fmt_type agreement_candidate_t) ;
-
   let expr_resolved_injected_lst =
     List.map (inject_type_into_expr agreement_candidate_t) expr_lst
   in
@@ -534,45 +531,9 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
     List.map (type_check_expr tc_ctxt agreement_candidate_t) expr_resolved_injected_lst
   in
 
-  (* DEBUG *)
-  Printf.printf "expr_resolved_lst: \n" ;
-
-  List.iter (
-    fun exp ->
-      Printf.printf "  [[ " ;
-      print_expr ~print_typ:true "" exp ;
-      Printf.printf " ]] \n"
-  ) expr_resolved_lst ;
-
   let expr_t_resolved_lst = List.map expr_type expr_resolved_injected_lst in
 
-  (* DEBUG *)
-  List.iter (
-    fun t -> Printf.printf "expr_t_resolved: [[ %s ]]\n" (fmt_type t)
-  ) expr_t_resolved_lst;
-
-  (* DEBUG *)
-  let _ = begin
-    let all_concrete =
-      List.fold_left (&&) true (
-        List.map is_concrete_type expr_t_lst
-      )
-    in
-    if all_concrete then
-      ()
-    else begin
-      Printf.printf "Attempted to collapse non-concrete expressions to concrete, from:\n" ;
-      print_join_exprs ~print_typ:true "" "..]!![.." expr_lst ;
-      Printf.printf "\nTo:\n" ;
-      print_join_exprs ~print_typ:true "" "..]!![.." expr_resolved_lst ;
-      Printf.printf "\n"
-    end
-  end in
-
   let agreement_t = common_type_of_lst expr_t_resolved_lst in
-
-  (* DEBUG *)
-  Printf.printf "Common agreement type is: [[ %s ]]\n" (fmt_type agreement_t) ;
 
   (
     agreement_t,
@@ -912,29 +873,9 @@ and type_check_expr
           has enough information to create an overall-concrete, or
           more-concrete, type. *)
           else
-            (* DEBUG *)
-            let _ = Printf.printf
-              "Expected type not yet concrete: [[ %s ]]\n%!"
-              (fmt_type expected_t)
-            in
             let tvars_to_t = map_tvars_to_types expected_t exp_typechecked_t in
             let concrete_t = concretify_unbound_types tvars_to_t expected_t in
-            let _ = begin
-              if is_concrete_type concrete_t then
-                (* DEBUG *)
-                let _ = Printf.printf
-                  "Expected type MADE concrete: [[ %s ]]\n%!"
-                  (fmt_type concrete_t)
-                in
-                ()
-              else
-                (* DEBUG *)
-                let _ = Printf.printf
-                  "Expected type STILL not concrete: [[ %s ]]\n%!"
-                  (fmt_type concrete_t)
-                in
-                ()
-            end in
+
             concrete_t
         end in
         inject_t
@@ -943,41 +884,9 @@ and type_check_expr
   (* Inject the evaluated type back into the expression, which can in particular
   be helpful to normalize types between alternate branches in expressions like
   if-expr. *)
-  let exp_typechecked_final = begin
-    let already_concrete = begin
-      if is_concrete_expr exp_typechecked then
-        true
-      else
-        (* DEBUG output *)
-        let _ = Printf.printf
-          "Expr not yet concrete: [[ %s ]]\n%!" (fmt_type exp_typechecked_t)
-        in
-        false
-    end in
+  let exp_typechecked_injected =
+    inject_type_into_expr inject_t exp_typechecked
+  in
 
-    let exp_typechecked_injected =
-      inject_type_into_expr inject_t exp_typechecked
-    in
-
-    (* DEBUG output *)
-    let _ =
-      if not already_concrete then
-        if is_concrete_expr exp_typechecked_injected then
-          let _ = Printf.printf
-            "Type made concrete: [[ %s ]]\n%!" (fmt_type inject_t)
-          in
-          ()
-        else
-          let _ = Printf.printf "[" in
-          let _ = print_expr ~print_typ:true "" exp_typechecked in
-          let _ = Printf.printf "]\n%!" in
-          let _ = Printf.printf "Non-concrete expr!\n%!" in
-          ()
-      else
-        ()
-    in
     exp_typechecked_injected
-  end in
-
-  exp_typechecked_final
 ;;

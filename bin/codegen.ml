@@ -20,7 +20,6 @@ type func_gen_context = {
 
 let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
   let rec _berk_t_to_llvm_t typ =
-    (* Printf.printf "berk_t_to_llvm_t: [[ %s ]]\n%!" (fmt_type typ) ; *)
     begin match typ with
     | Nil -> Llvm.void_type llvm_ctxt
 
@@ -59,12 +58,7 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
             | _ -> Some(_berk_t_to_llvm_t typ)
         ) ctors in
 
-        let typ_sizes = List.map (
-          fun llvm_typ ->
-            Printf.printf "LLVM type: [%s]\n%!" (Llvm.string_of_lltype llvm_typ) ;
-
-            llvm_sizeof llvm_typ
-        ) llvm_nonempty_typs in
+        let typ_sizes = List.map llvm_sizeof llvm_nonempty_typs in
 
         let largest = List.fold_left max 0 typ_sizes in
         let llvm_variant_t = begin
@@ -874,9 +868,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       (* Sanity check we're working with a variant, and extract some info while
       we're at it. *)
       let (v_name, v_ctors) = begin match variant_t with
-      | Variant(v_name, v_ctors) ->
-          Printf.printf "VariantCtorExpr of variant [%s]\n" v_name ;
-          (v_name, v_ctors)
+      | Variant(v_name, v_ctors) -> (v_name, v_ctors)
       | _ -> failwith "Unexpected non-variant type in variant-ctor-expr"
       end in
 
@@ -892,8 +884,6 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       let alloca =
         Llvm.build_alloca llvm_variant_t variant_ssa_alloca_name builder
       in
-
-      Printf.printf "Alloca: [[ %s ]]\n%!" (Llvm.string_of_llvalue alloca) ;
 
       (* Which "tag" is this variant constructor supposed to be? Find it, then
       assign it to the tag field in the LLVM variant struct. *)
@@ -927,13 +917,9 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
         | Nil -> ()
         | _ ->
           begin
-            Printf.printf "Berk ctor Expr: [[ %s ]]\n%!" (fmt_type expr_t) ;
-
             let llvm_expr_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t expr_t in
             let llvm_ctor_t = get_ctor_llvm_type llvm_expr_t in
             let llvm_ctor_t_ptr = Llvm.pointer_type llvm_ctor_t in
-
-            Printf.printf "LLVM ctor type: [[ %s ]]\n%!" (Llvm.string_of_lltype llvm_ctor_t) ;
 
             let llvm_expr_val = _codegen_expr exp in
 
@@ -946,8 +932,6 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
                 ctor_ssa_bitcast_name
                 builder
             in
-
-            Printf.printf "Bitcasted alloca: [[ %s ]]\n%!" (Llvm.string_of_llvalue bitcast_alloca) ;
 
             (* Since the arbitrarily-complex constructor expression is still
             just "one type", its offset is simply index 1, right after the
