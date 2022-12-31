@@ -1,9 +1,9 @@
 open Printexc
 
-open Ast
-open Typing
-open Type_check
-open Codegen
+open Berk_ocaml.Ast
+open Berk_ocaml.Typing
+open Berk_ocaml.Type_check
+open Berk_ocaml.Codegen
 open Test
 
 

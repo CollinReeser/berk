@@ -1,6 +1,6 @@
-open Ast
-open Type_check
-open Typing
+open Berk_ocaml.Ast
+open Berk_ocaml.Type_check
+open Berk_ocaml.Typing
 
 
 let build_example_ast : func_def_t =

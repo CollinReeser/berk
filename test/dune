@@ -1,6 +1,12 @@
 (test
  (name berk_test)
  (deps ../bin/utility.ml)
- (libraries alcotest)
+ (libraries
+    berk_ocaml
+    alcotest
+  )
 )
 
+(rule
+ (alias  runtest)
+ (action (run ./berk_test.exe)))
