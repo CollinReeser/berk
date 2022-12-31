@@ -672,34 +672,16 @@ and type_check_expr
         let then_expr_typechecked = _type_check_expr then_expr in
         let else_expr_typechecked = _type_check_expr else_expr in
 
-        (* Opportunistic additional type inference intelligence. If one branch
-        was able to determine its type, but the other side was not, then we
-        assume the other side was supposed to match, and retry typechecking
-        that branch. *)
         let then_expr_t = expr_type then_expr_typechecked in
         let else_expr_t = expr_type else_expr_typechecked in
 
         let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
 
-        let _ = begin
-          Printf.printf "THEN type: [[ %s ]]\n" (fmt_type then_expr_t) ;
-          Printf.printf "ELSE type: [[ %s ]]\n" (fmt_type else_expr_t) ;
-          Printf.printf "AGRE type: [[ %s ]]\n" (fmt_type then_else_agreement_t) ;
-          ()
-        end in
-
-        let then_expr_injected =
-          inject_type_into_expr then_else_agreement_t then_expr_typechecked
-        in
-        let else_expr_injected =
-          inject_type_into_expr then_else_agreement_t else_expr_typechecked
-        in
-
         IfThenElseExpr(
           then_else_agreement_t,
           if_cond_typechecked,
-          then_expr_injected,
-          else_expr_injected
+          then_expr_typechecked,
+          else_expr_typechecked
         )
 
     | WhileExpr(_, while_cond, then_stmts, finally_expr) ->
