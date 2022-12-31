@@ -523,6 +523,7 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
   in
   let agreement_candidate_t = common_type_of_lst expr_t_concretified_lst in
 
+  (* DEBUG *)
   Printf.printf "Common CANDIDATE agreement type is: [[ %s ]]\n" (fmt_type agreement_candidate_t) ;
 
   let expr_resolved_injected_lst =
@@ -533,6 +534,7 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
     List.map (type_check_expr tc_ctxt agreement_candidate_t) expr_resolved_injected_lst
   in
 
+  (* DEBUG *)
   Printf.printf "expr_resolved_lst: \n" ;
 
   List.iter (
@@ -544,10 +546,12 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
 
   let expr_t_resolved_lst = List.map expr_type expr_resolved_injected_lst in
 
+  (* DEBUG *)
   List.iter (
     fun t -> Printf.printf "expr_t_resolved: [[ %s ]]\n" (fmt_type t)
   ) expr_t_resolved_lst;
 
+  (* DEBUG *)
   let _ = begin
     let all_concrete =
       List.fold_left (&&) true (
@@ -567,6 +571,7 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
 
   let agreement_t = common_type_of_lst expr_t_resolved_lst in
 
+  (* DEBUG *)
   Printf.printf "Common agreement type is: [[ %s ]]\n" (fmt_type agreement_t) ;
 
   (
@@ -907,6 +912,7 @@ and type_check_expr
           has enough information to create an overall-concrete, or
           more-concrete, type. *)
           else
+            (* DEBUG *)
             let _ = Printf.printf
               "Expected type not yet concrete: [[ %s ]]\n%!"
               (fmt_type expected_t)
@@ -915,12 +921,14 @@ and type_check_expr
             let concrete_t = concretify_unbound_types tvars_to_t expected_t in
             let _ = begin
               if is_concrete_type concrete_t then
+                (* DEBUG *)
                 let _ = Printf.printf
                   "Expected type MADE concrete: [[ %s ]]\n%!"
                   (fmt_type concrete_t)
                 in
                 ()
               else
+                (* DEBUG *)
                 let _ = Printf.printf
                   "Expected type STILL not concrete: [[ %s ]]\n%!"
                   (fmt_type concrete_t)
