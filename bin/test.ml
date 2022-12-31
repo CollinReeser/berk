@@ -1,5 +1,4 @@
 open Ast
-open Pretty_print
 open Type_check
 open Typing
 

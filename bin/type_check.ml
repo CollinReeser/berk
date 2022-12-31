@@ -1,5 +1,4 @@
 open Ast
-open Pretty_print
 open Typing
 open Utility
 
@@ -546,6 +545,8 @@ and collapse_expr_type_alternates_n tc_ctxt expr_lst =
 
   let agreement_t = common_type_of_lst expr_t_resolved_lst in
 
+  Printf.printf "Common agreement type is: [[ %s ]]\n" (fmt_type agreement_t) ;
+
   (
     agreement_t,
     expr_resolved_lst
@@ -823,7 +824,11 @@ and type_check_expr
           | Undecided ->
               let tuple_len = List.length exprs in
               List.init tuple_len (fun _ -> Undecided)
-          | _ -> failwith "Unexpectedly expecting non-array type in array expr"
+          | _ ->
+              failwith (
+                "Unexpectedly expecting non-tuple type in tuple expr: " ^
+                (fmt_type expected_t)
+              )
         end in
 
         let exprs_typechecked =

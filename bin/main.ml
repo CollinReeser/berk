@@ -1,7 +1,6 @@
 open Printexc
 
 open Ast
-open Pretty_print
 open Typing
 open Type_check
 open Codegen
