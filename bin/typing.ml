@@ -87,6 +87,11 @@ let rec common_type_of_lr lhs rhs =
   let _common_type_of_lr lhs rhs =
     match (lhs, rhs) with
     | (Undecided, Undecided) -> Some(Undecided)
+
+    | (Unbound(_), Undecided)
+    | (Undecided, Unbound(_)) ->
+        failwith "Nonsense mapping from unbound typevar to undecided type"
+
     | (_,         Undecided) -> Some(lhs)
     | (Undecided,         _) -> Some(rhs)
 
@@ -112,7 +117,7 @@ let rec common_type_of_lr lhs rhs =
           None
 
     | (Unbound(_), _) -> Some(rhs)
-    | (_, Unbound(_)) -> Some(rhs)
+    | (_, Unbound(_)) -> Some(lhs)
 
     | (Tuple(lhs_typs), Tuple(rhs_typs)) ->
         let common_tup_typs = List.map2 common_type_of_lr lhs_typs rhs_typs in
@@ -365,14 +370,18 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
       | None -> Unbound(tvar)
       | Some(t) -> t
     end
+
   | Tuple(tuple_typs) ->
       let typs_concretified =
         List.map (concretify_unbound_types tvar_to_t) tuple_typs
       in
+
       Tuple(typs_concretified)
+
   | Array(arr_typ, sz) ->
       let arr_typ_concretified = concretify_unbound_types tvar_to_t arr_typ in
       Array(arr_typ_concretified, sz)
+
   | Variant(v_name, v_ctors) ->
       let v_ctors_concretified =
         List.map (
@@ -451,18 +460,19 @@ let map_tvars_to_types ?(init_map=StrMap.empty) lhs_typ rhs_typ =
         (* Don't record a mapping from a type variable to an undecided type. *)
         map_so_far
 
-    | (Unbound(tvar), concrete)
-    | (concrete, Unbound(tvar)) ->
+    | (Unbound(tvar), concrete_t)
+    | (concrete_t, Unbound(tvar)) ->
         (*  The critical pattern: If one type has an unbound type variable and
         the other has a concrete type, then we can add that mapping to our
         collection. *)
-        begin if is_concrete_type concrete then
+        begin if is_concrete_type concrete_t then
           match (StrMap.find_opt tvar map_so_far) with
-          | None -> StrMap.add tvar concrete map_so_far
-          | Some(already_concrete) ->
-              if concrete = already_concrete
-              then map_so_far
-              else failwith ("Cannot map multiple types to type var " ^ tvar)
+          | None -> StrMap.add tvar concrete_t map_so_far
+          | Some(already_concrete_t) ->
+              let common_concrete_t =
+                common_type_of_lr concrete_t already_concrete_t
+              in
+              StrMap.add tvar common_concrete_t map_so_far
         else
           map_so_far
         end

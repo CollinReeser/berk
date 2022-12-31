@@ -318,22 +318,25 @@ and print_stmt ?(print_typ = false) ind stmt =
   end
 ;; *)
 
-(* Force-apply a top-level type to the given expression, recursively. Fails
-if any component subtype disagrees with what the expression had already
-determined was its type. *)
-let rec inject_type_into_expr typ exp =
-  Printf.printf "Injecting: [[ %s ]] into expr [[ " (fmt_type typ) ;
-  print_expr ~print_typ:true "" exp ;
-  Printf.printf " ]]\n" ;
+(* Force-apply a top-level type to the given expression, recursively. *)
+let rec inject_type_into_expr ?(ind="") typ exp =
+  Printf.printf "%sInjecting: [[ %s ]] into expr [[ " ind (fmt_type typ) ;
+  print_expr ~print_typ:true ind exp ;
+  Printf.printf "%s ]]\n" ind ;
 
   let exp_t = expr_type exp in
+  let tvars_to_t = map_tvars_to_types typ exp_t in
+
+  (* Shadow the old `typ`; we now have a possibly-more-concrete type. *)
+  let typ = concretify_unbound_types tvars_to_t typ in
+
   if not (type_convertible_to exp_t typ) then
     failwith (
       "Injection type [[" ^ (fmt_type typ) ^ "]] disagrees with existing " ^
       "type [[" ^ (fmt_type exp_t) ^ "]]"
     )
   else
-    match (typ, exp) with
+    let exp_up = begin match (typ, exp) with
     | (Undecided, _) ->
         failwith "Refuse to inject undecided type into expr"
 
@@ -349,19 +352,32 @@ let rec inject_type_into_expr typ exp =
             exp
         end
 
-    | (_, ValVar(_, var_name))            -> ValVar(typ, var_name)
+    | (_, ValCastTrunc  (t, exp_trunc))   -> ValCastTrunc  (t, exp_trunc)
+    | (_, ValCastBitwise(t, exp_bitwise)) -> ValCastBitwise(t, exp_bitwise)
+        (* TODO, applying to both of the above: In general,
+        `type_convertible_to` will fail for the interesting cases for
+        ValCastTrunc, and doesn't cover what ValCastBitwise wants to do. So,
+        we'll need some special logic to cover these, and any other
+        "explicit conversion" expressions. *)
 
-    | (_, ValCastTrunc  (_, exp_trunc))   -> ValCastTrunc  (typ, exp_trunc)
-    | (_, ValCastBitwise(_, exp_bitwise)) -> ValCastBitwise(typ, exp_bitwise)
+    | (_, ValVar(t, var_name)) -> ValVar(t, var_name)
+        (* TODO: We probably need some sort of "extension" expression, if
+        necessary to "promote" whatever type is in this variable. *)
 
-    (* The return type of a function does not influence its parameters. *)
-    | (_, FuncCall(_, f_name, exp_lst)) -> FuncCall(typ, f_name, exp_lst)
+    | (_, FuncCall(t, f_name, exp_lst)) -> FuncCall(t, f_name, exp_lst)
+      (* The return type of a function does not influence its parameters. *)
+      (* TODO: That said, we should probably be injecting a conversion
+      expression rather than blanket overriding the claimed return type of the
+      function. *)
 
     | (_, BlockExpr(_, stmts, exp_res)) ->
         (* We're not smart enough yet to influence the types of any expressions
         within the statements within the block. So, just make sure the trailing
         expression is type-injected. *)
-        let exp_res_injected = inject_type_into_expr typ exp_res in
+        let exp_res_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") typ exp_res
+        in
+
         BlockExpr(typ, stmts, exp_res_injected)
 
     | (_, IndexExpr(_, idx_exp, arr_exp)) ->
@@ -375,7 +391,7 @@ let rec inject_type_into_expr typ exp =
           | _ -> failwith ("Unexpected non-array type: " ^ (fmt_type arr_t))
         end in
         let arr_exp_injected =
-          inject_type_into_expr arr_injection_type arr_exp
+          inject_type_into_expr ~ind:(ind ^ "  ") arr_injection_type arr_exp
         in
         IndexExpr(typ, idx_exp, arr_exp_injected)
 
@@ -390,20 +406,21 @@ let rec inject_type_into_expr typ exp =
           | _ -> failwith ("Unexpected non-array type: " ^ (fmt_type arr_t))
         end in
         let arr_exp_injected =
-          inject_type_into_expr arr_injection_type arr_exp
+          inject_type_into_expr ~ind:(ind ^ "  ") arr_injection_type arr_exp
         in
         StaticIndexExpr(typ, idx, arr_exp_injected)
 
     | (Array(elem_t, sz), ArrayExpr(_, elem_lst)) ->
         let elem_t_lst = List.init sz (fun _ -> elem_t) in
         let elem_exp_injected_lst =
-          List.map2 inject_type_into_expr elem_t_lst elem_lst
+          List.map2
+            (inject_type_into_expr ~ind:(ind ^ "  ")) elem_t_lst elem_lst
         in
         ArrayExpr(typ, elem_exp_injected_lst)
 
     | (Tuple(exp_t_lst), TupleExpr(_, exp_lst)) ->
         let exp_injected_lst =
-          List.map2 inject_type_into_expr exp_t_lst exp_lst
+          List.map2 (inject_type_into_expr ~ind:(ind ^ "  ")) exp_t_lst exp_lst
         in
         TupleExpr(typ, exp_injected_lst)
 
@@ -415,18 +432,29 @@ let rec inject_type_into_expr typ exp =
           "Cannot inject incompatible aggregate types: " ^ (fmt_type typ)
         )
 
-    | (_, BinOp(_, bin_op, lhs, rhs)) ->
-        let lhs_injected = inject_type_into_expr typ lhs in
-        let rhs_injected = inject_type_into_expr typ rhs in
-        BinOp(typ, bin_op, lhs_injected, rhs_injected)
+    (* BinOps are an interesting case because they can "switch types"
+    arbitrarily deep into a nested bin-op tree, we don't want to eg
+    propagate the expectation of a bool due to an eg LessEq op into the
+    arithmetic branches, and in general we expect the bottom-up typecheck to
+    have correctly inferred everything (or failed eagerly due to type
+    mismatch.) *)
+    | (_, BinOp(t, bin_op, lhs, rhs)) -> BinOp(t, bin_op, lhs, rhs)
 
     | (_, IfThenElseExpr(_, cond_exp, then_exp, else_exp)) ->
-        let then_exp_injected = inject_type_into_expr typ then_exp in
-        let else_exp_injected = inject_type_into_expr typ else_exp in
+        let then_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") typ then_exp
+        in
+        let else_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") typ else_exp
+        in
+
         IfThenElseExpr (typ, cond_exp, then_exp_injected, else_exp_injected)
 
     | (_, WhileExpr(_, cond_expr, stmts, exp_res)) ->
-        let exp_res_injected = inject_type_into_expr typ exp_res in
+        let exp_res_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") typ exp_res
+        in
+
         WhileExpr(typ, cond_expr, stmts, exp_res_injected)
 
     | (Variant(_, ctors), VariantCtorExpr(_, ctor_name, ctor_exp)) ->
@@ -434,11 +462,13 @@ let rec inject_type_into_expr typ exp =
             fun (name, _) -> name = ctor_name
           ) ctors
         in
-        let ctor_exp_injected = inject_type_into_expr ctor_exp_t ctor_exp in
+        let ctor_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") ctor_exp_t ctor_exp
+        in
+
         VariantCtorExpr(typ, ctor_name, ctor_exp_injected)
 
     | (Variant(_, _), _)
-    (* NOTE: We don't need this case because it is implicitly covered above. *)
     | (_, VariantCtorExpr(_, _, _)) ->
         failwith (
           "Unexpectedly encountered mismatch in variant typing: " ^
@@ -468,11 +498,16 @@ let rec inject_type_into_expr typ exp =
     | ((U64 | U32 | U16 | U8 | I64 | I32 | I16 | I8 | F128 | F64 | F32), _)
     | ((Nil | Bool | String), _)
     | (VarArgSentinel, _) ->
-        Printf.printf "Given expr: [[ " ;
+        Printf.printf "%sGiven expr: [[ " ind ;
         print_expr ~print_typ:true "" exp ;
-        Printf.printf " ]]\n" ;
+        Printf.printf "%s ]]\n" ind ;
         failwith ("Cannot inject type [[ " ^ (fmt_type typ) ^ " ]] into expr")
 
+    end in
+    Printf.printf "%s  Injected [[ %s ]] to yield expr [[ " ind (fmt_type typ) ;
+    print_expr ~print_typ:true (ind ^ "  ") exp_up ;
+    Printf.printf "%s ]]\n" ind ;
+    exp_up
 ;;
 
 type v_ctor = (string * berk_t)

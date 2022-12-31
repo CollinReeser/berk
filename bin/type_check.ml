@@ -676,21 +676,30 @@ and type_check_expr
         was able to determine its type, but the other side was not, then we
         assume the other side was supposed to match, and retry typechecking
         that branch. *)
+        let then_expr_t = expr_type then_expr_typechecked in
+        let else_expr_t = expr_type else_expr_typechecked in
 
-        let (
-          then_else_agreement_t,
-          then_expr_typechecked_final,
-          else_expr_typechecked_final
-        ) =
-          collapse_expr_type_alternates_2
-            tc_ctxt then_expr_typechecked else_expr_typechecked
+        let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
+
+        let _ = begin
+          Printf.printf "THEN type: [[ %s ]]\n" (fmt_type then_expr_t) ;
+          Printf.printf "ELSE type: [[ %s ]]\n" (fmt_type else_expr_t) ;
+          Printf.printf "AGRE type: [[ %s ]]\n" (fmt_type then_else_agreement_t) ;
+          ()
+        end in
+
+        let then_expr_injected =
+          inject_type_into_expr then_else_agreement_t then_expr_typechecked
+        in
+        let else_expr_injected =
+          inject_type_into_expr then_else_agreement_t else_expr_typechecked
         in
 
         IfThenElseExpr(
           then_else_agreement_t,
           if_cond_typechecked,
-          then_expr_typechecked_final,
-          else_expr_typechecked_final
+          then_expr_injected,
+          else_expr_injected
         )
 
     | WhileExpr(_, while_cond, then_stmts, finally_expr) ->
@@ -890,38 +899,86 @@ and type_check_expr
 
   (* First, allow the typechecker to try to infer types as much as possible. *)
   let exp_typechecked = _type_check_expr exp in
+  let exp_typechecked_t = expr_type exp_typechecked in
 
-  (* Then, inject the expected type, which may require implicit conversions
-  from subset to superset types, but should otherwise apply cleanly if the
-  explicitly declared type is compatible with the inferred types. This is also
-  necessary to make types resolved in alternate branches of a single expression
-  (eg, if-expr) agree with each other. *)
-  let exp_typechecked_final = begin match expected_t with
-    | Undecided -> exp_typechecked
+  (* If we were given an explicit type that the expression must match, then we
+  inject that type back into the expression, which may implicitly promote
+  relevant types. Since the explicit type may still not be complete (unspecified
+  type vars, we try to roll in the information we have from the bottom-up
+  typecheck as well.)
+
+  If we were not given an explicit type, we inject the type the typechecker
+  inferred, as this will normalize/promote various types as necessary in
+  possibly-misaligned branches within the expression (eg, if-expr) *)
+  let inject_t = begin match expected_t with
+    | Undecided -> exp_typechecked_t
     | _ ->
-        let exp_typechecked_t = expr_type exp_typechecked in
-        Printf.printf
-          "Type not yet concrete: [[ %s ]]\n%!" (fmt_type exp_typechecked_t) ;
-        let tvars_to_t = map_tvars_to_types exp_typechecked_t expected_t in
-        let concrete_t =
-          concretify_unbound_types tvars_to_t exp_typechecked_t
+        let inject_t = begin
+          (* If the expected type is concrete, that should be all we need. *)
+          if is_concrete_type expected_t then
+            expected_t
+          (* If the expected type is not concrete, then maybe the inferred type
+          has enough information to create an overall-concrete, or
+          more-concrete, type. *)
+          else
+            let _ = Printf.printf
+              "Expected type not yet concrete: [[ %s ]]\n%!"
+              (fmt_type expected_t)
+            in
+            let tvars_to_t = map_tvars_to_types expected_t exp_typechecked_t in
+            let concrete_t = concretify_unbound_types tvars_to_t expected_t in
+            let _ = begin
+              if is_concrete_type concrete_t then
+                let _ = Printf.printf
+                  "Expected type MADE concrete: [[ %s ]]\n%!"
+                  (fmt_type concrete_t)
+                in
+                ()
+              else
+                let _ = Printf.printf
+                  "Expected type STILL not concrete: [[ %s ]]\n%!"
+                  (fmt_type concrete_t)
+                in
+                ()
+            end in
+            concrete_t
+        end in
+        inject_t
+  end in
+
+  (*  *)
+  let exp_typechecked_final = begin
+    let already_concrete = begin
+      if is_concrete_expr exp_typechecked then
+        true
+      else
+        let _ = Printf.printf
+          "Expr not yet concrete: [[ %s ]]\n%!" (fmt_type exp_typechecked_t)
         in
-        let exp_typechecked_final =
-          inject_type_into_expr concrete_t exp_typechecked
-        in
-        if is_concrete_expr exp_typechecked_final then
-          begin
-            Printf.printf
-              "Type made concrete: [[ %s ]]\n%!" (fmt_type concrete_t) ;
-            exp_typechecked_final
-          end
-        else begin
-          Printf.printf "[" ;
-          print_expr ~print_typ:true "" exp_typechecked ;
-          Printf.printf "]\n%!" ;
-          Printf.printf "Non-concrete expr!\n%!" ;
-          exp_typechecked_final
-        end
+        false
+    end in
+
+    let exp_typechecked_injected =
+      inject_type_into_expr inject_t exp_typechecked
+    in
+
+    let _ =
+      if not already_concrete then
+        if is_concrete_expr exp_typechecked_injected then
+          let _ = Printf.printf
+            "Type made concrete: [[ %s ]]\n%!" (fmt_type inject_t)
+          in
+          ()
+        else
+          let _ = Printf.printf "[" in
+          let _ = print_expr ~print_typ:true "" exp_typechecked in
+          let _ = Printf.printf "]\n%!" in
+          let _ = Printf.printf "Non-concrete expr!\n%!" in
+          ()
+      else
+        ()
+    in
+    exp_typechecked_injected
   end in
 
   exp_typechecked_final
