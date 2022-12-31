@@ -1,0 +1,6 @@
+(test
+ (name berk_test)
+ (deps ../bin/utility.ml)
+ (libraries alcotest)
+)
+
