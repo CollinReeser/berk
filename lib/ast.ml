@@ -327,20 +327,20 @@ let pprint_expr ppf exp =
 ;;
 
 (* Force-apply a top-level type to the given expression, recursively. *)
-let rec inject_type_into_expr ?(ind="") typ exp =
+let rec inject_type_into_expr ?(ind="") injected_t exp =
   let exp_t = expr_type exp in
-  let tvars_to_t = map_tvars_to_types typ exp_t in
+  let tvars_to_t = map_tvars_to_types injected_t exp_t in
 
-  (* Shadow the old `typ`; we now have a possibly-more-concrete type. *)
-  let typ = concretify_unbound_types tvars_to_t typ in
+  (* Shadow the old `injected_t`; we now have a possibly-more-concrete type. *)
+  let injected_t = concretify_unbound_types tvars_to_t injected_t in
 
-  if not (type_convertible_to exp_t typ) then
+  if not (type_convertible_to exp_t injected_t) then
     failwith (
-      "Injection type [[" ^ (fmt_type typ) ^ "]] disagrees with existing " ^
-      "type [[" ^ (fmt_type exp_t) ^ "]]"
+      "Injection type [[" ^ (fmt_type injected_t) ^
+      "]] disagrees with existing " ^ "type [[" ^ (fmt_type exp_t) ^ "]]"
     )
   else
-    match (typ, exp) with
+    match (injected_t, exp) with
     | (Undecided, _) -> failwith "Refuse to inject undecided type into expr"
 
     | (Unbound(a), _) ->
@@ -378,10 +378,10 @@ let rec inject_type_into_expr ?(ind="") typ exp =
         within the statements within the block. So, just make sure the trailing
         expression is type-injected. *)
         let exp_res_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") typ exp_res
+          inject_type_into_expr ~ind:(ind ^ "  ") injected_t exp_res
         in
 
-        BlockExpr(typ, stmts, exp_res_injected)
+        BlockExpr(injected_t, stmts, exp_res_injected)
 
     | (_, IndexExpr(_, idx_exp, arr_exp)) ->
         (* We can't use our injection type info to assist with typechecking the
@@ -390,13 +390,13 @@ let rec inject_type_into_expr ?(ind="") typ exp =
         to be an "array of" the target type. *)
         let arr_t = expr_type arr_exp in
         let arr_injection_type = begin match arr_t with
-          | Array(_, sz) -> Array(typ, sz)
+          | Array(_, sz) -> Array(injected_t, sz)
           | _ -> failwith ("Unexpected non-array type: " ^ (fmt_type arr_t))
         end in
         let arr_exp_injected =
           inject_type_into_expr ~ind:(ind ^ "  ") arr_injection_type arr_exp
         in
-        IndexExpr(typ, idx_exp, arr_exp_injected)
+        IndexExpr(injected_t, idx_exp, arr_exp_injected)
 
     | (_, StaticIndexExpr(_, idx, arr_exp)) ->
         (* We can't use our injection type info to assist with typechecking the
@@ -405,13 +405,13 @@ let rec inject_type_into_expr ?(ind="") typ exp =
         to be an "array of" the target type. *)
         let arr_t = expr_type arr_exp in
         let arr_injection_type = begin match arr_t with
-          | Array(_, sz) -> Array(typ, sz)
+          | Array(_, sz) -> Array(injected_t, sz)
           | _ -> failwith ("Unexpected non-array type: " ^ (fmt_type arr_t))
         end in
         let arr_exp_injected =
           inject_type_into_expr ~ind:(ind ^ "  ") arr_injection_type arr_exp
         in
-        StaticIndexExpr(typ, idx, arr_exp_injected)
+        StaticIndexExpr(injected_t, idx, arr_exp_injected)
 
     | (Array(elem_t, sz), ArrayExpr(_, elem_lst)) ->
         let elem_t_lst = List.init sz (fun _ -> elem_t) in
@@ -419,20 +419,20 @@ let rec inject_type_into_expr ?(ind="") typ exp =
           List.map2
             (inject_type_into_expr ~ind:(ind ^ "  ")) elem_t_lst elem_lst
         in
-        ArrayExpr(typ, elem_exp_injected_lst)
+        ArrayExpr(injected_t, elem_exp_injected_lst)
 
     | (Tuple(exp_t_lst), TupleExpr(_, exp_lst)) ->
         let exp_injected_lst =
           List.map2 (inject_type_into_expr ~ind:(ind ^ "  ")) exp_t_lst exp_lst
         in
-        TupleExpr(typ, exp_injected_lst)
+        TupleExpr(injected_t, exp_injected_lst)
 
     | (Tuple(_), _)
     | (_, TupleExpr(_, _))
     | (Array(_, _), _)
     | (_, ArrayExpr(_, _)) ->
         failwith (
-          "Cannot inject incompatible aggregate types: " ^ (fmt_type typ)
+          "Cannot inject incompatible aggregate types: " ^ (fmt_type injected_t)
         )
 
     (* BinOps are an interesting case because they can "switch types"
@@ -454,12 +454,12 @@ let rec inject_type_into_expr ?(ind="") typ exp =
         let then_t = expr_type then_exp in
         let else_t = expr_type else_exp in
         let common_then_else_t = common_type_of_lr then_t else_t in
-        let common_t = common_type_of_lr typ common_then_else_t in
+        let common_t = common_type_of_lr injected_t common_then_else_t in
 
         (* The common type of the then/else/expected types, if it exists, may be
         a superset of the injected type, but the injected type is expected to
         dominate. *)
-        let common_t = if type_convertible_to common_t typ then
+        let common_t = if type_convertible_to common_t injected_t then
           common_t
         else
           failwith (
@@ -474,7 +474,7 @@ let rec inject_type_into_expr ?(ind="") typ exp =
               (fmt_type else_t)
               (fmt_type common_then_else_t)
               (fmt_type common_t)
-              (fmt_type typ)
+              (fmt_type injected_t)
           )
         in
 
@@ -489,10 +489,10 @@ let rec inject_type_into_expr ?(ind="") typ exp =
 
     | (_, WhileExpr(_, cond_expr, stmts, exp_res)) ->
         let exp_res_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") typ exp_res
+          inject_type_into_expr ~ind:(ind ^ "  ") injected_t exp_res
         in
 
-        WhileExpr(typ, cond_expr, stmts, exp_res_injected)
+        WhileExpr(injected_t, cond_expr, stmts, exp_res_injected)
 
     | (Variant(_, ctors), VariantCtorExpr(_, ctor_name, ctor_exp)) ->
         let (_, ctor_exp_t) = List.find (
@@ -503,13 +503,13 @@ let rec inject_type_into_expr ?(ind="") typ exp =
           inject_type_into_expr ~ind:(ind ^ "  ") ctor_exp_t ctor_exp
         in
 
-        VariantCtorExpr(typ, ctor_name, ctor_exp_injected)
+        VariantCtorExpr(injected_t, ctor_name, ctor_exp_injected)
 
     | (Variant(_, _), _)
     | (_, VariantCtorExpr(_, _, _)) ->
         failwith (
           "Unexpectedly encountered mismatch in variant typing: " ^
-          "[[ " ^ (fmt_type typ) ^ " ]]"
+          "[[ " ^ (fmt_type injected_t) ^ " ]]"
         )
 
     | (U8,   ValU8(x))                                      -> ValU8 (x)
@@ -540,7 +540,9 @@ let rec inject_type_into_expr ?(ind="") typ exp =
             ind
             (fmt_expr ~print_typ:true "" exp)
         in
-        failwith ("Cannot inject type [[ " ^ (fmt_type typ) ^ " ]] into expr")
+        failwith (
+          "Cannot inject type [[ " ^ (fmt_type injected_t) ^ " ]] into expr"
+        )
 ;;
 
 type v_ctor = (string * berk_t)
