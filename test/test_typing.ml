@@ -2,10 +2,11 @@ open Berk.Typing
 
 let berk_t_tst = Alcotest.testable pprint_berk_t (=)
 
-let test_common_type_of_lst expect given () = Alcotest.(check' berk_t_tst)
-  ~msg:"common_type_of_lst"
-  ~expected:expect
-  ~actual:(common_type_of_lst given)
+let test_common_type_of_lst expect given () =
+  Alcotest.(check' berk_t_tst)
+    ~msg:"common_type_of_lst"
+    ~expected:expect
+    ~actual:(common_type_of_lst given)
 
 let common_type = let open Alcotest in [(
   test_case "lst_sanity" `Quick (

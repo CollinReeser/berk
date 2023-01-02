@@ -188,7 +188,7 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         (fmt_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") exp)
         ind
   | IfThenElseExpr (_, if_cond, then_expr, else_expr) ->
-      Printf.sprintf "%s%sif (%s) {\n%s\n%s} else {%s\n%s}"
+      Printf.sprintf "%s%sif (%s) {\n%s\n%s} else {\n%s\n%s}"
         init_ind
         typ_s_rev
         (fmt_expr ~print_typ:print_typ "" if_cond)
@@ -322,23 +322,9 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         (fmt_expr ~print_typ:print_typ ind ex)
 ;;
 
-(* let coerce_expr_to_type typ exp =
-  begin match (typ, exp) with
-    | (Undecided, _) ->
-        failwith "Refusing to coerce expression to undecided type."
-
-    | (U64, (ValU8(x) | ValU16(x) | ValU32(x) | ValU64(x))) -> ValU64(x)
-    | (U32, (ValU8(x) | ValU16(x) | ValU32(x)))             -> ValU32(x)
-    | (U16, (ValU8(x) | ValU16(x)))                         -> ValU16(x)
-    | (U8,   ValU8(x))                                      -> ValU8 (x)
-    | (I64, (ValI8(x) | ValI16(x) | ValI32(x) | ValI64(x))) -> ValI64(x)
-    | (I32, (ValI8(x) | ValI16(x) | ValI32(x)))             -> ValI32(x)
-    | (I16, (ValI8(x) | ValI16(x)))                         -> ValI16(x)
-    | (I8,   ValI8(x))                                      -> ValI8 (x)
-
-
-  end
-;; *)
+let pprint_expr ppf exp =
+  Format.fprintf ppf "%s" (fmt_expr ~print_typ:true "" exp)
+;;
 
 (* Force-apply a top-level type to the given expression, recursively. *)
 let rec inject_type_into_expr ?(ind="") typ exp =
@@ -458,14 +444,48 @@ let rec inject_type_into_expr ?(ind="") typ exp =
     | (_, BinOp(t, bin_op, lhs, rhs)) -> BinOp(t, bin_op, lhs, rhs)
 
     | (_, IfThenElseExpr(_, cond_exp, then_exp, else_exp)) ->
-        let then_exp_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") typ then_exp
-        in
-        let else_exp_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") typ else_exp
+        (* The injected type into an if-expr should be the common type that
+        all branches agree on, but that is still convertible to the injected
+        type itself. Put another way, the "most concrete" type to use is the one
+        that combines the possibly-incomplete information shared between the
+        injected type, the then-branch type, and the else-branch type, but this
+        common type must not be a superset of the injected type. *)
+
+        let then_t = expr_type then_exp in
+        let else_t = expr_type else_exp in
+        let common_then_else_t = common_type_of_lr then_t else_t in
+        let common_t = common_type_of_lr typ common_then_else_t in
+
+        (* The common type of the then/else/expected types, if it exists, may be
+        a superset of the injected type, but the injected type is expected to
+        dominate. *)
+        let common_t = if type_convertible_to common_t typ then
+          common_t
+        else
+          failwith (
+            Printf.sprintf
+              (
+                "then/else branches do not agree on type that is compatible " ^^
+                "with injected type: then [[ %s ]], else [[ %s ]], " ^^
+                "common then/else [[ %s ]], common all [[ %s ]], " ^^
+                "injected [[ %s ]]"
+              )
+              (fmt_type then_t)
+              (fmt_type else_t)
+              (fmt_type common_then_else_t)
+              (fmt_type common_t)
+              (fmt_type typ)
+          )
         in
 
-        IfThenElseExpr (typ, cond_exp, then_exp_injected, else_exp_injected)
+        let then_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") common_t then_exp
+        in
+        let else_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") common_t else_exp
+        in
+
+        IfThenElseExpr(common_t, cond_exp, then_exp_injected, else_exp_injected)
 
     | (_, WhileExpr(_, cond_expr, stmts, exp_res)) ->
         let exp_res_injected =
