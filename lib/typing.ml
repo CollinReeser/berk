@@ -1,4 +1,3 @@
-
 module StrMap = Map.Make(String)
 
 type berk_t =

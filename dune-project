@@ -1,6 +1,6 @@
 (lang dune 3.5)
 
-(name berk_ocaml)
+(name berk)
 
 (generate_opam_files true)
 
@@ -16,7 +16,7 @@
 (documentation https://url/to/documentation)
 
 (package
- (name berk_ocaml)
+ (name berk)
  (synopsis "A short synopsis")
  (description "A longer description")
  (depends ocaml dune (alcotest :with-test))
