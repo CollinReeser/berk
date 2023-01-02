@@ -1,5 +1,5 @@
 (executables
- (names test_berk test_utility)
+ (names test_berk test_utility test_typing)
  (libraries
     berk
     alcotest
@@ -10,6 +10,11 @@
  (alias  runtest)
  (deps ../lib/utility.ml)
  (action (run ./test_utility.exe)))
+
+(rule
+ (alias  runtest)
+ (deps ../lib/typing.ml)
+ (action (run ./test_typing.exe)))
 
 (rule
  (alias  runtest)

@@ -71,6 +71,9 @@ and fmt_type ?(pretty_unbound=false) berk_type =
   | Undecided -> "<?undecided?>"
 ;;
 
+let pprint_berk_t ppf berk_type =
+  Format.fprintf ppf "%s" (fmt_type berk_type)
+;;
 
 type var_qual = {
   mut: bool;
