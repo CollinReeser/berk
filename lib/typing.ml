@@ -33,7 +33,7 @@ let rec fmt_join_types delim types =
       let lhs = fmt_type x in
       lhs ^ delim ^ (fmt_join_types delim xs)
 
-and fmt_type ?(pretty_unbound=false) berk_type =
+and fmt_type ?(pretty_unbound=false) berk_type : string =
   match berk_type with
   | U64 -> "u64"
   | U32 -> "u32"

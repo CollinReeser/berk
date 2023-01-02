@@ -223,14 +223,17 @@ let main = begin
       in
       let tc_ctxt : typecheck_context = default_tc_ctxt Undecided in
       let (tc_ctxt_up, _) = type_check_stmt tc_ctxt decl_stmt_raw in
-        test_typecheck ~tc_ctxt:tc_ctxt_up expr_raw;
-        Printf.printf "Expr type: %s\n" (
-          type_check_expr tc_ctxt_up Undecided expr_raw |> expr_type |> fmt_type
-        );
-        print_expr "" expr_raw;
-        Printf.printf "\n";
-        print_expr "" (type_check_expr tc_ctxt_up Undecided expr_raw);
-        Printf.printf "\n";
+
+      let _ = test_typecheck ~tc_ctxt:tc_ctxt_up expr_raw in
+
+      let _ = Printf.printf "Expr type: %s\n%s\n%s\n"
+        (
+          type_check_expr tc_ctxt_up
+            Undecided expr_raw |> expr_type |> fmt_type
+        )
+        (fmt_expr "" expr_raw)
+        (fmt_expr "" (type_check_expr tc_ctxt_up Undecided expr_raw))
+      in
 
       let collatz_seq_stmt_raw =
         ExprStmt(
@@ -358,7 +361,7 @@ let main = begin
         ];
       } in
 
-      print_func_ast main_func_def ;
+      let _ = Printf.printf "%s" (fmt_func_ast main_func_def) in
 
       let rec_func_def = {
         f_decl = {
@@ -1031,17 +1034,18 @@ let main = begin
         fun mod_decl_typechecked ->
           match mod_decl_typechecked with
           | FuncExternDecl(f_decl_typechecked) ->
-            print_func_decl ~print_typ:true ~extern:true f_decl_typechecked ;
+              Printf.printf "%s"
+                (fmt_func_decl ~print_typ:true ~extern:true f_decl_typechecked)
 
-          | FuncDef(f_ast_typechecked) -> begin
-            print_func_ast f_ast_typechecked ;
-            print_func_ast ~print_typ:true f_ast_typechecked ;
-          end
+          | FuncDef(f_ast_typechecked) ->
+              Printf.printf "%s%s"
+                (fmt_func_ast f_ast_typechecked)
+                (fmt_func_ast ~print_typ:true f_ast_typechecked)
 
           | VariantDecl(v_ast_typechecked) ->
-            begin
-              print_variant_decl ~pretty_unbound:true v_ast_typechecked ;
-            end
+              Printf.printf "%s"
+                (fmt_variant_decl ~pretty_unbound:true v_ast_typechecked)
+
       ) mod_decls_typechecked in
 
       Printf.printf "%!";

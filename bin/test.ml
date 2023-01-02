@@ -60,18 +60,17 @@ let test_typecheck ?(
     mod_ctxt = default_mod_ctxt
   }
 ) ast =
-  Printf.printf "Expression [";
-  print_expr "" ast;
-  Printf.printf "] typechecks to: ";
   let expr_typechecked = type_check_expr tc_ctxt Undecided ast in
   let expr_t = expr_type expr_typechecked in
-  Printf.printf "%s" (fmt_type expr_t);
-  Printf.printf "\n"
+
+  Printf.printf "Expression [[ %s ]] typechecks to [[ %s ]]\n"
+    (fmt_expr "" ast)
+    (fmt_type expr_t)
 ;;
 
 
 let test_suite =
-  print_func_ast build_example_ast;
+  Printf.printf "%s" (fmt_func_ast build_example_ast);
 
   test_typecheck (BinOp(Undecided, Add, ValI32(1), ValI32(2)));
   test_typecheck (BinOp(Undecided, Add, ValI32(1), ValI64(2)));

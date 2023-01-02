@@ -74,9 +74,9 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
 
   let _ = if verbose then
     begin
-      Printf.printf "is_concrete_stmt[[ " ;
-      print_stmt ~print_typ:true "" stmt ;
-      Printf.printf " ]] == %B\n%!" res
+      Printf.printf "is_concrete_stmt[[ %s ]] == %B\n%!"
+        (fmt_stmt ~print_typ:true "" stmt)
+        res
     end
   else
     ()
@@ -138,9 +138,9 @@ and is_concrete_expr ?(verbose=false) expr =
 
   let _ = if verbose then
     begin
-      Printf.printf "is_concrete_stmt[[ " ;
-      print_expr ~print_typ:true "" expr ;
-      Printf.printf " ]] == %B\n%!" res
+      Printf.printf "is_concrete_stmt[[ %s ]] == %B\n%!"
+        (fmt_expr ~print_typ:true "" expr)
+        res
     end
   else
     ()
@@ -346,16 +346,17 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
            exp_t
         else
           begin
-            Printf.printf (
+            let msg = Printf.sprintf (
                 "Explicitly declared type [[ %s ]] " ^^
-                "disagrees with deduced type [[ %s ]] "
+                "disagrees with deduced type [[ %s ]] " ^^
+                "over expression [[ %s ]]\n%!"
               )
               (fmt_type decl_t)
-              (fmt_type exp_t) ;
-            Printf.printf "over expression [[ " ;
-            print_expr ~print_typ:true "" exp_typechecked ;
-            Printf.printf " ]]\n%!" ;
-            failwith "Explicitly declared type disagrees with expr"
+              (fmt_type exp_t)
+              (fmt_expr ~print_typ:true "" exp_typechecked)
+            in
+
+            failwith msg
           end
       in
 
