@@ -71,7 +71,7 @@ and fmt_type ?(pretty_unbound=false) berk_type =
 ;;
 
 let pprint_berk_t ppf berk_type =
-  Format.fprintf ppf "%s" (fmt_type berk_type)
+  Format.fprintf ppf "%s" (fmt_type ~pretty_unbound:true berk_type)
 ;;
 
 type var_qual = {
