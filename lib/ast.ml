@@ -1,4 +1,5 @@
 open Typing
+open Ir
 
 
 (*
@@ -6,19 +7,6 @@ AST for the berk language.
 *)
 
 type ident_t = string
-
-and bin_op =
-  | Add
-  | Sub
-  | Mul
-  | Div
-  | Mod
-  | Eq
-  | NotEq
-  | Less
-  | LessEq
-  | Greater
-  | GreaterEq
 
 and maybe_bounds_check =
   | NoBoundsCheck
