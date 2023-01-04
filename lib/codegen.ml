@@ -23,6 +23,8 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
     begin match typ with
     | Nil -> Llvm.void_type llvm_ctxt
 
+    | PtrTo(pointed_t) -> Llvm.pointer_type (_berk_t_to_llvm_t pointed_t)
+
     | U64 | I64 -> Llvm.i64_type llvm_ctxt
     | U32 | I32 -> Llvm.i32_type llvm_ctxt
     | U16 | I16 -> Llvm.i16_type llvm_ctxt

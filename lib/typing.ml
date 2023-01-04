@@ -21,6 +21,7 @@ type berk_t =
       (*
         Variant("Option", [("Some", Unbound("`a")); (None, Nil)])
       *)
+  | PtrTo of berk_t
   | VarArgSentinel
   | Unbound of string
   | Undecided
@@ -61,6 +62,8 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
       let variants_fmt = List.fold_left (^) "" variant_fmts in
 
       Printf.sprintf "variant %s {%s}" type_name variants_fmt
+
+  | PtrTo (typ) -> Printf.sprintf "ptrto %s" (fmt_type typ)
 
   | VarArgSentinel -> "..."
   | Unbound (type_var) ->
@@ -373,6 +376,13 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
       | Some(t) -> t
     end
 
+  | PtrTo(pointed_t) ->
+      let pointed_concretified_t =
+        concretify_unbound_types tvar_to_t pointed_t
+      in
+
+      PtrTo(pointed_concretified_t)
+
   | Tuple(tuple_typs) ->
       let typs_concretified =
         List.map (concretify_unbound_types tvar_to_t) tuple_typs
@@ -413,6 +423,8 @@ let rec is_concrete_type ?(verbose=false) typ =
   | Bool
   | String
   | Nil -> true
+
+  | PtrTo(pointed_t) -> _is_concrete_type pointed_t
 
   | VarArgSentinel -> true
 
@@ -526,6 +538,8 @@ let get_tvars typ =
     | Nil
     | VarArgSentinel
     | Undecided -> so_far
+
+    | PtrTo(pointed_t) -> _get_tvars so_far pointed_t
 
     | Tuple(tuple_typs) ->
         List.fold_left _get_tvars so_far tuple_typs

@@ -36,7 +36,7 @@ and lval_kind =
 
 (* Instruction *)
 type instr =
-| Alloca of lval
+| Alloca of lval * berk_t
 | Store of lval * rval
 | Load of lval * lval
 | Assign of lval * rval
@@ -81,7 +81,7 @@ let update_bb mir_ctxt bb =
 let instr_lval instr =
   match instr with
   | Assign(lval, _) -> lval
-  | Alloca(lval) -> lval
+  | Alloca(lval, _) -> lval
   | Store(lval, _) -> lval
   | Load(lval, _) -> lval
   | BinOp(lval, _, _, _) -> lval
@@ -195,8 +195,10 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
             | _ ->
               let (mir_ctxt, if_alloca_name) = get_varname mir_ctxt in
-              let if_alloca_lval = {t=t; kind=Tmp; lname=if_alloca_name} in
-              let alloca_instr = Alloca(if_alloca_lval) in
+              let if_alloca_lval =
+                {t=PtrTo(t); kind=Tmp; lname=if_alloca_name}
+              in
+              let alloca_instr = Alloca(if_alloca_lval, t) in
               let bb = {bb with instrs = bb.instrs @ [alloca_instr]} in
 
               let do_store if_branch_instr =
@@ -308,17 +310,21 @@ let fmt_rval rval =
 let fmt_instr instr =
   let open Printf in
   match instr with
-  | Alloca(lval) ->
-      let {t; kind; lname} = lval in
-      sprintf "  %s = alloca<%s> %s\n" lname (fmt_lval_kind kind) (fmt_type t)
+  | Alloca(lval, pointed_t) ->
+      let {t=ptr_t; kind; lname} = lval in
+      sprintf "  %s<%s>: %s = alloca of %s\n"
+        lname
+        (fmt_lval_kind kind)
+        (fmt_type ptr_t)
+        (fmt_type pointed_t)
 
   | Store(lval, rval) ->
       let {t; kind; lname} = lval in
-      sprintf "  store<%s> %s -> %s -> %s\n"
-        (fmt_lval_kind kind)
+      sprintf "  store %s into %s<%s>: %s\n"
         (fmt_rval rval)
-        (fmt_type t)
         lname
+        (fmt_lval_kind kind)
+        (fmt_type t)
 
   | Load(lval, rhs_lval) ->
       let {t; kind; lname} = lval in
@@ -381,7 +387,7 @@ let fmt_instr instr =
       sprintf "  ret %s\n" (fmt_rval rval)
 
 let fmt_bb ({name; instrs} : bb) =
-  Printf.sprintf "%s:\n%s"
+  Printf.sprintf "\n%s:\n%s"
     name
     (List.fold_left (^) "" (List.map fmt_instr instrs))
 
