@@ -241,6 +241,8 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
     let (mir_ctxt, bb, instr) = begin match exp with
       | ValNil -> ValNil |> literal_to_instr mir_ctxt bb
 
+      | ValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb
+
       | ValU8 (x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb
       | ValU16(x) -> ValU16(x) |> literal_to_instr mir_ctxt bb
       | ValU32(x) -> ValU32(x) |> literal_to_instr mir_ctxt bb
