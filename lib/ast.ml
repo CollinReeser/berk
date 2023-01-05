@@ -92,17 +92,17 @@ let expr_type exp =
 
 let fmt_bin_op op =
   match op with
-  | Add -> " + "
-  | Sub -> " - "
-  | Mul -> " * "
-  | Div -> " / "
-  | Mod -> " %% "
-  | Eq -> " == "
-  | Ne -> " != "
-  | Lt -> " < "
-  | Le -> " <= "
-  | Gt -> " > "
-  | Ge -> " >= "
+  | Add -> "+"
+  | Sub -> "-"
+  | Mul -> "*"
+  | Div -> "/"
+  | Mod -> "%%"
+  | Eq -> "=="
+  | Ne -> "!="
+  | Lt -> "<"
+  | Le -> "<="
+  | Gt -> ">"
+  | Ge -> ">="
 
 let rec fmt_join_exprs ?(print_typ = false) ind delim exprs : string =
   match exprs with
