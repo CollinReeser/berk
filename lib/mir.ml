@@ -147,12 +147,12 @@ let fmt_instr instr =
         (fmt_lval lval_aggregate)
 
   | Br({name; _}) ->
-      sprintf "  unconditional branch to %s\n" name
+      sprintf "  branch to %s\n" name
 
   | CondBr(lval, {name=lhs_name; _}, {name=rhs_name; _}) ->
-      sprintf "  branch on %s among %s, %s\n"
-        (fmt_lval lval)
+      sprintf "  branch to %s if %s else %s\n"
         lhs_name
+        (fmt_lval lval)
         rhs_name
 
   | RetVoid -> sprintf "  ret (void)\n"
