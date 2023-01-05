@@ -28,6 +28,20 @@ let main = begin
         };
         f_stmts = [
           DeclDeconStmt(
+            [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
+            Undecided,
+            ArrayExpr(
+              Undecided, [
+                (* FIXME: These don't quite work right. Check resultant types
+                of lvals in the aggregate; they should all match the actual
+                aggregate type in the MIR, but they don't. *)
+                ValCastTrunc(U32, ValU64(65));
+                ValU32(66);
+                ValCastBitwise(U8, ValI8(67));
+              ]
+            )
+          );
+          DeclDeconStmt(
             [("a", {mut=false}); ("b", {mut=false}); ("c", {mut=false})],
             Undecided,
             TupleExpr(Undecided, [ValU64(64); ValU32(32); ValU16(16);])

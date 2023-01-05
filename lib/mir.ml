@@ -305,6 +305,29 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, lval)
 
+      (* TODO: This is structually identical to TupleExprs. Are statically
+      sized arrays really so interesting that they need to be different? The
+      question really is whether a statically sized array must also be
+      statically fully initialized, or if it can be partially/fully
+      _un_initialized after first declaration.
+       *)
+      | ArrayExpr(t, exprs) ->
+          let ((mir_ctxt, bb), arr_values) =
+            List.fold_left_map (
+              fun (mir_ctxt, bb) exp ->
+                let (mir_ctxt, bb, arr_val) = _expr_to_mir mir_ctxt bb exp in
+                ((mir_ctxt, bb), arr_val)
+            ) (mir_ctxt, bb) exprs
+          in
+
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
+          let lval = {t=t; kind=Tmp; lname=varname} in
+          let arr_instr = IntoAggregate(lval, arr_values) in
+
+          let bb = {bb with instrs=bb.instrs @ [arr_instr]} in
+
+          (mir_ctxt, bb, lval)
+
       | BinOp(t, op, lhs, rhs) ->
           let (mir_ctxt, bb, lhs_lval) = _expr_to_mir mir_ctxt bb lhs in
           let (mir_ctxt, bb, rhs_lval) = _expr_to_mir mir_ctxt bb rhs in
