@@ -123,17 +123,18 @@ let fmt_instr instr =
         (fmt_bin_op op)
         (fmt_lval rhs_lval)
 
-  | UnOp(lval, un_op, rhs_lval) ->
+  | UnOp({t=target_t; _} as lval, un_op, rhs_lval) ->
       let fmt_un_op un_op = begin match un_op with
         | Truncate -> "truncate of"
         | Extend -> "extend of"
         | Bitwise -> "bitwise cast of"
       end in
 
-      sprintf "  %s = %s %s\n"
+      sprintf "  %s = %s %s into %s\n"
         (fmt_lval lval)
         (fmt_un_op un_op)
         (fmt_lval rhs_lval)
+        (fmt_type target_t)
 
   | IntoAggregate(lval, elems) ->
       sprintf "  %s = aggregate of (%s)\n"
@@ -264,8 +265,8 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, var_value)
 
-      (* FIXME: ValCastTrunc and ValCastBitwise are identical in structure; is
-      there a way to cleanly collapse their implementations? *)
+      (* FIXME: These casts are are identical in structure; is there a way to
+      cleanly collapse their implementations? *)
       | ValCastTrunc(t, exp) ->
           let (mir_ctxt, bb, to_trunc_lval) = _expr_to_mir mir_ctxt bb exp in
 
@@ -283,6 +284,17 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let (mir_ctxt, varname) = get_varname mir_ctxt in
           let lval = {t=t; kind=Tmp; lname=varname} in
           let instr = UnOp(lval, Bitwise, to_bitwise_lval) in
+
+          let bb = {bb with instrs=bb.instrs @ [instr]} in
+
+          (mir_ctxt, bb, lval)
+
+      | ValCastExtend(t, exp) ->
+          let (mir_ctxt, bb, to_bitwise_lval) = _expr_to_mir mir_ctxt bb exp in
+
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
+          let lval = {t=t; kind=Tmp; lname=varname} in
+          let instr = UnOp(lval, Extend, to_bitwise_lval) in
 
           let bb = {bb with instrs=bb.instrs @ [instr]} in
 
