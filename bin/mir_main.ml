@@ -112,42 +112,6 @@ let main = begin
     let filename_exe = "output" in
     generate_executable filename_exe filename_obj ;
 
-    let _ = begin
-      let rec tailcall_collatz_len_internal cur_len cur_val =
-        if cur_val = 1
-        then cur_len
-
-        else if cur_val mod 2 == 0
-        then tailcall_collatz_len_internal (cur_len + 1) (cur_val / 2)
-        else tailcall_collatz_len_internal (cur_len + 1) (cur_val * 3 + 1)
-
-
-      and collatz_len start_val =
-        tailcall_collatz_len_internal 1 start_val
-
-
-      and collatz_highest_seed_internal max_seed max_len cur_seed ceiling =
-        if cur_seed > ceiling
-        then (max_seed, max_len)
-        else
-          begin
-            let cur_len = collatz_len cur_seed in
-            if cur_len > max_len
-            then collatz_highest_seed_internal cur_seed cur_len (cur_seed + 1) ceiling
-            else collatz_highest_seed_internal max_seed max_len (cur_seed + 1) ceiling
-          end
-
-
-      and collatz_highest_seed ceiling =
-        collatz_highest_seed_internal 1 1 1 ceiling
-
-      in
-
-      (* let (highest_seed, max_len) = collatz_highest_seed 120 in *)
-      let (highest_seed, max_len) = collatz_highest_seed 1000000 in
-      Printf.printf "Highest seed: [%d], max len: [%d]" highest_seed max_len
-    end in
-
     ()
   end
 end
