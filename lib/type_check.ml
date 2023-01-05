@@ -613,7 +613,7 @@ and type_check_expr
             let common_t = common_type_of_lr lhs_t rhs_t in
             BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
 
-        | Eq | NotEq | Less | LessEq | Greater | GreaterEq ->
+        | Eq | Ne | Lt | Le | Gt | Ge ->
             let lhs_typechecked = _type_check_expr lhs in
             let rhs_typechecked = _type_check_expr rhs in
             BinOp(Bool, op, lhs_typechecked, rhs_typechecked)

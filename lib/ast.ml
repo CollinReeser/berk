@@ -1,5 +1,6 @@
 open Typing
 open Ir
+open Utility
 
 
 (*
@@ -96,12 +97,12 @@ let fmt_bin_op op =
   | Mul -> " * "
   | Div -> " / "
   | Mod -> " %% "
-  | Eq        -> " == "
-  | NotEq     -> " != "
-  | Less      -> " < "
-  | LessEq    -> " <= "
-  | Greater   -> " > "
-  | GreaterEq -> " >= "
+  | Eq -> " == "
+  | Ne -> " != "
+  | Lt -> " < "
+  | Le -> " <= "
+  | Gt -> " > "
+  | Ge -> " >= "
 
 let rec fmt_join_exprs ?(print_typ = false) ind delim exprs : string =
   match exprs with
@@ -251,16 +252,6 @@ and fmt_join_idents_quals delim idents_quals : string =
         ident
         delim
         (fmt_join_idents_quals delim xs)
-
-and fmt_join_strs delim idents : string =
-  match idents with
-  | [] -> ""
-  | [ident] -> ident
-  | ident::xs ->
-      Printf.sprintf "%s%s%s"
-        ident
-        delim
-        (fmt_join_strs delim xs)
 
 and fmt_stmt ?(print_typ = false) ind stmt =
   match stmt with

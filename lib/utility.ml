@@ -23,3 +23,14 @@ let list_to_2_tuples lst =
   | [_] -> failwith "List too small to split into 2-tuples"
   | _ -> every_elem [] lst
 ;;
+
+let rec fmt_join_strs delim idents : string =
+  match idents with
+  | [] -> ""
+  | [ident] -> ident
+  | ident::xs ->
+      Printf.sprintf "%s%s%s"
+        ident
+        delim
+        (fmt_join_strs delim xs)
+;;

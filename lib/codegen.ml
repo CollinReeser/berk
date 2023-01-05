@@ -533,7 +533,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
           begin match op with
           | Eq ->
               Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
-          | NotEq ->
+          | Ne ->
               Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
 
           | _ -> failwith "Non-equality binop not supported for bool"
@@ -549,15 +549,15 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
           | Mod -> Llvm.build_urem lhs_comm rhs_comm "uremtmp" builder
           | Eq ->
               Llvm.build_icmp Llvm.Icmp.Eq lhs_comm rhs_comm "uicmptmp" builder
-          | NotEq ->
+          | Ne ->
               Llvm.build_icmp Llvm.Icmp.Ne lhs_comm rhs_comm "uicmptmp" builder
-          | Less ->
+          | Lt ->
               Llvm.build_icmp Llvm.Icmp.Ult lhs_comm rhs_comm "uicmptmp" builder
-          | LessEq ->
+          | Le ->
               Llvm.build_icmp Llvm.Icmp.Ule lhs_comm rhs_comm "uicmptmp" builder
-          | Greater ->
+          | Gt ->
               Llvm.build_icmp Llvm.Icmp.Ugt lhs_comm rhs_comm "uicmptmp" builder
-          | GreaterEq ->
+          | Ge ->
               Llvm.build_icmp Llvm.Icmp.Uge lhs_comm rhs_comm "uicmptmp" builder
           end
       | I64 | I32 | I16 | I8 ->
@@ -577,15 +577,15 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
           | Mod -> Llvm.build_srem lhs_comm rhs_comm "sremtmp" builder
           | Eq ->
               Llvm.build_icmp Llvm.Icmp.Eq lhs_comm rhs_comm "iicmptmp" builder
-          | NotEq ->
+          | Ne ->
               Llvm.build_icmp Llvm.Icmp.Ne lhs_comm rhs_comm "iicmptmp" builder
-          | Less ->
+          | Lt ->
               Llvm.build_icmp Llvm.Icmp.Slt lhs_comm rhs_comm "iicmptmp" builder
-          | LessEq ->
+          | Le ->
               Llvm.build_icmp Llvm.Icmp.Sle lhs_comm rhs_comm "iicmptmp" builder
-          | Greater ->
+          | Gt ->
               Llvm.build_icmp Llvm.Icmp.Sgt lhs_comm rhs_comm "iicmptmp" builder
-          | GreaterEq ->
+          | Ge ->
               Llvm.build_icmp Llvm.Icmp.Sge lhs_comm rhs_comm "iicmptmp" builder
           end
       | F128 | F64 | F32 ->
@@ -599,15 +599,15 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
           | Mod -> Llvm.build_frem lhs_comm rhs_comm "fremtmp" builder
           | Eq ->
               Llvm.build_fcmp Llvm.Fcmp.Ueq lhs_comm rhs_comm "fcmptmp" builder
-          | NotEq ->
+          | Ne ->
               Llvm.build_fcmp Llvm.Fcmp.Une lhs_comm rhs_comm "fcmptmp" builder
-          | Less ->
+          | Lt ->
               Llvm.build_fcmp Llvm.Fcmp.Ult lhs_comm rhs_comm "fcmptmp" builder
-          | LessEq ->
+          | Le ->
               Llvm.build_fcmp Llvm.Fcmp.Ule lhs_comm rhs_comm "fcmptmp" builder
-          | Greater ->
+          | Gt ->
               Llvm.build_fcmp Llvm.Fcmp.Ugt lhs_comm rhs_comm "fcmptmp" builder
-          | GreaterEq ->
+          | Ge ->
               Llvm.build_fcmp Llvm.Fcmp.Uge lhs_comm rhs_comm "fcmptmp" builder
           end
       | typ ->

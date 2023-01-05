@@ -1,6 +1,7 @@
 open Ast
-open Typing
 open Ir
+open Typing
+open Utility
 
 module StrMap = Map.Make(String)
 
@@ -37,15 +38,17 @@ and lval_kind =
 (* Instruction *)
 type instr =
 | Alloca of lval * berk_t
-| Store of lval * rval
+(* Store -> lhs is alloca target, rhs is stored value *)
+| Store of lval * lval
+(* Load -> lhs is loaded value, rhs alloca target *)
 | Load of lval * lval
 | Assign of lval * rval
-| BinOp of lval * bin_op * rval * rval
-| UnOp of lval * un_op * rval
+| BinOp of lval * bin_op * lval * lval
+| UnOp of lval * un_op * lval
 | Br of bb
 | CondBr of lval * bb * bb
 | RetVoid
-| Ret of rval
+| Ret of lval
 
 and bb = {
   name: string;
@@ -53,6 +56,9 @@ and bb = {
 }
 
 type mir_ctxt = {
+  f_name: string;
+  f_params: (ident_t * berk_t) list;
+  f_ret_t: berk_t;
   name_gen: int;
   lvars: lval StrMap.t;
   bbs: bb StrMap.t;
@@ -77,6 +83,11 @@ let update_bb mir_ctxt bb =
   let mir_ctxt = {mir_ctxt with bbs=bbs} in
 
   mir_ctxt
+
+let get_bb mir_ctxt bb_name : bb =
+  StrMap.find bb_name mir_ctxt.bbs
+
+let get_entry mir_ctxt : bb = get_bb mir_ctxt "entry"
 
 let instr_lval instr =
   match instr with
@@ -129,7 +140,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let (mir_ctxt, varname) = get_varname mir_ctxt in
 
           let lval = {t=t; kind=Tmp; lname=varname} in
-          let instr = BinOp(lval, op, RVar(lhs_lval), RVar(rhs_lval)) in
+          let instr = BinOp(lval, op, lhs_lval, rhs_lval) in
 
           let bb = {bb with instrs=bb.instrs @ [instr]} in
 
@@ -203,7 +214,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
               let do_store if_branch_instr =
                 let lval = instr_lval if_branch_instr in
-                [Store(if_alloca_lval, RVar(lval))]
+                [Store(if_alloca_lval, lval)]
               in
 
               let (mir_ctxt, (bb, then_bb, else_bb, end_bb)) =
@@ -234,7 +245,6 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, if_res_instr)
 
-
       | _ -> failwith "Unimplemented"
     end in
 
@@ -264,13 +274,29 @@ let stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb, assign_instr)
 
+    | ReturnStmt(exp) ->
+        let (mir_ctxt, bb, instr) = expr_to_mir mir_ctxt bb exp in
+
+        let ret_lval = instr_lval instr in
+        let ret_instr = Ret(ret_lval) in
+
+        let bb = {bb with instrs = bb.instrs @ [ret_instr]} in
+        let mir_ctxt = update_bb mir_ctxt bb in
+
+        (mir_ctxt, bb, ret_instr)
+
     | _ -> failwith "Unimplemented"
   in
 
   _stmt_to_mir mir_ctxt bb stmt
 
-let func_to_mir {f_stmts; _} =
-  let mir_ctxt = {name_gen = 0; lvars = StrMap.empty; bbs = StrMap.empty} in
+let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
+  let mir_ctxt = {
+    f_name = f_name;
+    f_params = (List.map (fun (param_name, _, t) -> (param_name, t)) f_params);
+    f_ret_t = f_ret_t;
+    name_gen = 0; lvars = StrMap.empty; bbs = StrMap.empty
+  } in
   let bb_entry = {name="entry"; instrs=[]} in
   let ((mir_ctxt, _), _) =
     List.fold_left_map (
@@ -281,6 +307,10 @@ let func_to_mir {f_stmts; _} =
   in
 
   mir_ctxt
+
+
+(* Formatting functions. *)
+
 
 let fmt_lval_kind kind =
   match kind with
@@ -318,10 +348,13 @@ let fmt_instr instr =
         (fmt_type ptr_t)
         (fmt_type pointed_t)
 
-  | Store(lval, rval) ->
+  | Store(lval, rhs_lval) ->
       let {t; kind; lname} = lval in
-      sprintf "  store %s into %s<%s>: %s\n"
-        (fmt_rval rval)
+      let {t=rhs_t; kind=rhs_kind; lname=rhs_lname} = rhs_lval in
+      sprintf "  store %s<%s>: %s into %s<%s>: %s\n"
+        rhs_lname
+        (fmt_lval_kind rhs_kind)
+        (fmt_type rhs_t)
         lname
         (fmt_lval_kind kind)
         (fmt_type t)
@@ -345,17 +378,26 @@ let fmt_instr instr =
         (fmt_type t)
         (fmt_rval rval)
 
-  | BinOp(lval, op, lhs, rhs) ->
+  | BinOp(lval, op, lhs_lval, rhs_lval) ->
       let {t; kind; lname} = lval in
-      sprintf "  %s<%s>: %s = %s%s%s\n"
+      let {t=lhs_t; kind=lhs_kind; lname=lhs_lname} = lhs_lval in
+      let {t=rhs_t; kind=rhs_kind; lname=rhs_lname} = rhs_lval in
+      sprintf "  %s<%s>: %s = %s<%s>: %s%s%s<%s>: %s\n"
         lname
         (fmt_lval_kind kind)
         (fmt_type t)
-        (fmt_rval lhs)
-        (fmt_bin_op op)
-        (fmt_rval rhs)
 
-  | UnOp(lval, un_op, rval) ->
+        lhs_lname
+        (fmt_lval_kind lhs_kind)
+        (fmt_type lhs_t)
+
+        (fmt_bin_op op)
+
+        rhs_lname
+        (fmt_lval_kind rhs_kind)
+        (fmt_type rhs_t)
+
+  | UnOp(lval, un_op, rhs_lval) ->
       let fmt_un_op un_op = begin match un_op with
         | Truncate -> "truncate of"
         | Extend -> "extend of"
@@ -363,12 +405,15 @@ let fmt_instr instr =
       end in
 
       let {t; kind; lname} = lval in
-      sprintf "  %s<%s>: %s = %s %s\n"
+      let {t=rhs_t; kind=rhs_kind; lname=rhs_lname} = rhs_lval in
+      sprintf "  %s<%s>: %s = %s %s<%s>: %s\n"
         lname
         (fmt_lval_kind kind)
         (fmt_type t)
         (fmt_un_op un_op)
-        (fmt_rval rval)
+        rhs_lname
+        (fmt_lval_kind rhs_kind)
+        (fmt_type rhs_t)
 
   | Br({name; _}) ->
       sprintf "  unconditional branch to %s\n" name
@@ -383,17 +428,31 @@ let fmt_instr instr =
         rhs_name
 
   | RetVoid -> sprintf "  ret (void)\n"
-  | Ret(rval) ->
-      sprintf "  ret %s\n" (fmt_rval rval)
+  | Ret(lval) ->
+      let {t; kind; lname} = lval in
+      sprintf "  ret %s<%s>: %s\n"
+        lname
+        (fmt_lval_kind kind)
+        (fmt_type t)
 
 let fmt_bb ({name; instrs} : bb) =
-  Printf.sprintf "\n%s:\n%s"
+  Printf.sprintf "%s:\n%s"
     name
     (List.fold_left (^) "" (List.map fmt_instr instrs))
 
-let fmt_mir_ctxt mir_ctxt =
-  let bbs = List.map (fun (_, bb) -> bb) (StrMap.bindings mir_ctxt.bbs) in
-  Printf.sprintf "%s"
+let fmt_mir_ctxt {f_name; f_params; f_ret_t; bbs; _} =
+  let open Printf in
+  let bbs = List.map (fun (_, bb) -> bb) (StrMap.bindings bbs) in
+  let f_params_fmted =
+    fmt_join_strs ", " (
+      List.map (fun (n, t) -> sprintf "%s: %s" n (fmt_type t)) f_params
+    )
+  in
+
+  sprintf "\nfn %s(%s) -> %s:\n%s"
+    f_name
+    f_params_fmted
+    (fmt_type f_ret_t)
     (List.fold_left (^) "" (List.map fmt_bb bbs))
 
 let pprint_mir_ctxt ppf mir_ctxt =

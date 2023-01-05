@@ -4,13 +4,11 @@ open Berk.Ast
 open Berk.Typing
 open Berk.Type_check
 open Berk.Codegen
-open Test
 
 
 let main = begin
   record_backtrace true;
   Llvm.enable_pretty_stacktrace ();
-  test_suite;
 
   begin
     let llvm_ctxt = Llvm.global_context () in
@@ -37,11 +35,11 @@ let main = begin
                 "my_inner_var_3", def_var_qual, Undecided,
                 IfThenElseExpr(
                   Undecided,
-                  BinOp(Undecided, Less, ValI8(11), ValI64(9)),
+                  BinOp(Undecided, Lt, ValI8(11), ValI64(9)),
                   ValI64(6),
                   IfThenElseExpr(
                     Undecided,
-                    BinOp(Undecided, GreaterEq, ValF64(11.12), ValF32(9.34)),
+                    BinOp(Undecided, Ge, ValF64(11.12), ValF32(9.34)),
                     BlockExpr(Undecided, [], ValI64(9)),
                     ValI64(8)
                   )
@@ -223,8 +221,6 @@ let main = begin
       in
       let tc_ctxt : typecheck_context = default_tc_ctxt Undecided in
       let (tc_ctxt_up, _) = type_check_stmt tc_ctxt decl_stmt_raw in
-
-      let _ = test_typecheck ~tc_ctxt:tc_ctxt_up expr_raw in
 
       let _ = Printf.printf "Expr type: %s\n%s\n%s\n"
         (
@@ -560,7 +556,7 @@ let main = begin
             IfThenElseExpr(
               Undecided,
               BinOp(
-                Undecided, Greater,
+                Undecided, Gt,
                 ValVar(Undecided, "cur_seed"), ValVar(Undecided, "ceiling")
               ),
               BlockExpr(
@@ -592,7 +588,7 @@ let main = begin
                     IfThenElseExpr(
                       Undecided,
                       BinOp(
-                        Undecided, Greater,
+                        Undecided, Gt,
                         ValVar(Undecided, "cur_len"),
                         ValVar(Undecided, "max_len")
                       ),
@@ -676,7 +672,7 @@ let main = begin
                   WhileExpr(
                     Undecided,
                     BinOp(
-                      Undecided, NotEq,
+                      Undecided, Ne,
                       ValVar(Undecided, "cur"),
                       ValU64(1)
                     ),

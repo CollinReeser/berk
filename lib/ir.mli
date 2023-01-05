@@ -5,11 +5,11 @@ type bin_op =
 | Div
 | Mod
 | Eq
-| NotEq
-| Less
-| LessEq
-| Greater
-| GreaterEq
+| Ne
+| Lt
+| Le
+| Gt
+| Ge
 
 type un_op =
 | Truncate
