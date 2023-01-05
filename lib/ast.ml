@@ -32,6 +32,7 @@ and expr =
   | ValVar of berk_t * ident_t
   | ValCastTrunc of berk_t * expr
   | ValCastBitwise of berk_t * expr
+  | ValCastExtend of berk_t * expr
   | BinOp of berk_t * bin_op * expr * expr
   (* Sequence of statements followed by an expression, where if the expression
   is None, then the BlockExpr resolves to a nil value. *)
@@ -78,6 +79,7 @@ let expr_type exp =
   | ValVar(typ, _) -> typ
   | ValCastTrunc(typ, _) -> typ
   | ValCastBitwise(typ, _) -> typ
+  | ValCastExtend(typ, _) -> typ
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
@@ -151,6 +153,13 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
 
   | ValCastBitwise (target_t, exp) ->
       Printf.sprintf "%scast_bitwise<%s>(%s)%s"
+        init_ind
+        (fmt_type target_t)
+        (fmt_expr ~print_typ:print_typ "" exp)
+        typ_s
+
+  | ValCastExtend (target_t, exp) ->
+      Printf.sprintf "%scast_extend<%s>(%s)%s"
         init_ind
         (fmt_type target_t)
         (fmt_expr ~print_typ:print_typ "" exp)
@@ -491,21 +500,28 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
           "[[ " ^ (fmt_type injected_t) ^ " ]]"
         )
 
-    | (U8,   ValU8(x))                                      -> ValU8 (x)
-    | (U16, (ValU8(x) | ValU16(x)))                         -> ValU16(x)
-    | (U32, (ValU8(x) | ValU16(x) | ValU32(x)))             -> ValU32(x)
-    | (U64, (ValU8(x) | ValU16(x) | ValU32(x) | ValU64(x))) -> ValU64(x)
+    | (U8,   ValU8(_)) -> exp
+    | (U16, ValU16(_)) -> exp
+    | (U32, ValU32(_)) -> exp
+    | (U64, ValU64(_)) -> exp
+    | (U16,  ValU8(_))                          -> ValCastExtend(U16, exp)
+    | (U32, (ValU8(_) | ValU16(_)))             -> ValCastExtend(U32, exp)
+    | (U64, (ValU8(_) | ValU16(_) | ValU32(_))) -> ValCastExtend(U64, exp)
 
-    | (I8,   ValI8(x))                                      -> ValI8 (x)
-    | (I16, (ValI8(x) | ValI16(x)))                         -> ValI16(x)
-    | (I32, (ValI8(x) | ValI16(x) | ValI32(x)))             -> ValI32(x)
-    | (I64, (ValI8(x) | ValI16(x) | ValI32(x) | ValI64(x))) -> ValI64(x)
+    | (I8,   ValI8(_)) -> exp
+    | (I16, ValI16(_)) -> exp
+    | (I32, ValI32(_)) -> exp
+    | (I64, ValI64(_)) -> exp
+    | (I16,  ValI8(_))                          -> ValCastExtend(I16, exp)
+    | (I32, (ValI8(_) | ValI16(_)))             -> ValCastExtend(I32, exp)
+    | (I64, (ValI8(_) | ValI16(_) | ValI32(_))) -> ValCastExtend(I64, exp)
 
-    | (F32,  ValF32(x))                                     -> ValF32(x)
-    | (F64, (ValF32(x) | ValF64(x)))                        -> ValF64(x)
+    | (F32,  ValF32(_))  -> exp
+    | (F64,  ValF64(_))  -> exp
+    | (F128, ValF128(_)) -> exp
 
-    | (F128, (ValF32(x) | ValF64(x))) -> ValF128(Printf.sprintf "%f" x)
-    | (F128, ValF128(str))            -> ValF128(str)
+    | (F64,   ValF32(_))              -> ValCastExtend( F64, exp)
+    | (F128, (ValF32(_) | ValF64(_))) -> ValCastExtend(F128, exp)
 
     | (Nil,    ValNil)
     | (Bool,   ValBool(_))
