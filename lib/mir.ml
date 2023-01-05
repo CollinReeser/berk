@@ -264,6 +264,8 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, var_value)
 
+      (* FIXME: ValCastTrunc and ValCastBitwise are identical in structure; is
+      there a way to cleanly collapse their implementations? *)
       | ValCastTrunc(t, exp) ->
           let (mir_ctxt, bb, to_trunc_lval) = _expr_to_mir mir_ctxt bb exp in
 
