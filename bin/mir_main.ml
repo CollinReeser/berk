@@ -2,6 +2,7 @@ open Printexc
 
 open Berk.Ast
 open Berk.Codegen_mir
+open Berk.Llvm_utility
 open Berk.Mir
 open Berk.Type_check
 open Berk.Typing

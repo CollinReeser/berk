@@ -1,9 +1,10 @@
 open Printexc
 
 open Berk.Ast
-open Berk.Typing
-open Berk.Type_check
 open Berk.Codegen
+open Berk.Llvm_utility
+open Berk.Type_check
+open Berk.Typing
 
 
 let main = begin
