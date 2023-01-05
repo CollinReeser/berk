@@ -45,6 +45,8 @@ type instr =
 | Assign of lval * rval
 | BinOp of lval * bin_op * lval * lval
 | UnOp of lval * un_op * lval
+| IntoAggregate of lval * lval list
+| FromAggregate of lval * int * lval
 | Br of bb
 | CondBr of lval * bb * bb
 | RetVoid
@@ -216,6 +218,8 @@ let instr_lval instr =
   | Load(lval, _) -> lval
   | BinOp(lval, _, _, _) -> lval
   | UnOp(lval, _, _) -> lval
+  | IntoAggregate(lval, _) -> lval
+  | FromAggregate(lval, _, _) -> lval
   | CondBr(_, _, _) -> failwith "No resultant lval for condbr"
   | Ret(_) -> failwith "No resultant lval for ret"
   | Br(_) -> failwith "No resultant lval for br"
@@ -223,7 +227,7 @@ let instr_lval instr =
 
 let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
   let rec _expr_to_mir
-    (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * instr)
+    (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * lval)
   =
     let literal_to_instr mir_ctxt bb ctor =
       let (mir_ctxt, varname) = get_varname mir_ctxt in
@@ -231,7 +235,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       let lval = {t=t; kind=Tmp; lname=varname} in
       let instr = Assign(lval, Constant(ctor)) in
       let bb = {bb with instrs=bb.instrs @ [instr]} in
-      (mir_ctxt, bb, instr)
+      (mir_ctxt, bb, lval)
     in
 
     let (mir_ctxt, bb, instr) = begin match exp with
@@ -251,11 +255,31 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb
       | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb
 
+      | ValVar(_, varname) ->
+          let var_value = StrMap.find varname mir_ctxt.lvars in
+
+          (mir_ctxt, bb, var_value)
+
+      | TupleExpr(t, exprs) ->
+          let ((mir_ctxt, bb), tuple_values) =
+            List.fold_left_map (
+              fun (mir_ctxt, bb) exp ->
+                let (mir_ctxt, bb, tuple_val) = _expr_to_mir mir_ctxt bb exp in
+                ((mir_ctxt, bb), tuple_val)
+            ) (mir_ctxt, bb) exprs
+          in
+
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
+          let lval = {t=t; kind=Tmp; lname=varname} in
+          let tuple_instr = IntoAggregate(lval, tuple_values) in
+
+          let bb = {bb with instrs=bb.instrs @ [tuple_instr]} in
+
+          (mir_ctxt, bb, lval)
+
       | BinOp(t, op, lhs, rhs) ->
-          let (mir_ctxt, bb, lhs_instr) = _expr_to_mir mir_ctxt bb lhs in
-          let (mir_ctxt, bb, rhs_instr) = _expr_to_mir mir_ctxt bb rhs in
-          let lhs_lval = instr_lval lhs_instr in
-          let rhs_lval = instr_lval rhs_instr in
+          let (mir_ctxt, bb, lhs_lval) = _expr_to_mir mir_ctxt bb lhs in
+          let (mir_ctxt, bb, rhs_lval) = _expr_to_mir mir_ctxt bb rhs in
           let (mir_ctxt, varname) = get_varname mir_ctxt in
 
           let lval = {t=t; kind=Tmp; lname=varname} in
@@ -263,7 +287,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           let bb = {bb with instrs=bb.instrs @ [instr]} in
 
-          (mir_ctxt, bb, instr)
+          (mir_ctxt, bb, lval)
 
       | IfThenElseExpr(t, cond_expr, then_expr, else_expr) ->
           let core_if_then_else_gen mir_ctxt bb maybe_do_store =
@@ -274,7 +298,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             let else_bb = {name=else_bb_name; instrs=[]} in
             let end_bb = {name=end_bb_name; instrs=[]} in
 
-            let (mir_ctxt, bb, cond_instr) =
+            let (mir_ctxt, bb, cond_lval) =
               _expr_to_mir mir_ctxt bb cond_expr
             in
 
@@ -298,7 +322,6 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
               }
             in
 
-            let cond_lval = instr_lval cond_instr in
             let cond_br = CondBr(cond_lval, then_bb, else_bb) in
             let bb = {bb with instrs = bb.instrs @ [cond_br]} in
 
@@ -314,14 +337,11 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                 core_if_then_else_gen mir_ctxt bb no_store
               in
 
-              let (mir_ctxt, end_bb, nil_instr) =
+              let (mir_ctxt, end_bb, nil_lval) =
                 _expr_to_mir mir_ctxt end_bb ValNil
               in
-              let end_bb =
-                {end_bb with instrs = end_bb.instrs @ [nil_instr]}
-              in
 
-              (mir_ctxt, (bb, then_bb, else_bb, end_bb), nil_instr)
+              (mir_ctxt, (bb, then_bb, else_bb, end_bb), nil_lval)
 
             | _ ->
               let (mir_ctxt, if_alloca_name) = get_varname mir_ctxt in
@@ -331,9 +351,8 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
               let alloca_instr = Alloca(if_alloca_lval, t) in
               let bb = {bb with instrs = bb.instrs @ [alloca_instr]} in
 
-              let do_store if_branch_instr =
-                let lval = instr_lval if_branch_instr in
-                [Store(if_alloca_lval, lval)]
+              let do_store if_branch_lval =
+                [Store(if_alloca_lval, if_branch_lval)]
               in
 
               let (mir_ctxt, (bb, then_bb, else_bb, end_bb)) =
@@ -349,7 +368,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                 {end_bb with instrs = end_bb.instrs @ [if_res_instr]}
               in
 
-              (mir_ctxt, (bb, then_bb, else_bb, end_bb), if_res_instr)
+              (mir_ctxt, (bb, then_bb, else_bb, end_bb), if_res_lval)
 
             end
           in
@@ -374,14 +393,18 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
 let stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
   let _stmt_to_mir
-    (mir_ctxt: mir_ctxt) (bb: bb) (stmt: Ast.stmt) : (mir_ctxt * bb * instr)
+    (mir_ctxt: mir_ctxt) (bb: bb) (stmt: Ast.stmt) : (mir_ctxt * bb)
   =
     match stmt with
+    | ExprStmt(exp) ->
+        let (mir_ctxt, bb, _) = expr_to_mir mir_ctxt bb exp in
+
+        (mir_ctxt, bb)
+
     | DeclStmt(lhs_name, _, t, exp) ->
-        let (mir_ctxt, bb, instr) = expr_to_mir mir_ctxt bb exp in
+        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
 
         let lval = {t=t; kind=Var; lname=lhs_name} in
-        let rhs_lval = instr_lval instr in
         let assign_instr = Assign(lval, RVar(rhs_lval)) in
 
         let mir_ctxt = {
@@ -391,18 +414,61 @@ let stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         let bb = {bb with instrs = bb.instrs @ [assign_instr]} in
         let mir_ctxt = update_bb mir_ctxt bb in
 
-        (mir_ctxt, bb, assign_instr)
+        (mir_ctxt, bb)
+
+    | DeclDeconStmt(ident_quals, t, exp) ->
+        let (mir_ctxt, bb, aggregate_lval) = expr_to_mir mir_ctxt bb exp in
+
+        let idents = List.map (fun (ident, _) -> ident) ident_quals in
+        let decon_sz = List.length idents in
+
+        let aggregate_types = begin match t with
+          | Array(t, _) -> List.init decon_sz (fun _ -> t)
+          | Tuple(ts) -> ts
+          | _ -> failwith "Typecheck failure deconstructing aggr in MIR"
+        end in
+
+        let elem_lvals =
+          List.map2 (
+            fun ident elem_t -> {lname=ident; t=elem_t; kind=Var}
+          ) idents aggregate_types
+        in
+
+        let extract_instrs =
+          List.mapi (
+            fun i lval ->
+              let decon_instr = FromAggregate(lval, i, aggregate_lval) in
+
+              decon_instr
+          ) elem_lvals
+        in
+
+        let idents_lvals = List.combine idents elem_lvals in
+
+        let (mir_ctxt, _) =
+          List.fold_left_map (
+            fun mir_ctxt (ident, lval) ->
+              let mir_ctxt = {
+                mir_ctxt with lvars = StrMap.add ident lval mir_ctxt.lvars
+              } in
+              (mir_ctxt, ())
+          ) mir_ctxt idents_lvals
+        in
+
+        let bb = {bb with instrs = bb.instrs @ extract_instrs} in
+        let mir_ctxt = update_bb mir_ctxt bb in
+
+        (mir_ctxt, bb)
 
     | ReturnStmt(exp) ->
-        let (mir_ctxt, bb, instr) = expr_to_mir mir_ctxt bb exp in
+        let (mir_ctxt, bb, ret_lval) = expr_to_mir mir_ctxt bb exp in
 
-        let ret_lval = instr_lval instr in
         let ret_instr = Ret(ret_lval) in
 
         let bb = {bb with instrs = bb.instrs @ [ret_instr]} in
         let mir_ctxt = update_bb mir_ctxt bb in
 
-        (mir_ctxt, bb, ret_instr)
+        (mir_ctxt, bb)
 
     | _ -> failwith "Unimplemented"
   in
@@ -420,8 +486,8 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
   let ((mir_ctxt, _), _) =
     List.fold_left_map (
       fun (mir_ctxt, cur_bb) stmt ->
-        let (mir_ctxt, cur_bb, instr) = stmt_to_mir mir_ctxt cur_bb stmt in
-        ((mir_ctxt, cur_bb), instr)
+        let (mir_ctxt, cur_bb) = stmt_to_mir mir_ctxt cur_bb stmt in
+        ((mir_ctxt, cur_bb), ())
     ) (mir_ctxt, bb_entry) f_stmts
   in
 

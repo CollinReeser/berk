@@ -126,6 +126,22 @@ let codegen_constant
   end
 ;;
 
+let codegen_aggregate builder t vals =
+  let rec _codegen_aggregate vals cur_val idx =
+    begin match vals with
+    | [] -> cur_val
+    | x::xs ->
+        let next_val = (
+          Llvm.build_insertvalue cur_val x idx "tupletmp" builder
+        ) in
+        let next_idx = idx + 1 in
+        _codegen_aggregate xs next_val next_idx
+    end
+  in
+  let undef_aggregate = Llvm.undef t in
+  _codegen_aggregate vals undef_aggregate 0
+;;
+
 let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
   begin match instr with
   | Alloca({lname; _}, t) ->
@@ -165,6 +181,33 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       let value = codegen_constant llvm_ctxt func_ctxt constant in
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname value func_ctxt.cur_vars
+      } in
+
+      func_ctxt
+
+  | IntoAggregate({lname; t; _}, elems) ->
+      let llvm_aggregate_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
+      let llvm_elems =
+        List.map (
+          fun {lname=elem_name; _} -> StrMap.find elem_name func_ctxt.cur_vars
+        ) elems
+      in
+
+      let aggr_val = codegen_aggregate builder llvm_aggregate_t llvm_elems in
+      let func_ctxt = {
+        func_ctxt with cur_vars = StrMap.add lname aggr_val func_ctxt.cur_vars
+      } in
+
+      func_ctxt
+
+  | FromAggregate({lname; _}, elem_idx, {lname=name_aggregate; _}) ->
+      let agg_value = StrMap.find name_aggregate func_ctxt.cur_vars in
+      let elem_val =
+        Llvm.build_extractvalue agg_value elem_idx "decontmp" builder
+      in
+
+      let func_ctxt = {
+        func_ctxt with cur_vars = StrMap.add lname elem_val func_ctxt.cur_vars
       } in
 
       func_ctxt

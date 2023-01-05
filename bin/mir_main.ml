@@ -26,10 +26,15 @@ let main = begin
           f_params = [];
         };
         f_stmts = [
+          DeclDeconStmt(
+            [("a", {mut=false}); ("b", {mut=false}); ("c", {mut=false})],
+            Undecided,
+            TupleExpr(Undecided, [ValU64(64); ValU32(32); ValU16(16);])
+          );
           ReturnStmt(
             IfThenElseExpr(
               Undecided,
-              BinOp(Undecided, Eq, ValU16(20), ValU16(30)),
+              BinOp(Undecided, Eq, ValU16(16), ValVar(Undecided, "c")),
               ValI8(40),
               ValI8(50)
             )
