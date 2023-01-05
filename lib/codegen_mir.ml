@@ -400,6 +400,8 @@ let codegen_func_mirs llvm_mod llvm_ctxt the_fpm builder mir_ctxts =
     llvm_sizeof = llvm_sizeof;
   } in
 
+  (* TODO: This will need to change when we're generating multiple functions. *)
+
   let _ =
     List.map (codegen_func_mir llvm_ctxt the_fpm builder mod_ctxt) mir_ctxts
   in
