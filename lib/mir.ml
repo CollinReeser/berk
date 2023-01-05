@@ -284,10 +284,40 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let (mir_ctxt, bb, rhs_lval) = _expr_to_mir mir_ctxt bb rhs in
           let (mir_ctxt, varname) = get_varname mir_ctxt in
 
+          let instructions = [] in
+          let lhs_t = expr_type lhs in
+          let rhs_t = expr_type rhs in
+          let common_t = common_type_of_lr lhs_t rhs_t in
+
+          let (mir_ctxt, instructions, lhs_lval) =
+          if lhs_t <> common_t then
+            let (mir_ctxt, extend_name) = get_varname mir_ctxt in
+            let extend_lval = {t=common_t; kind=Tmp; lname=extend_name} in
+            let extend_instr = UnOp(extend_lval, Extend, lhs_lval) in
+            let instructions = instructions @ [extend_instr] in
+
+            (mir_ctxt, instructions, extend_lval)
+          else
+            (mir_ctxt, instructions, lhs_lval)
+          in
+
+          let (mir_ctxt, instructions, rhs_lval) =
+          if rhs_t <> common_t then
+            let (mir_ctxt, extend_name) = get_varname mir_ctxt in
+            let extend_lval = {t=common_t; kind=Tmp; lname=extend_name} in
+            let extend_instr = UnOp(extend_lval, Extend, rhs_lval) in
+            let instructions = instructions @ [extend_instr] in
+
+            (mir_ctxt, instructions, extend_lval)
+          else
+            (mir_ctxt, instructions, rhs_lval)
+          in
+
           let lval = {t=t; kind=Tmp; lname=varname} in
           let instr = BinOp(lval, op, lhs_lval, rhs_lval) in
+          let instructions = instructions @ [instr] in
 
-          let bb = {bb with instrs=bb.instrs @ [instr]} in
+          let bb = {bb with instrs=bb.instrs @ instructions} in
 
           (mir_ctxt, bb, lval)
 

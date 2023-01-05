@@ -35,7 +35,7 @@ let main = begin
           ReturnStmt(
             IfThenElseExpr(
               Undecided,
-              BinOp(Undecided, Eq, ValU16(16), ValVar(Undecided, "c")),
+              BinOp(Undecided, Eq, ValU32(32), ValVar(Undecided, "c")),
               ValI8(40),
               ValI8(50)
             )

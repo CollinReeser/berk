@@ -170,7 +170,14 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       let trunc_val = begin match op with
         | Truncate -> Llvm.build_trunc op_val llvm_t "trunctmp" builder
         | BitwiseCast -> Llvm.build_bitcast op_val llvm_t "bitcasttmp" builder
-        | Extend -> failwith "Unimplemented"
+        | Extend ->
+            begin match t with
+            | U8 | U16 | U32 | U64 ->
+              Llvm.build_zext op_val llvm_t "zexttmp" builder
+            | I8 | I16 | I32 | I64 ->
+              Llvm.build_sext op_val llvm_t "sexttmp" builder
+            | _ -> failwith "Cannot extend non-integer type"
+            end
       end in
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname trunc_val func_ctxt.cur_vars
