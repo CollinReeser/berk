@@ -73,31 +73,13 @@ let main = begin
 
       let _ = Printf.printf "%s%!" (fmt_mir_ctxt mir_ctxt) in
 
-      let data_layout_str = Llvm.data_layout the_module in
-      let data_layout_mod = Llvm_target.DataLayout.of_string data_layout_str in
-
-      let llvm_sizeof typ =
-        let llvm_sizeof_int64 =
-          Llvm_target.DataLayout.store_size typ data_layout_mod
-        in
-        Int64.to_int llvm_sizeof_int64
-      in
-
-      let mod_ctxt = {
-        func_sigs = StrMap.empty;
-        llvm_mod = the_module;
-        data_layout_mod = data_layout_mod;
-        berk_t_to_llvm_t = berk_t_to_llvm_t llvm_sizeof llvm_ctxt;
-        llvm_sizeof = llvm_sizeof;
-      } in
-
       let _ =
-        codegen_func_mir
+        codegen_func_mirs
+          the_module
           llvm_ctxt
           the_fpm
           builder
-          mod_ctxt
-          mir_ctxt
+          [mir_ctxt]
       in
 
       ()
