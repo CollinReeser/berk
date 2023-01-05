@@ -127,7 +127,7 @@ let fmt_instr instr =
       let fmt_un_op un_op = begin match un_op with
         | Truncate -> "truncate of"
         | Extend -> "extend of"
-        | BitwiseCast -> "bitwise cast of"
+        | Bitwise -> "bitwise cast of"
       end in
 
       sprintf "  %s = %s %s\n"
@@ -257,6 +257,28 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb
       | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb
 
+      | ValCastTrunc(t, exp) ->
+          let (mir_ctxt, bb, to_trunc_lval) = _expr_to_mir mir_ctxt bb exp in
+
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
+          let lval = {t=t; kind=Tmp; lname=varname} in
+          let instr = UnOp(lval, Truncate, to_trunc_lval) in
+
+          let bb = {bb with instrs=bb.instrs @ [instr]} in
+
+          (mir_ctxt, bb, lval)
+
+      | ValCastBitwise(t, exp) ->
+          let (mir_ctxt, bb, to_bitwise_lval) = _expr_to_mir mir_ctxt bb exp in
+
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
+          let lval = {t=t; kind=Tmp; lname=varname} in
+          let instr = UnOp(lval, Bitwise, to_bitwise_lval) in
+
+          let bb = {bb with instrs=bb.instrs @ [instr]} in
+
+          (mir_ctxt, bb, lval)
+
       | ValVar(_, varname) ->
           let var_value = StrMap.find varname mir_ctxt.lvars in
 
@@ -282,7 +304,6 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | BinOp(t, op, lhs, rhs) ->
           let (mir_ctxt, bb, lhs_lval) = _expr_to_mir mir_ctxt bb lhs in
           let (mir_ctxt, bb, rhs_lval) = _expr_to_mir mir_ctxt bb rhs in
-          let (mir_ctxt, varname) = get_varname mir_ctxt in
 
           let instructions = [] in
           let lhs_t = expr_type lhs in
@@ -313,6 +334,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             (mir_ctxt, instructions, rhs_lval)
           in
 
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
           let lval = {t=t; kind=Tmp; lname=varname} in
           let instr = BinOp(lval, op, lhs_lval, rhs_lval) in
           let instructions = instructions @ [instr] in

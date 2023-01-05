@@ -14,4 +14,4 @@ type bin_op =
 type un_op =
 | Truncate
 | Extend
-| BitwiseCast
+| Bitwise

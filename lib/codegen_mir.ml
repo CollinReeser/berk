@@ -169,7 +169,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       let trunc_val = begin match op with
         | Truncate -> Llvm.build_trunc op_val llvm_t "trunctmp" builder
-        | BitwiseCast -> Llvm.build_bitcast op_val llvm_t "bitcasttmp" builder
+        | Bitwise -> Llvm.build_bitcast op_val llvm_t "bitcasttmp" builder
         | Extend ->
             begin match t with
             | U8 | U16 | U32 | U64 ->
