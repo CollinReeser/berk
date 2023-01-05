@@ -443,6 +443,20 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       let exp_val = _codegen_expr exp in
       Llvm.build_bitcast exp_val llvm_t "bitcasttmp" builder
     end
+  | ValCastExtend(target_t, exp) ->
+    begin
+      let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in
+      let exp_val = _codegen_expr exp in
+      begin match target_t with
+      | U8 | U16 | U32 | U64 ->
+          Llvm.build_zext exp_val llvm_t "extendtmp" builder
+      | I8 | I16 | I32 | I64 ->
+          Llvm.build_sext exp_val llvm_t "extendtmp" builder
+      | F32 | F64 | F128 ->
+          Llvm.build_fpext exp_val llvm_t "extendtmp" builder
+      | _ -> failwith "Cannot extend non-numeric types"
+      end
+    end
   | BinOp(_, op, lhs, rhs) ->
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in

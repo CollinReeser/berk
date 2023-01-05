@@ -176,7 +176,9 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
               Llvm.build_zext op_val llvm_t "zexttmp" builder
             | I8 | I16 | I32 | I64 ->
               Llvm.build_sext op_val llvm_t "sexttmp" builder
-            | _ -> failwith "Cannot extend non-integer type"
+            | F32 | F64 | F128 ->
+              Llvm.build_fpext op_val llvm_t "fpexttmp" builder
+            | _ -> failwith "Cannot extend non-numeric type"
             end
       end in
       let func_ctxt = {

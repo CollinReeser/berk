@@ -343,8 +343,18 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             exp
         end
 
-    | (_, ValCastTrunc  (t, exp_trunc))   -> ValCastTrunc  (t, exp_trunc)
-    | (_, ValCastBitwise(t, exp_bitwise)) -> ValCastBitwise(t, exp_bitwise)
+    | (_, ValCastTrunc  (t, exp_trunc))   ->
+        Printf.printf
+          "Ignoring attempt to inject type [[ %s ]] into truncate\n"
+          (fmt_type t)
+          ;
+        ValCastTrunc  (t, exp_trunc)
+    | (_, ValCastBitwise(t, exp_bitwise)) ->
+        Printf.printf
+          "Ignoring attempt to inject type [[ %s ]] into bitwise\n"
+          (fmt_type t)
+          ;
+        ValCastBitwise(t, exp_bitwise)
         (* TODO, applying to both of the above: In general,
         `type_convertible_to` will fail for the interesting cases for
         ValCastTrunc, and doesn't cover what ValCastBitwise wants to do. So,

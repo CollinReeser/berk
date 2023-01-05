@@ -101,6 +101,7 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ValCastTrunc(typ, expr)
   | ValCastBitwise(typ, expr)
+  | ValCastExtend(typ, expr)
   | StaticIndexExpr(typ, _, expr)
   | VariantCtorExpr(typ, _, expr) ->
       (_is_concrete_type typ) &&
@@ -602,6 +603,13 @@ and type_check_expr
         if type_bitwise_to exp_t target_t
           then ValCastBitwise(target_t, exp_typechecked)
           else failwith "Cannot bitwise-cast incompatible types"
+
+    | ValCastExtend(target_t, exp) ->
+        let exp_typechecked = _type_check_expr exp in
+        let exp_t = expr_type exp_typechecked in
+        if type_extendable_to exp_t target_t
+          then ValCastExtend(target_t, exp_typechecked)
+          else failwith "Cannot extend incompatible types"
 
     | BinOp(_, op, lhs, rhs) ->
         begin match op with
