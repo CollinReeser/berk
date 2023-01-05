@@ -257,6 +257,13 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb
       | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb
 
+      | ValVar(_, varname) ->
+          (* For variable access in MIR, we just want to yield the lvar that
+          should already exist for this name. *)
+          let var_value = StrMap.find varname mir_ctxt.lvars in
+
+          (mir_ctxt, bb, var_value)
+
       | ValCastTrunc(t, exp) ->
           let (mir_ctxt, bb, to_trunc_lval) = _expr_to_mir mir_ctxt bb exp in
 
@@ -278,11 +285,6 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let bb = {bb with instrs=bb.instrs @ [instr]} in
 
           (mir_ctxt, bb, lval)
-
-      | ValVar(_, varname) ->
-          let var_value = StrMap.find varname mir_ctxt.lvars in
-
-          (mir_ctxt, bb, var_value)
 
       | TupleExpr(t, exprs) ->
           let ((mir_ctxt, bb), tuple_values) =
