@@ -280,6 +280,9 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
       | ValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb
 
+      | ValFunc(_, func_name) ->
+          ValFunc(func_name) |> literal_to_instr mir_ctxt bb
+
       | ValVar(_, varname) ->
           (* For variable access in MIR, we just want to yield the lvar that
           should already exist for this name. *)
@@ -353,6 +356,39 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           end in
 
           let bb = {bb with instrs=bb.instrs @ [func_instr; call_instr]} in
+
+          (mir_ctxt, bb, lval)
+
+      | VarInvoke(t, varname, exprs) ->
+          let ((mir_ctxt, bb), arg_values) =
+            List.fold_left_map (
+              fun (mir_ctxt, bb) exp ->
+                let (mir_ctxt, bb, arg_val) = _expr_to_mir mir_ctxt bb exp in
+                ((mir_ctxt, bb), arg_val)
+            ) (mir_ctxt, bb) exprs
+          in
+
+          (* For variable access in MIR, we just want to yield the lvar that
+          should already exist for this name. *)
+          let func_lval = StrMap.find varname mir_ctxt.lvars in
+
+          let (mir_ctxt, bb, lval, call_instr) = begin match t with
+            | Nil ->
+                let (mir_ctxt, bb, nil_lval) =
+                  _expr_to_mir mir_ctxt bb ValNil
+                in
+                let instr = CallVoid(func_lval, arg_values) in
+
+                (mir_ctxt, bb, nil_lval, instr)
+            | _ ->
+                let (mir_ctxt, varname) = get_varname mir_ctxt in
+                let res_lval = {t=t; kind=Tmp; lname=varname} in
+                let instr = Call(res_lval, func_lval, arg_values) in
+
+                (mir_ctxt, bb, res_lval, instr)
+          end in
+
+          let bb = {bb with instrs=bb.instrs @ [call_instr]} in
 
           (mir_ctxt, bb, lval)
 

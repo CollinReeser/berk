@@ -30,6 +30,7 @@ and expr =
   | ValBool of bool
   | ValStr of string
   | ValVar of berk_t * ident_t
+  | ValFunc of berk_t * string
   | ValCastTrunc of berk_t * expr
   | ValCastBitwise of berk_t * expr
   | ValCastExtend of berk_t * expr
@@ -41,7 +42,10 @@ and expr =
   | IfThenElseExpr of berk_t * expr * expr * expr
   (* while expr, then stmts, else expr *)
   | WhileExpr of berk_t * expr * stmt list * expr
+  (* A direct call to an in-scope named function. *)
   | FuncCall of berk_t * ident_t * expr list
+  (* An indirect invocation of a function inside a variable. *)
+  | VarInvoke of berk_t * ident_t * expr list
   | ArrayExpr of berk_t * expr list
   (* First expr is index, second is array *)
   | IndexExpr of berk_t * expr * expr
@@ -77,6 +81,7 @@ let expr_type exp =
   | ValBool(_) -> Bool
   | ValStr(_) -> String
   | ValVar(typ, _) -> typ
+  | ValFunc(typ, _) -> typ
   | ValCastTrunc(typ, _) -> typ
   | ValCastBitwise(typ, _) -> typ
   | ValCastExtend(typ, _) -> typ
@@ -85,6 +90,7 @@ let expr_type exp =
   | IfThenElseExpr(typ, _, _, _) -> typ
   | WhileExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
+  | VarInvoke(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
   | IndexExpr(typ, _, _) -> typ
   | StaticIndexExpr(typ, _, _) -> typ
@@ -143,6 +149,9 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
       Printf.sprintf "%s\"%s\"%s" init_ind (String.escaped str) typ_s
 
   | ValVar(_, id) -> Printf.sprintf "%s%s%s" init_ind id typ_s
+
+  | ValFunc(_, func_name) ->
+      Printf.sprintf "%sfn<%s%s>" init_ind func_name typ_s
 
   | ValCastTrunc (target_t, exp) ->
       Printf.sprintf "%scast_trunc<%s>(%s)%s"
@@ -213,6 +222,13 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
 
   | FuncCall(_, id, exprs) ->
       Printf.sprintf "%s%s%s(%s)"
+        init_ind
+        typ_s_rev
+        id
+        (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
+
+  | VarInvoke(_, id, exprs) ->
+      Printf.sprintf "%s%s%s->(%s)"
         init_ind
         typ_s_rev
         id
@@ -329,7 +345,37 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     )
   else
     match (injected_t, exp) with
-    | (Function(_, _), _) -> failwith "Unimplemented"
+    | (
+        Function(inj_ret_t, inj_args_t_lst), (
+          ValFunc(Function(has_ret_t, has_args_t_lst), _) |
+          VarInvoke(Function(has_ret_t, has_args_t_lst), _, _)
+        )
+      ) ->
+        let args_match =
+          List.fold_left (=) true (
+            List.map2 (=) inj_args_t_lst has_args_t_lst
+          )
+        in
+
+        (* TODO: This is probably overly restrictive, but it's unclear
+        how to handle non-matching argument types. *)
+        if args_match then
+          if has_ret_t = inj_ret_t then
+            exp
+          else if type_extendable_to has_ret_t inj_ret_t then
+            ValCastExtend(inj_ret_t, exp)
+          else
+            failwith "Cannot extend func ret type to injected"
+        else
+          failwith "Cannot inject function type with non-matching args"
+
+
+    | (Function(_, _), _) ->
+        failwith (
+          Printf.sprintf
+            "Cannot inject function type into non-func value: [[ %s ]]"
+            (fmt_expr ~print_typ:true "" exp)
+        )
 
     | (Undecided, _) -> failwith "Refuse to inject undecided type into expr"
 
@@ -682,7 +728,7 @@ let fmt_variant_decl
 
 (* Return the pair of all the non-variadic function parameter types, and whether
 the parameter list ends with a variadic-args sentinel. Fails if ill-formed. *)
-let rec get_static_f_params (f_params : f_param list) =
+let rec get_static_f_params f_params =
   begin match f_params with
   | [] -> ([], false)
   | [(_, _, VarArgSentinel)] -> ([], true)

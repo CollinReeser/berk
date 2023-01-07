@@ -99,6 +99,8 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ValVar(typ, _) -> _is_concrete_type typ
 
+  | ValFunc(t, _) -> _is_concrete_type t
+
   | ValCastTrunc(typ, expr)
   | ValCastBitwise(typ, expr)
   | ValCastExtend(typ, expr)
@@ -132,7 +134,8 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ArrayExpr(typ, exprs)
   | TupleExpr(typ, exprs)
-  | FuncCall(typ, _, exprs) ->
+  | FuncCall(typ, _, exprs)
+  | VarInvoke(typ, _, exprs) ->
       (_is_concrete_type typ) &&
         (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
   end in
@@ -590,6 +593,15 @@ and type_check_expr
         let (var_t, _) = StrMap.find id tc_ctxt.vars in
         ValVar(var_t, id)
 
+    | ValFunc(_, func_name) ->
+        let {f_params; f_ret_t; _} =
+          StrMap.find func_name tc_ctxt.mod_ctxt.func_sigs
+        in
+        let f_param_t_lst = List.map (fun (_, _, t) -> t) f_params in
+        let func_t = Function(f_ret_t, f_param_t_lst) in
+
+        ValFunc(func_t, func_name)
+
     | ValCastTrunc(target_t, exp) ->
         let exp_typechecked = _type_check_expr exp in
         let exp_t = expr_type exp_typechecked in
@@ -721,15 +733,66 @@ and type_check_expr
             "Func call args must not be less than num non-variadic func params"
         in
 
-        let take lst n =
-          let rec _take accum remain n =
-            begin match (remain, n) with
-            | (_, 0)  -> accum
-            | ([], _) -> failwith "Could not take remaining items: empty list"
-            | (x::xs, _) -> _take (accum @ [x]) xs (n - 1)
-            end
-          in
-          _take [] lst n
+        let exprs_t_non_variadic =
+          take exprs_t (List.length params_non_variadic_t_lst)
+        in
+
+        let _ = List.iter2 (
+          fun expr_t param_t ->
+            if type_convertible_to expr_t param_t
+            then ()
+            else failwith "Could not convert expr type to arg type"
+        ) exprs_t_non_variadic params_non_variadic_t_lst in
+
+        FuncCall(f_ret_t, f_name, exprs_typechecked)
+
+    | VarInvoke(_, invocable_name, exprs) ->
+        let (var_t, _) = StrMap.find invocable_name tc_ctxt.vars in
+
+        let f_fake_params = begin match var_t with
+          | Function(_, args_t_lst) ->
+              let f_fake_params =
+                List.map (fun arg_t -> ((), (), arg_t)) args_t_lst
+              in
+              f_fake_params
+          | _ -> failwith "Invocable unexpectedly contains non-function type"
+        end in
+
+        let (params_non_variadic_t_lst, is_var_arg) =
+          get_static_f_params f_fake_params
+        in
+
+        let params_t_lst_padded = begin
+            let len_diff =
+              (List.length exprs) - (List.length params_non_variadic_t_lst)
+            in
+            if len_diff = 0 then
+              params_non_variadic_t_lst
+            else if len_diff > 0 then
+              let padding = List.init len_diff (fun _ -> Undecided) in
+              params_non_variadic_t_lst @ padding
+            else
+              failwith "Unexpected shorter expr list than non-variadic params"
+          end
+        in
+
+        let exprs_typechecked =
+          List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
+        in
+        let exprs_t = List.map expr_type exprs_typechecked in
+
+        let cmp_non_variadic_params_to_exprs =
+          List.compare_lengths params_non_variadic_t_lst exprs_t
+        in
+        let _ =
+          if (
+            is_var_arg && (cmp_non_variadic_params_to_exprs <= 0)
+          ) || (
+            cmp_non_variadic_params_to_exprs = 0
+          )
+          then ()
+          else failwith
+            "Func call args must not be less than num non-variadic func params"
         in
 
         let exprs_t_non_variadic =
@@ -743,7 +806,7 @@ and type_check_expr
             else failwith "Could not convert expr type to arg type"
         ) exprs_t_non_variadic params_non_variadic_t_lst in
 
-        FuncCall(f_ret_t, f_name, exprs_typechecked)
+        VarInvoke(var_t, invocable_name, exprs_typechecked)
 
     | ArrayExpr(_, exprs) ->
         let elem_expected_t = begin match expected_t with

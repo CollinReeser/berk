@@ -67,7 +67,7 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
   | PtrTo (typ) -> Printf.sprintf "ptrto %s" (fmt_type typ)
 
   | Function (ret_t, arg_t_lst) ->
-      Printf.sprintf "fn<(%s):%s>"
+      Printf.sprintf "(%s)->%s"
         (fmt_join_types ", " arg_t_lst)
         (fmt_type ret_t)
 
@@ -217,6 +217,15 @@ let rec type_convertible_to from_t to_t =
   | (String, String) -> true
   | (Bool, Bool) -> true
   | (Nil, Nil) -> true
+
+  | (Function(lhs_ret_t, lhs_args_ts), Function(rhs_ret_t, rhs_args_ts)) ->
+      let ret_t_convertible = type_convertible_to lhs_ret_t rhs_ret_t in
+      let args_ts_convertible =
+        List.fold_left (=) true (
+          List.map2 type_convertible_to lhs_args_ts rhs_args_ts
+        )
+      in
+      if ret_t_convertible && args_ts_convertible then true else false
 
   | (Tuple(lhs_types), Tuple(rhs_types)) ->
       if (List.length lhs_types) <> (List.length rhs_types)
@@ -521,6 +530,10 @@ let map_tvars_to_types ?(init_map=StrMap.empty) lhs_typ rhs_typ =
     | (Nil, Nil)
     | (VarArgSentinel, VarArgSentinel)
     | (Undecided, Undecided) -> map_so_far
+
+    | (Function(lhs_ret_t, lhs_args_ts), Function(rhs_ret_t, rhs_args_ts)) ->
+        let map_so_far = _map_tvars_to_types map_so_far lhs_ret_t rhs_ret_t in
+        List.fold_left2 _map_tvars_to_types map_so_far lhs_args_ts rhs_args_ts
 
     | (Tuple(lhs_typs), Tuple(rhs_typs)) ->
         List.fold_left2 _map_tvars_to_types map_so_far lhs_typs rhs_typs

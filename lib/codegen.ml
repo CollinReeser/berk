@@ -431,6 +431,9 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       let alloca = StrMap.find ident func_ctxt.cur_vars in
       let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in
       loaded
+
+  | ValFunc(_, _) -> failwith "Unimplemented"
+
   | ValCastTrunc(target_t, exp) ->
     begin
       let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in
@@ -691,6 +694,8 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       Llvm.set_tail_call true call ;
 
       call
+
+  | VarInvoke(_, _, _) -> failwith "Unimplemented"
 
   | ArrayExpr(typ, exprs) ->
       let llvm_expr_vals = List.map _codegen_expr exprs in

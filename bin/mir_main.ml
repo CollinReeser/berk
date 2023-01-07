@@ -43,6 +43,13 @@ let main = begin
             "my_call", {mut=false}, Undecided,
             FuncCall(Undecided, "trivial", [])
           );
+          DeclStmt(
+            "my_func_var", {mut=false}, Undecided, ValFunc(Undecided, "trivial")
+          );
+          DeclStmt(
+            "my_func_var_call", {mut=false}, Undecided,
+            VarInvoke(Undecided, "my_func_var", [])
+          );
           DeclDeconStmt(
             [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
             Undecided,
