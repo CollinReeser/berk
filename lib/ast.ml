@@ -346,7 +346,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     | (_, ValCastTrunc  (t, _))
     | (_, ValCastExtend (t, _))
     | (_, ValCastBitwise(t, _)) ->
-        if injected_t = t then
+        if t = injected_t then
           exp
         else if type_extendable_to t injected_t then
           ValCastExtend(injected_t, exp)
@@ -357,15 +357,29 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
               (fmt_type t)
           )
 
-    | (_, ValVar(t, var_name)) -> ValVar(t, var_name)
-        (* TODO: We probably need some sort of "extension" expression, if
-        necessary to "promote" whatever type is in this variable. *)
+    | (_, ValVar(t, _)) ->
+        if t = injected_t then
+          exp
+        else if type_extendable_to t injected_t then
+          ValCastExtend(injected_t, exp)
+        else
+          failwith (
+            Printf.sprintf "Cannot inject [[ %s ]] into var type [[ %s ]]"
+              (fmt_type injected_t)
+              (fmt_type t)
+          )
 
-    | (_, FuncCall(t, f_name, exp_lst)) -> FuncCall(t, f_name, exp_lst)
-      (* The return type of a function does not influence its parameters. *)
-      (* TODO: That said, we should probably be injecting a conversion
-      expression rather than blanket overriding the claimed return type of the
-      function. *)
+    | (_, FuncCall(t, _, _)) ->
+        if t = injected_t then
+          exp
+        else if type_extendable_to t injected_t then
+          ValCastExtend(injected_t, exp)
+        else
+          failwith (
+            Printf.sprintf "Cannot inject [[ %s ]] into func ret_t [[ %s ]]"
+              (fmt_type injected_t)
+              (fmt_type t)
+          )
 
     | (_, BlockExpr(_, stmts, exp_res)) ->
         (* We're not smart enough yet to influence the types of any expressions
