@@ -50,9 +50,8 @@ let main = begin
             "my_func_var_call", {mut=false}, Undecided,
             VarInvoke(Undecided, "my_func_var", [])
           );
-          DeclDeconStmt(
-            [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
-            Undecided,
+          DeclStmt(
+            "my_array", {mut=false}, Undecided,
             ArrayExpr(
               Undecided, [
                 ValCastTrunc(U32, ValU64(65));
@@ -60,6 +59,11 @@ let main = begin
                 ValCastBitwise(U8, ValI8(67));
               ]
             )
+          );
+          DeclDeconStmt(
+            [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
+            Undecided,
+            ValVar(Undecided, "my_array")
           );
           DeclDeconStmt(
             [("a", {mut=false}); ("b", {mut=false}); ("c", {mut=false})],

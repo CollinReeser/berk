@@ -118,10 +118,10 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       } in
 
       func_ctxt
-  | Store({lname=name_alloca; _}, {lname=name_value; _}) ->
-      let alloca = StrMap.find name_alloca func_ctxt.cur_vars in
+  | Store({lname=name_ptrto; _}, {lname=name_value; _}) ->
+      let ptrto = StrMap.find name_ptrto func_ctxt.cur_vars in
       let value = StrMap.find name_value func_ctxt.cur_vars in
-      let _ : Llvm.llvalue = Llvm.build_store value alloca builder in
+      let _ : Llvm.llvalue = Llvm.build_store value ptrto builder in
 
       func_ctxt
 
@@ -151,7 +151,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | IntoAggregate({lname; t; _}, elems) ->
+  | ConstructAggregate({lname; t; _}, elems) ->
       let llvm_aggregate_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
       let llvm_elems =
         List.map (

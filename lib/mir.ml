@@ -39,14 +39,17 @@ and lval_kind =
 (* Instruction *)
 type instr =
 | Alloca of lval * berk_t
-(* Store -> lhs is alloca target, rhs is stored value *)
+(* Store -> lhs is memory target, rhs is stored value *)
 | Store of lval * lval
-(* Load -> lhs is loaded value, rhs alloca target *)
+(* Load -> lhs is loaded value, rhs memory target *)
 | Load of lval * lval
 | Assign of lval * rval
 | BinOp of lval * bin_op * lval * lval
 | UnOp of lval * un_op * lval
-| IntoAggregate of lval * lval list
+(* Turn a list of separate values into a struct containing those values, whose
+members are in the same order as the given list. *)
+| ConstructAggregate of lval * lval list
+(* Yield the lval element at the given index in the given aggregate value. *)
 | FromAggregate of lval * int * lval
 (* The first lval is the return value, and the second lval is the function to be
 called. *)
@@ -143,7 +146,7 @@ let fmt_instr instr =
         (fmt_lval rhs_lval)
         (fmt_type target_t)
 
-  | IntoAggregate(lval, elems) ->
+  | ConstructAggregate(lval, elems) ->
       sprintf "  %s = aggregate of (%s)\n"
         (fmt_lval lval)
         (fmt_join_strs "; "(List.map fmt_lval elems))
@@ -237,7 +240,7 @@ let instr_lval instr =
   | Load(lval, _) -> lval
   | BinOp(lval, _, _, _) -> lval
   | UnOp(lval, _, _) -> lval
-  | IntoAggregate(lval, _) -> lval
+  | ConstructAggregate(lval, _) -> lval
   | FromAggregate(lval, _, _) -> lval
   | Call(lval, _, _) -> lval
   | CallVoid(_, _) -> failwith "No resultant lval for void call"
@@ -414,7 +417,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
           let lval = {t=t; kind=Tmp; lname=varname} in
-          let tuple_instr = IntoAggregate(lval, tuple_values) in
+          let tuple_instr = ConstructAggregate(lval, tuple_values) in
 
           let bb = {bb with instrs=bb.instrs @ [tuple_instr]} in
 
@@ -437,7 +440,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
           let lval = {t=t; kind=Tmp; lname=varname} in
-          let arr_instr = IntoAggregate(lval, arr_values) in
+          let arr_instr = ConstructAggregate(lval, arr_values) in
 
           let bb = {bb with instrs=bb.instrs @ [arr_instr]} in
 
