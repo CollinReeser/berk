@@ -476,7 +476,14 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, if_res_instr)
 
-      | _ -> failwith "Unimplemented"
+      | ValStr(_)
+      | BlockExpr(_, _, _)
+      | WhileExpr(_, _, _, _)
+      | FuncCall(_, _, _)
+      | IndexExpr(_, _, _)
+      | StaticIndexExpr(_, _, _)
+      | VariantCtorExpr(_, _, _) ->
+          failwith "Unimplemented"
     end in
 
     (mir_ctxt, bb, instr)
