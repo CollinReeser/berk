@@ -343,23 +343,19 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             exp
         end
 
-    | (_, ValCastTrunc  (t, exp_trunc))   ->
-        Printf.printf
-          "Ignoring attempt to inject type [[ %s ]] into truncate\n"
-          (fmt_type t)
-          ;
-        ValCastTrunc  (t, exp_trunc)
-    | (_, ValCastBitwise(t, exp_bitwise)) ->
-        Printf.printf
-          "Ignoring attempt to inject type [[ %s ]] into bitwise\n"
-          (fmt_type t)
-          ;
-        ValCastBitwise(t, exp_bitwise)
-        (* TODO, applying to both of the above: In general,
-        `type_convertible_to` will fail for the interesting cases for
-        ValCastTrunc, and doesn't cover what ValCastBitwise wants to do. So,
-        we'll need some special logic to cover these, and any other
-        "explicit conversion" expressions. *)
+    | (_, ValCastTrunc  (t, _))
+    | (_, ValCastExtend (t, _))
+    | (_, ValCastBitwise(t, _)) ->
+        if injected_t = t then
+          exp
+        else if type_extendable_to t injected_t then
+          ValCastExtend(injected_t, exp)
+        else
+          failwith (
+            Printf.sprintf "Cannot inject [[ %s ]] into casted type [[ %s ]]"
+              (fmt_type injected_t)
+              (fmt_type t)
+          )
 
     | (_, ValVar(t, var_name)) -> ValVar(t, var_name)
         (* TODO: We probably need some sort of "extension" expression, if
@@ -510,24 +506,24 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
           "[[ " ^ (fmt_type injected_t) ^ " ]]"
         )
 
-    | (U8,   ValU8(_)) -> exp
+    | (U8,  ValU8 (_)) -> exp
     | (U16, ValU16(_)) -> exp
     | (U32, ValU32(_)) -> exp
     | (U64, ValU64(_)) -> exp
-    | (U16,  ValU8(_))                          -> ValCastExtend(U16, exp)
+    | (U16, ValU8 (_))                          -> ValCastExtend(U16, exp)
     | (U32, (ValU8(_) | ValU16(_)))             -> ValCastExtend(U32, exp)
     | (U64, (ValU8(_) | ValU16(_) | ValU32(_))) -> ValCastExtend(U64, exp)
 
-    | (I8,   ValI8(_)) -> exp
+    | (I8,  ValI8 (_)) -> exp
     | (I16, ValI16(_)) -> exp
     | (I32, ValI32(_)) -> exp
     | (I64, ValI64(_)) -> exp
-    | (I16,  ValI8(_))                          -> ValCastExtend(I16, exp)
+    | (I16, ValI8 (_))                          -> ValCastExtend(I16, exp)
     | (I32, (ValI8(_) | ValI16(_)))             -> ValCastExtend(I32, exp)
     | (I64, (ValI8(_) | ValI16(_) | ValI32(_))) -> ValCastExtend(I64, exp)
 
-    | (F32,  ValF32(_))  -> exp
-    | (F64,  ValF64(_))  -> exp
+    | (F32,  ValF32 (_)) -> exp
+    | (F64,  ValF64 (_)) -> exp
     | (F128, ValF128(_)) -> exp
 
     | (F64,   ValF32(_))              -> ValCastExtend( F64, exp)

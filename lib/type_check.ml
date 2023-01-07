@@ -897,5 +897,5 @@ and type_check_expr
     inject_type_into_expr inject_t exp_typechecked
   in
 
-    exp_typechecked_injected
+  exp_typechecked_injected
 ;;

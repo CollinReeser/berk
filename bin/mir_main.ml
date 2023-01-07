@@ -32,9 +32,6 @@ let main = begin
             Undecided,
             ArrayExpr(
               Undecided, [
-                (* FIXME: These don't quite work right. Check resultant types
-                of lvals in the aggregate; they should all match the actual
-                aggregate type in the MIR, but they don't. *)
                 ValCastTrunc(U32, ValU64(65));
                 ValU16(66);
                 ValCastBitwise(U8, ValI8(67));
