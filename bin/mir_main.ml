@@ -20,6 +20,15 @@ let main = begin
     let _ = begin
       initialize_fpm the_fpm |> ignore ;
 
+      let trivial_func_def = {
+        f_decl = {
+          f_name = "trivial";
+          f_ret_t = I8;
+          f_params = [];
+        };
+        f_stmts = [ReturnStmt(ValI8(101))];
+      } in
+
       let main_func_def = {
         f_decl = {
           f_name = "main";
@@ -29,6 +38,10 @@ let main = begin
         f_stmts = [
           DeclStmt(
             "my_str", {mut=false}, Undecided, ValStr("Hello, world!")
+          );
+          DeclStmt(
+            "my_call", {mut=false}, Undecided,
+            FuncCall(Undecided, "trivial", [])
           );
           DeclDeconStmt(
             [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
@@ -57,11 +70,21 @@ let main = begin
         ];
       } in
 
-      let _ = Printf.printf "%s" (fmt_func_ast main_func_def) in
-
-      let mod_decls = [
-        FuncDef(main_func_def);
+      let func_defs = [
+        trivial_func_def;
+        main_func_def;
       ] in
+
+      let mod_decls =
+        [] @
+        (List.map (fun func_def -> FuncDef(func_def)) func_defs)
+      in
+
+      let _ =
+        List.iter (
+          fun func_def -> Printf.printf "%s" (fmt_func_ast func_def)
+        ) func_defs
+      in
 
       let mod_decls_typechecked = type_check_mod_decls mod_decls in
       let _ = List.iter (
@@ -82,19 +105,51 @@ let main = begin
 
       ) mod_decls_typechecked in
 
-      let mir_ctxt =
-        func_to_mir (type_check_func default_mod_ctxt main_func_def)
+      let mir_ctxts =
+        List.filter_map (
+          fun mod_decl ->
+            begin match mod_decl with
+              | FuncExternDecl(_)
+              | VariantDecl(_) -> None
+
+              | FuncDef(f_ast) ->
+                  let mir_ctxt = func_to_mir f_ast in
+                  Some(mir_ctxt)
+            end
+        ) mod_decls_typechecked
       in
 
-      let _ = Printf.printf "%s%!" (fmt_mir_ctxt mir_ctxt) in
+      let _ =
+        List.iter (
+          fun mir_ctxt -> Printf.printf "%s%!" (fmt_mir_ctxt mir_ctxt)
+        ) mir_ctxts
+      in
+
+      let data_layout_str = Llvm.data_layout the_module in
+      let data_layout_mod = Llvm_target.DataLayout.of_string data_layout_str in
+
+      let llvm_sizeof typ =
+        let llvm_sizeof_int64 =
+          Llvm_target.DataLayout.store_size typ data_layout_mod
+        in
+        Int64.to_int llvm_sizeof_int64
+      in
+
+      let mod_gen_ctxt : module_gen_context = {
+        func_sigs = StrMap.empty;
+        llvm_mod = the_module;
+        data_layout_mod = data_layout_mod;
+        berk_t_to_llvm_t = berk_t_to_llvm_t llvm_sizeof llvm_ctxt;
+        llvm_sizeof = llvm_sizeof;
+      } in
 
       let _ =
         codegen_func_mirs
-          the_module
           llvm_ctxt
           the_fpm
           builder
-          [mir_ctxt]
+          mod_gen_ctxt
+          mir_ctxts
       in
 
       ()

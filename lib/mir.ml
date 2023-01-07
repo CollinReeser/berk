@@ -47,6 +47,11 @@ type instr =
 | UnOp of lval * un_op * lval
 | IntoAggregate of lval * lval list
 | FromAggregate of lval * int * lval
+(* TODO: Both Call and CallVoid will need to become more sophisticated. They
+shouldn't just rely on a raw string for the function name, but should rather
+depend on a more abstract "function" value/type (ie, an lval). *)
+| Call of lval * string * lval list
+| CallVoid of string * lval list
 | Br of bb
 | CondBr of lval * bb * bb
 | RetVoid
@@ -147,6 +152,17 @@ let fmt_instr instr =
         i
         (fmt_lval lval_aggregate)
 
+  | Call(lval, func_name, args) ->
+      sprintf "  %s = %s(%s)\n"
+        (fmt_lval lval)
+        func_name
+        (fmt_join_strs ", " (List.map fmt_lval args))
+
+  | CallVoid(func_name, args) ->
+      sprintf "  %s(%s)\n"
+        func_name
+        (fmt_join_strs ", " (List.map fmt_lval args))
+
   | Br({name; _}) ->
       sprintf "  branch to %s\n" name
 
@@ -221,6 +237,8 @@ let instr_lval instr =
   | UnOp(lval, _, _) -> lval
   | IntoAggregate(lval, _) -> lval
   | FromAggregate(lval, _, _) -> lval
+  | Call(lval, _, _) -> lval
+  | CallVoid(_, _) -> failwith "No resultant lval for void call"
   | CondBr(_, _, _) -> failwith "No resultant lval for condbr"
   | Ret(_) -> failwith "No resultant lval for ret"
   | Br(_) -> failwith "No resultant lval for br"
@@ -299,6 +317,35 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let instr = UnOp(lval, Extend, to_bitwise_lval) in
 
           let bb = {bb with instrs=bb.instrs @ [instr]} in
+
+          (mir_ctxt, bb, lval)
+
+      | FuncCall(t, func_name, exprs) ->
+          let ((mir_ctxt, bb), arg_values) =
+            List.fold_left_map (
+              fun (mir_ctxt, bb) exp ->
+                let (mir_ctxt, bb, arg_val) = _expr_to_mir mir_ctxt bb exp in
+                ((mir_ctxt, bb), arg_val)
+            ) (mir_ctxt, bb) exprs
+          in
+
+          let (mir_ctxt, bb, lval, call_instr) = begin match t with
+            | Nil ->
+                let (mir_ctxt, bb, nil_lval) =
+                  _expr_to_mir mir_ctxt bb ValNil
+                in
+                let instr = CallVoid(func_name, arg_values) in
+
+                (mir_ctxt, bb, nil_lval, instr)
+            | _ ->
+                let (mir_ctxt, varname) = get_varname mir_ctxt in
+                let res_lval = {t=t; kind=Tmp; lname=varname} in
+                let instr = Call(res_lval, func_name, arg_values) in
+
+                (mir_ctxt, bb, res_lval, instr)
+          end in
+
+          let bb = {bb with instrs=bb.instrs @ [call_instr]} in
 
           (mir_ctxt, bb, lval)
 
@@ -480,7 +527,6 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
       | BlockExpr(_, _, _)
       | WhileExpr(_, _, _, _)
-      | FuncCall(_, _, _)
       | IndexExpr(_, _, _)
       | StaticIndexExpr(_, _, _)
       | VariantCtorExpr(_, _, _) ->

@@ -1,5 +1,4 @@
 open Ir
-open Llvm_utility
 open Mir
 open Typing
 
@@ -85,6 +84,26 @@ let codegen_aggregate builder t vals =
   _codegen_aggregate vals undef_aggregate 0
 ;;
 
+let codegen_call ?(result_name="") func_ctxt builder func_name args =
+  let llvm_func_val = StrMap.find func_name func_ctxt.mod_ctxt.func_sigs in
+
+  let llvm_args =
+    List.map (
+      fun {lname=arg_name; _} -> StrMap.find arg_name func_ctxt.cur_vars
+    ) args
+  in
+  let llvm_args = Array.of_list llvm_args in
+
+  let call_result =
+    Llvm.build_call llvm_func_val llvm_args result_name builder
+  in
+
+  (* Hint that this should be a tailcall if possible. *)
+  let _ = Llvm.set_tail_call true call_result in
+
+  (func_ctxt, call_result)
+;;
+
 let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
   begin match instr with
   | Alloca({lname; _}, t) ->
@@ -152,6 +171,26 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname elem_val func_ctxt.cur_vars
       } in
+
+      func_ctxt
+
+  | Call({lname; _}, func_name, args) ->
+      (* By passing in a ~result_name, we're saying this is a non-void call that
+      will return an LLVM value. *)
+      let (func_ctxt, call_value) =
+        codegen_call ~result_name:lname func_ctxt builder func_name args
+      in
+
+      (* Only when calls are non-void do they return a value that we might need
+      later. *)
+      let func_ctxt = {
+        func_ctxt with cur_vars = StrMap.add lname call_value func_ctxt.cur_vars
+      } in
+
+      func_ctxt
+
+  | CallVoid(func_name, args) ->
+      let (func_ctxt, _) = codegen_call func_ctxt builder func_name args in
 
       func_ctxt
 
@@ -349,8 +388,8 @@ let codegen_func_mir
 
   (* Add this new function to our codegen context; doing this now, rather than
   at the _end_ of function codegen, is what permits self recursion. *)
-  let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
-  let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
+  let func_sigs = StrMap.add f_name new_func mod_ctxt.func_sigs in
+  let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
 
 
   (* ??? *)
@@ -383,7 +422,7 @@ let codegen_func_mir
   let func_ctxt = {
     cur_func = new_func;
     cur_vars = init_vars;
-    mod_ctxt = mod_ctxt_up;
+    mod_ctxt = mod_ctxt;
     bbs = StrMap.empty;
   } in
 
@@ -406,32 +445,18 @@ let codegen_func_mir
   (* Optimize the function. *)
   let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
 
-  mod_ctxt_up
+  mod_ctxt
 ;;
 
-let codegen_func_mirs llvm_mod llvm_ctxt the_fpm builder mir_ctxts =
-  let data_layout_str = Llvm.data_layout llvm_mod in
-  let data_layout_mod = Llvm_target.DataLayout.of_string data_layout_str in
-
-  let llvm_sizeof typ =
-    let llvm_sizeof_int64 =
-      Llvm_target.DataLayout.store_size typ data_layout_mod
-    in
-    Int64.to_int llvm_sizeof_int64
-  in
-
-  let mod_ctxt = {
-    func_sigs = StrMap.empty;
-    llvm_mod = llvm_mod;
-    data_layout_mod = data_layout_mod;
-    berk_t_to_llvm_t = berk_t_to_llvm_t llvm_sizeof llvm_ctxt;
-    llvm_sizeof = llvm_sizeof;
-  } in
-
-  (* TODO: This will need to change when we're generating multiple functions. *)
-
+let codegen_func_mirs llvm_ctxt the_fpm builder mod_gen_ctxt mir_ctxts =
   let _ =
-    List.map (codegen_func_mir llvm_ctxt the_fpm builder mod_ctxt) mir_ctxts
+    List.fold_left_map (
+      fun mod_gen_ctxt mir_ctxt ->
+        let mod_gen_ctxt =
+          codegen_func_mir llvm_ctxt the_fpm builder mod_gen_ctxt mir_ctxt
+        in
+        (mod_gen_ctxt, ())
+    ) mod_gen_ctxt mir_ctxts
   in
 
   ()
