@@ -21,7 +21,7 @@ type func_gen_context = {
 }
 
 let codegen_constant
-  llvm_ctxt func_ctxt constant : Llvm.llvalue
+  llvm_ctxt func_ctxt builder constant : Llvm.llvalue
 =
   let i64_t = Llvm.i64_type llvm_ctxt in
   let i32_t = Llvm.i32_type llvm_ctxt in
@@ -41,12 +41,31 @@ let codegen_constant
   | ValU32(n) | ValI32(n) -> Llvm.const_int i32_t n
   | ValU16(n) | ValI16(n) -> Llvm.const_int i16_t n
   | ValU8(n)  | ValI8(n)  -> Llvm.const_int  i8_t n
+
+  | ValF64(n) -> Llvm.const_float f64_t n
+  | ValF32(n) -> Llvm.const_float f32_t n
+
+  | ValF128(str) -> Llvm.const_float_of_string f128_t str
+
   | ValBool(false) -> Llvm.const_int bool_t 0
   | ValBool(true)  -> Llvm.const_int bool_t 1
-  | ValF128(str) -> Llvm.const_float_of_string f128_t str
-  | ValF64(n) -> Llvm.const_float f64_t  n
-  | ValF32(n) -> Llvm.const_float f32_t  n
-  | ValString(_) -> failwith "Unimplemented"
+
+  | ValStr(str) ->
+      let llvm_str = Llvm.const_stringz llvm_ctxt str in
+      let global_str =
+        Llvm.define_global "str" llvm_str func_ctxt.mod_ctxt.llvm_mod
+      in
+      let indices = Array.of_list [
+        Llvm.const_int i32_t 0;
+        Llvm.const_int i32_t 0;
+      ] in
+      (* We don't want the pointer to the statically sized array, but rather a
+      more "raw" pointer to the first element, as the LLVM-side type of our
+      string values is a "raw" pointer to some bytes (as opposed to a pointer
+      to a structure or statically-sized array). *)
+      let llvm_gep = Llvm.build_gep global_str indices "strgeptmp" builder in
+
+      llvm_gep
   end
 ;;
 
@@ -102,7 +121,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       func_ctxt
 
   | Assign({lname; _}, Constant(constant)) ->
-      let value = codegen_constant llvm_ctxt func_ctxt constant in
+      let value = codegen_constant llvm_ctxt func_ctxt builder constant in
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname value func_ctxt.cur_vars
       } in

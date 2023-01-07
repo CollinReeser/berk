@@ -27,6 +27,9 @@ let main = begin
           f_params = [];
         };
         f_stmts = [
+          DeclStmt(
+            "my_str", {mut=false}, Undecided, ValStr("Hello, world!")
+          );
           DeclDeconStmt(
             [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
             Undecided,

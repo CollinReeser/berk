@@ -16,7 +16,7 @@ type constant =
 | ValF32 of float | ValF64 of float
 | ValF128 of string
 | ValBool of bool
-| ValString of string
+| ValStr of string
 
 (* Components of an instruction RHS. *)
 type rval =
@@ -83,7 +83,7 @@ let fmt_constant constant =
   | ValF32(f) | ValF64(f) -> sprintf "%f" f
   | ValF128(str) -> sprintf "%s" str
   | ValBool(b) -> sprintf "%b" b
-  | ValString(str) -> sprintf "\"%s\"" str
+  | ValStr(str) -> sprintf "\"%s\"" str
 
 let fmt_lval ({t; kind; lname} : lval) =
   Printf.sprintf "%s<%s>: %s" lname (fmt_lval_kind kind) (fmt_type t)
@@ -257,6 +257,8 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb
       | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb
       | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb
+
+      | ValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb
 
       | ValVar(_, varname) ->
           (* For variable access in MIR, we just want to yield the lvar that
@@ -476,7 +478,6 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, if_res_instr)
 
-      | ValStr(_)
       | BlockExpr(_, _, _)
       | WhileExpr(_, _, _, _)
       | FuncCall(_, _, _)
