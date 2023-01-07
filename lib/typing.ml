@@ -22,6 +22,7 @@ type berk_t =
         Variant("Option", [("Some", Unbound("`a")); (None, Nil)])
       *)
   | PtrTo of berk_t
+  | Function of berk_t * berk_t list
   | VarArgSentinel
   | Unbound of string
   | Undecided
@@ -64,6 +65,11 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
       Printf.sprintf "variant %s {%s}" type_name variants_fmt
 
   | PtrTo (typ) -> Printf.sprintf "ptrto %s" (fmt_type typ)
+
+  | Function (ret_t, arg_t_lst) ->
+      Printf.sprintf "fn<(%s):%s>"
+        (fmt_join_types ", " arg_t_lst)
+        (fmt_type ret_t)
 
   | VarArgSentinel -> "..."
   | Unbound (type_var) ->
@@ -406,6 +412,14 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
       in
 
       Variant(v_name, v_ctors_concretified)
+
+  | Function(ret_t, args_t_lst) ->
+      let ret_t = concretify_unbound_types tvar_to_t ret_t in
+      let args_t_lst =
+        List.map (concretify_unbound_types tvar_to_t) args_t_lst
+      in
+
+      Function(ret_t, args_t_lst)
 ;;
 
 (* Returns true if the type is entirely resolved to a concrete (instantiable)
@@ -440,6 +454,14 @@ let rec is_concrete_type ?(verbose=false) typ =
           fun (_, typ) -> _is_concrete_type typ
         ) v_ctors
       )
+
+  | Function(ret_t, args_t_lst) ->
+      let ret_concrete = _is_concrete_type ret_t in
+      let args_concrete =
+        List.fold_left (&&) true (List.map _is_concrete_type args_t_lst)
+      in
+      if ret_concrete && args_concrete then true else false
+
   end in
 
   let _ = if verbose then
@@ -552,6 +574,15 @@ let get_tvars typ =
           fun so_far (_, typ) ->
             _get_tvars so_far typ
         ) so_far ctors
+
+    | Function(ret_t, args_t_lst) ->
+        let so_far = _get_tvars so_far ret_t in
+        let so_far =
+          List.fold_left (
+            fun so_far arg_t -> _get_tvars so_far arg_t
+          ) so_far args_t_lst
+        in
+        so_far
   in
 
   let tvars = _get_tvars [] typ in

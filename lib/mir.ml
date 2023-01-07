@@ -17,6 +17,7 @@ type constant =
 | ValF128 of string
 | ValBool of bool
 | ValStr of string
+| ValFunc of string
 
 (* Components of an instruction RHS. *)
 type rval =
@@ -47,11 +48,11 @@ type instr =
 | UnOp of lval * un_op * lval
 | IntoAggregate of lval * lval list
 | FromAggregate of lval * int * lval
-(* TODO: Both Call and CallVoid will need to become more sophisticated. They
-shouldn't just rely on a raw string for the function name, but should rather
-depend on a more abstract "function" value/type (ie, an lval). *)
-| Call of lval * string * lval list
-| CallVoid of string * lval list
+(* The first lval is the return value, and the second lval is the function to be
+called. *)
+| Call of lval * lval * lval list
+(* The lval is the function to be called. *)
+| CallVoid of lval * lval list
 | Br of bb
 | CondBr of lval * bb * bb
 | RetVoid
@@ -89,6 +90,7 @@ let fmt_constant constant =
   | ValF128(str) -> sprintf "%s" str
   | ValBool(b) -> sprintf "%b" b
   | ValStr(str) -> sprintf "\"%s\"" str
+  | ValFunc(func_name) -> sprintf "fn<%s>" func_name
 
 let fmt_lval ({t; kind; lname} : lval) =
   Printf.sprintf "%s<%s>: %s" lname (fmt_lval_kind kind) (fmt_type t)
@@ -152,15 +154,15 @@ let fmt_instr instr =
         i
         (fmt_lval lval_aggregate)
 
-  | Call(lval, func_name, args) ->
-      sprintf "  %s = %s(%s)\n"
+  | Call(lval, lval_func, args) ->
+      sprintf "  %s = call %s(%s)\n"
         (fmt_lval lval)
-        func_name
+        (fmt_lval lval_func)
         (fmt_join_strs ", " (List.map fmt_lval args))
 
-  | CallVoid(func_name, args) ->
-      sprintf "  %s(%s)\n"
-        func_name
+  | CallVoid(lval_func, args) ->
+      sprintf "  call %s(%s)\n"
+        (fmt_lval lval_func)
         (fmt_join_strs ", " (List.map fmt_lval args))
 
   | Br({name; _}) ->
@@ -329,23 +331,28 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             ) (mir_ctxt, bb) exprs
           in
 
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
+          let func_t = Function(t, (List.map expr_type exprs)) in
+          let func_lval = {t=func_t; kind=Tmp; lname=varname} in
+          let func_instr = Assign(func_lval, Constant(ValFunc(func_name))) in
+
           let (mir_ctxt, bb, lval, call_instr) = begin match t with
             | Nil ->
                 let (mir_ctxt, bb, nil_lval) =
                   _expr_to_mir mir_ctxt bb ValNil
                 in
-                let instr = CallVoid(func_name, arg_values) in
+                let instr = CallVoid(func_lval, arg_values) in
 
                 (mir_ctxt, bb, nil_lval, instr)
             | _ ->
                 let (mir_ctxt, varname) = get_varname mir_ctxt in
                 let res_lval = {t=t; kind=Tmp; lname=varname} in
-                let instr = Call(res_lval, func_name, arg_values) in
+                let instr = Call(res_lval, func_lval, arg_values) in
 
                 (mir_ctxt, bb, res_lval, instr)
           end in
 
-          let bb = {bb with instrs=bb.instrs @ [call_instr]} in
+          let bb = {bb with instrs=bb.instrs @ [func_instr; call_instr]} in
 
           (mir_ctxt, bb, lval)
 

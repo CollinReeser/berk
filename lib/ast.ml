@@ -329,6 +329,8 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     )
   else
     match (injected_t, exp) with
+    | (Function(_, _), _) -> failwith "Unimplemented"
+
     | (Undecided, _) -> failwith "Refuse to inject undecided type into expr"
 
     | (Unbound(a), _) ->

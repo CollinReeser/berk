@@ -65,6 +65,10 @@ let codegen_constant
       let llvm_gep = Llvm.build_gep global_str indices "strgeptmp" builder in
 
       llvm_gep
+
+  | ValFunc(func_name) ->
+      StrMap.find func_name func_ctxt.mod_ctxt.func_sigs
+
   end
 ;;
 
@@ -84,8 +88,8 @@ let codegen_aggregate builder t vals =
   _codegen_aggregate vals undef_aggregate 0
 ;;
 
-let codegen_call ?(result_name="") func_ctxt builder func_name args =
-  let llvm_func_val = StrMap.find func_name func_ctxt.mod_ctxt.func_sigs in
+let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
+  let llvm_func_val = StrMap.find func_name func_ctxt.cur_vars in
 
   let llvm_args =
     List.map (
@@ -174,11 +178,11 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | Call({lname; _}, func_name, args) ->
+  | Call({lname; _}, func_lval, args) ->
       (* By passing in a ~result_name, we're saying this is a non-void call that
       will return an LLVM value. *)
       let (func_ctxt, call_value) =
-        codegen_call ~result_name:lname func_ctxt builder func_name args
+        codegen_call ~result_name:lname func_ctxt builder func_lval args
       in
 
       (* Only when calls are non-void do they return a value that we might need
@@ -189,8 +193,8 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | CallVoid(func_name, args) ->
-      let (func_ctxt, _) = codegen_call func_ctxt builder func_name args in
+  | CallVoid(func_lval, args) ->
+      let (func_ctxt, _) = codegen_call func_ctxt builder func_lval args in
 
       func_ctxt
 
