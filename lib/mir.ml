@@ -9,6 +9,18 @@ module StrMap = Map.Make(String)
 high-level AST (or HIR). This provides a reduced-complexity but computationally
 equivalent version of the input program, which is easier to process. *)
 
+type lval_kind =
+| Var
+| Arg
+| Tmp
+
+(* Lvalues, which can be assigned to and can be read in the RHS. *)
+type lval = {
+  t: berk_t;
+  kind: lval_kind;
+  lname: string;
+}
+
 type constant =
 | ValNil
 | ValU8 of int | ValU16 of int | ValU32 of int | ValU64 of int
@@ -24,17 +36,6 @@ type rval =
 | Constant of constant
 | RVar of lval
 
-(* Lvalues, which can be assigned to and can be read in the RHS. *)
-and lval = {
-  t: berk_t;
-  kind: lval_kind;
-  lname: string;
-}
-
-and lval_kind =
-| Var
-| Arg
-| Tmp
 
 (* Instruction *)
 type instr =
@@ -527,7 +528,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             (mir_ctxt, (bb, then_bb, else_bb, end_bb))
           in
 
-          let (mir_ctxt, (bb, then_bb, else_bb, end_bb), if_res_instr) =
+          let (mir_ctxt, (bb, then_bb, else_bb, end_bb), if_res_lval) =
             begin match t with
             | Nil ->
               let no_store _ = [] in
@@ -545,7 +546,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             | _ ->
               let (mir_ctxt, if_alloca_name) = get_varname mir_ctxt in
               let if_alloca_lval =
-                {t=PtrTo(t); kind=Tmp; lname=if_alloca_name}
+                {t=Ptr(t); kind=Tmp; lname=if_alloca_name}
               in
               let alloca_instr = Alloca(if_alloca_lval, t) in
               let bb = {bb with instrs = bb.instrs @ [alloca_instr]} in
@@ -580,7 +581,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             ) mir_ctxt [bb; then_bb; else_bb; end_bb]
           in
 
-          (mir_ctxt, end_bb, if_res_instr)
+          (mir_ctxt, end_bb, if_res_lval)
 
       | WhileExpr(_, _, _, _)
       | IndexExpr(_, _, _)

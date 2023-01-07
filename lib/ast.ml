@@ -607,7 +607,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
           "Cannot inject type [[ " ^ (fmt_type injected_t) ^ " ]] into expr"
         )
 
-    | (PtrTo(_), _) -> failwith "Unimplemented"
+    | (Ptr(_), _) -> failwith "Unimplemented"
 ;;
 
 type v_ctor = (string * berk_t)
