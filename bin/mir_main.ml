@@ -66,6 +66,24 @@ let main = begin
             Undecided,
             TupleExpr(Undecided, [ValU64(64); ValU32(32); ValU16(16);])
           );
+          DeclStmt(
+            "my_block_expr_res", {mut=false}, Undecided,
+            BlockExpr(
+              Undecided, [
+                DeclStmt(
+                  "my_int32", {mut=false}, Undecided, ValU32(15)
+                );
+                DeclStmt(
+                  "my_int64", {mut=false}, Undecided, ValU64(30)
+                );
+              ],
+              BinOp(
+                Undecided, Add,
+                ValVar(Undecided, "my_int32"),
+                ValVar(Undecided, "my_int64")
+              )
+            )
+          );
           ReturnStmt(
             IfThenElseExpr(
               Undecided,

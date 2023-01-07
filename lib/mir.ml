@@ -246,7 +246,7 @@ let instr_lval instr =
   | Br(_) -> failwith "No resultant lval for br"
   | RetVoid -> failwith "No resultant lval for ret (void)"
 
-let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
+let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
   let rec _expr_to_mir
     (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * lval)
   =
@@ -389,6 +389,17 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           end in
 
           let bb = {bb with instrs=bb.instrs @ [call_instr]} in
+
+          (mir_ctxt, bb, lval)
+
+      | BlockExpr(_, stmts, exp) ->
+          let (mir_ctxt, bb) =
+            List.fold_left (
+              fun (mir_ctxt, bb) stmt -> stmt_to_mir mir_ctxt bb stmt
+            ) (mir_ctxt, bb) stmts
+          in
+
+          let (mir_ctxt, bb, lval) = _expr_to_mir mir_ctxt bb exp in
 
           (mir_ctxt, bb, lval)
 
@@ -568,7 +579,6 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, if_res_instr)
 
-      | BlockExpr(_, _, _)
       | WhileExpr(_, _, _, _)
       | IndexExpr(_, _, _)
       | StaticIndexExpr(_, _, _)
@@ -581,7 +591,7 @@ let expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
   _expr_to_mir mir_ctxt bb exp
 
-let stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
+and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
   let _stmt_to_mir
     (mir_ctxt: mir_ctxt) (bb: bb) (stmt: Ast.stmt) : (mir_ctxt * bb)
   =
