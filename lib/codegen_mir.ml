@@ -166,8 +166,8 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | FromAggregate({lname; _}, elem_idx, {lname=name_aggregate; _}) ->
-      let agg_value = StrMap.find name_aggregate func_ctxt.cur_vars in
+  | FromAggregate({lname; _}, elem_idx, {lname=agg_name; _}) ->
+      let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
       let elem_val =
         Llvm.build_extractvalue agg_value elem_idx "decontmp" builder
       in

@@ -60,6 +60,10 @@ let main = begin
               ]
             )
           );
+          DeclStmt(
+            "my_array_elem", {mut=false}, Undecided,
+            StaticIndexExpr(Undecided, 1, ValVar(Undecided, "my_array"))
+          );
           DeclDeconStmt(
             [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
             Undecided,

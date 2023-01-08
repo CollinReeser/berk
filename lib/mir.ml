@@ -583,9 +583,21 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, if_res_lval)
 
+      | StaticIndexExpr(t, idx, exp) ->
+          let (mir_ctxt, bb, agg_lval) = _expr_to_mir mir_ctxt bb exp in
+
+          let (mir_ctxt, from_agg_varname) = get_varname mir_ctxt in
+          let from_agg_lval = {t=t; kind=Tmp; lname=from_agg_varname} in
+          let from_agg_instr = FromAggregate(from_agg_lval, idx, agg_lval) in
+
+          let bb = {
+            bb with instrs = bb.instrs @ [from_agg_instr]
+          } in
+
+          (mir_ctxt, bb, from_agg_lval)
+
       | WhileExpr(_, _, _, _)
       | IndexExpr(_, _, _)
-      | StaticIndexExpr(_, _, _)
       | VariantCtorExpr(_, _, _) ->
           failwith "Unimplemented"
     end in
