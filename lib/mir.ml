@@ -36,6 +36,9 @@ type rval =
 | Constant of constant
 | RVar of lval
 
+type index =
+| Static of int
+| Dynamic of lval
 
 (* Instruction *)
 type instr =
@@ -47,9 +50,15 @@ type instr =
 | Assign of lval * rval
 | BinOp of lval * bin_op * lval * lval
 | UnOp of lval * un_op * lval
+(* Yields an lval of some ptr type, that when loaded yields a value of the type
+within the ptr. The RHS lval is the object to index into. *)
+| PtrTo of lval * index list * lval
 (* Turn a list of separate values into a struct containing those values, whose
 members are in the same order as the given list. *)
 | ConstructAggregate of lval * lval list
+(* At the given index, insert the given lval element into the given aggregate
+value. *)
+| IntoAggregate of int * lval * lval
 (* Yield the lval element at the given index in the given aggregate value. *)
 | FromAggregate of lval * int * lval
 (* The first lval is the return value, and the second lval is the function to be
@@ -104,6 +113,15 @@ let fmt_rval rval =
   | Constant(constant) -> fmt_constant constant
   | RVar(lval) -> fmt_lval lval
 
+let fmt_index idx =
+  let open Printf in
+  match idx with
+  | Static(i) -> sprintf "%d" i
+  | Dynamic(lval) -> fmt_lval lval
+
+let fmt_join_indices idxs =
+  fmt_join_strs ", " (List.map fmt_index idxs)
+
 let fmt_instr instr =
   let open Printf in
   match instr with
@@ -147,10 +165,25 @@ let fmt_instr instr =
         (fmt_lval rhs_lval)
         (fmt_type target_t)
 
+  | PtrTo({t=Ptr(t); _} as lval, idxs, aggregate_lval) ->
+      sprintf "  %s = ptrto %s via %s(%s)\n"
+        (fmt_lval lval)
+        (fmt_type t)
+        (fmt_lval aggregate_lval)
+        (fmt_join_indices idxs)
+
+  | PtrTo(_, _, _) -> failwith "Cannot fmt ptrto with non-ptr lval"
+
   | ConstructAggregate(lval, elems) ->
       sprintf "  %s = aggregate of (%s)\n"
         (fmt_lval lval)
         (fmt_join_strs "; "(List.map fmt_lval elems))
+
+  | IntoAggregate(i, lval_elem, lval_aggregate) ->
+      sprintf "  insert %s into %s at index %d\n"
+        (fmt_lval lval_elem)
+        (fmt_lval lval_aggregate)
+        i
 
   | FromAggregate(lval, i, lval_aggregate) ->
       sprintf "  %s = extract index %d from %s\n"
@@ -241,7 +274,9 @@ let instr_lval instr =
   | Load(lval, _) -> lval
   | BinOp(lval, _, _, _) -> lval
   | UnOp(lval, _, _) -> lval
+  | PtrTo(lval, _, _) -> lval
   | ConstructAggregate(lval, _) -> lval
+  | IntoAggregate(_, _, _) -> failwith "Aggregate insertion yields no value"
   | FromAggregate(lval, _, _) -> lval
   | Call(lval, _, _) -> lval
   | CallVoid(_, _) -> failwith "No resultant lval for void call"

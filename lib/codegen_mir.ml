@@ -166,6 +166,20 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
+  | IntoAggregate(idx, {lname=elem_name; _}, {lname=agg_name; _}) ->
+      let elem_val = StrMap.find elem_name func_ctxt.cur_vars in
+      let agg_val = StrMap.find agg_name func_ctxt.cur_vars in
+
+      let agg_val =
+        Llvm.build_insertvalue agg_val elem_val idx "aggtmp" builder
+      in
+
+      let func_ctxt = {
+        func_ctxt with cur_vars = StrMap.add agg_name agg_val func_ctxt.cur_vars
+      } in
+
+      func_ctxt
+
   | FromAggregate({lname; _}, elem_idx, {lname=agg_name; _}) ->
       let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
       let elem_val =
@@ -174,6 +188,25 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname elem_val func_ctxt.cur_vars
+      } in
+
+      func_ctxt
+
+  | PtrTo({lname; _}, indices, {lname=agg_name; _}) ->
+      let index_to_llvm idx = begin match idx with
+        | Static(i) ->
+            ValU64(i) |> codegen_constant llvm_ctxt func_ctxt builder
+        | Dynamic({lname; _}) ->
+            StrMap.find lname func_ctxt.cur_vars
+      end in
+
+      let indices = Array.of_list (List.map index_to_llvm indices) in
+      let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
+
+      let llvm_gep = Llvm.build_gep agg_value indices "ptrtotmp" builder in
+
+      let func_ctxt = {
+        func_ctxt with cur_vars = StrMap.add lname llvm_gep func_ctxt.cur_vars
       } in
 
       func_ctxt
