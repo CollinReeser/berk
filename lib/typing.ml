@@ -1,3 +1,5 @@
+open Utility
+
 module StrMap = Map.Make(String)
 
 type berk_t =
@@ -58,9 +60,12 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
   | Variant (type_name, variants) ->
       let variant_fmts = List.map (
         fun (var_name, typ) ->
-          Printf.sprintf "| %s(%s)" var_name (fmt_type typ)
+          begin match typ with
+          | Nil -> Printf.sprintf "%s" var_name
+          | _ -> Printf.sprintf "%s(%s)" var_name (fmt_type typ)
+          end
       ) variants in
-      let variants_fmt = List.fold_left (^) "" variant_fmts in
+      let variants_fmt = fmt_join_strs " | " variant_fmts in
 
       Printf.sprintf "variant %s {%s}" type_name variants_fmt
 

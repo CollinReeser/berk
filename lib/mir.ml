@@ -166,7 +166,7 @@ let fmt_instr instr =
         (fmt_type target_t)
 
   | PtrTo({t=Ptr(t); _} as lval, idxs, aggregate_lval) ->
-      sprintf "  %s = ptrto %s via %s(%s)\n"
+      sprintf "  %s = ptrto %s via %s following indices (%s)\n"
         (fmt_lval lval)
         (fmt_type t)
         (fmt_lval aggregate_lval)
@@ -289,9 +289,8 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
   let rec _expr_to_mir
     (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * lval)
   =
-    let literal_to_instr mir_ctxt bb ctor =
+    let literal_to_instr mir_ctxt bb t ctor =
       let (mir_ctxt, varname) = get_varname mir_ctxt in
-      let t = expr_type exp in
       let lval = {t=t; kind=Tmp; lname=varname} in
       let instr = Assign(lval, Constant(ctor)) in
       let bb = {bb with instrs=bb.instrs @ [instr]} in
@@ -299,28 +298,28 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
     in
 
     let (mir_ctxt, bb, instr) = begin match exp with
-      | ValNil -> ValNil |> literal_to_instr mir_ctxt bb
+      | ValNil -> ValNil |> literal_to_instr mir_ctxt bb Nil
 
-      | ValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb
+      | ValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb Bool
 
-      | ValU8 (x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb
-      | ValU16(x) -> ValU16(x) |> literal_to_instr mir_ctxt bb
-      | ValU32(x) -> ValU32(x) |> literal_to_instr mir_ctxt bb
-      | ValU64(x) -> ValU64(x) |> literal_to_instr mir_ctxt bb
+      | ValU8 (x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb U8
+      | ValU16(x) -> ValU16(x) |> literal_to_instr mir_ctxt bb U16
+      | ValU32(x) -> ValU32(x) |> literal_to_instr mir_ctxt bb U32
+      | ValU64(x) -> ValU64(x) |> literal_to_instr mir_ctxt bb U64
 
-      | ValI8 (x) -> ValI8 (x) |> literal_to_instr mir_ctxt bb
-      | ValI16(x) -> ValI16(x) |> literal_to_instr mir_ctxt bb
-      | ValI32(x) -> ValI32(x) |> literal_to_instr mir_ctxt bb
-      | ValI64(x) -> ValI64(x) |> literal_to_instr mir_ctxt bb
+      | ValI8 (x) -> ValI8 (x) |> literal_to_instr mir_ctxt bb I8
+      | ValI16(x) -> ValI16(x) |> literal_to_instr mir_ctxt bb I16
+      | ValI32(x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
+      | ValI64(x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
 
-      | ValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb
-      | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb
-      | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb
+      | ValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb F32
+      | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb F64
+      | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb F128
 
-      | ValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb
+      | ValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb String
 
-      | ValFunc(_, func_name) ->
-          ValFunc(func_name) |> literal_to_instr mir_ctxt bb
+      | ValFunc(func_t, func_name) ->
+          ValFunc(func_name) |> literal_to_instr mir_ctxt bb func_t
 
       | ValVar(_, varname) ->
           (* For variable access in MIR, we just want to yield the lvar that
@@ -631,9 +630,103 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, from_agg_lval)
 
+      | VariantCtorExpr(variant_t, ctor_name, ctor_arg) ->
+          let v_ctors = begin match variant_t with
+          | Variant(_, v_ctors) -> v_ctors
+          | _ -> failwith "Unexpected non-variant type in variant-ctor-expr"
+          end in
+
+          (* Allocate stack space for the variant *)
+          let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
+          let alloca_lval =
+            {t=Ptr(variant_t); kind=Tmp; lname=variant_alloca_varname}
+          in
+          let alloca_instr = Alloca(alloca_lval, variant_t) in
+
+          let bb = {bb with instrs = bb.instrs @ [alloca_instr]} in
+
+          (* Load the variant aggregate itself, with the given (possibly
+          bitcasted) pointer. *)
+          let load_variant mir_ctxt bb variant_t ptr_lval =
+            let (mir_ctxt, variant_varname) = get_varname mir_ctxt in
+            let variant_lval =
+              {t=variant_t; kind=Tmp; lname=variant_varname}
+            in
+            let load_variant_instr = Load(variant_lval, ptr_lval) in
+
+            (mir_ctxt, bb, variant_lval, load_variant_instr)
+          in
+
+          (* This constructor may have associated data. Assign it now. *)
+          let ctor_t = expr_type ctor_arg in
+          let (mir_ctxt, bb, ctor_lval, instrs) = begin match ctor_t with
+            | Nil ->
+                (* "Load" the variant itself from the stack memory, so we can
+                manipulate its fields as an aggregate. *)
+                let (mir_ctxt, bb, variant_lval, load_instr) =
+                  load_variant mir_ctxt bb variant_t alloca_lval
+                in
+
+                (mir_ctxt, bb, variant_lval, [load_instr])
+
+            | _ ->
+                (* Cast the variant to a pointer to its specific constructor
+                layout. *)
+
+                let variant_ctor_t = Tuple([U8; ctor_t]) in
+                let (mir_ctxt, ctor_cast_varname) = get_varname mir_ctxt in
+                let ctor_cast_lval =
+                  {t=Ptr(variant_ctor_t); kind=Tmp; lname=ctor_cast_varname}
+                in
+                let variant_to_ctor_cast_instr =
+                  UnOp(ctor_cast_lval, Bitwise, alloca_lval)
+                in
+
+                (* "Load" the variant itself from the stack memory, so we can
+                manipulate its fields as an aggregate. *)
+
+                let (mir_ctxt, bb, variant_lval, load_instr) =
+                  load_variant mir_ctxt bb variant_ctor_t ctor_cast_lval
+                in
+
+                (* Assign the constructor data to the variant. *)
+
+                let (mir_ctxt, bb, ctor_elem_lval) =
+                  _expr_to_mir mir_ctxt bb ctor_arg
+                in
+
+                let insert_ctor_data_instr =
+                  IntoAggregate(1, ctor_elem_lval, variant_lval)
+                in
+
+                (
+                  mir_ctxt, bb, variant_lval, [
+                    variant_to_ctor_cast_instr;
+                    load_instr;
+                    insert_ctor_data_instr
+                  ]
+                )
+          end in
+
+          let bb = {bb with instrs = bb.instrs @ instrs} in
+
+          (* Assign the variant tag (first field in aggregate), based on the
+          specific constructor we're building. *)
+          let ctor_idx = get_variant_ctor_tag_index v_ctors ctor_name in
+          let (mir_ctxt, bb, tag_lval) =
+            ValU8(ctor_idx) |> literal_to_instr mir_ctxt bb U8
+          in
+
+          Printf.printf "ValU8 variant tag lval: [[ %s ]]\n" (fmt_lval tag_lval) ;
+
+          let assign_tag_instr = IntoAggregate(0, tag_lval, ctor_lval) in
+
+          let bb = {bb with instrs = bb.instrs @ [assign_tag_instr] } in
+
+          (mir_ctxt, bb, alloca_lval)
+
       | WhileExpr(_, _, _, _)
-      | IndexExpr(_, _, _)
-      | VariantCtorExpr(_, _, _) ->
+      | IndexExpr(_, _, _) ->
           failwith "Unimplemented"
     end in
 

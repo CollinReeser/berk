@@ -92,6 +92,10 @@ let main = begin
               )
             )
           );
+          DeclStmt(
+            "my_option_some", {mut=false}, Undecided,
+            VariantCtorExpr(Undecided, "Some", ValU32(101))
+          );
           ReturnStmt(
             IfThenElseExpr(
               Undecided,
@@ -103,13 +107,26 @@ let main = begin
         ];
       } in
 
+      let variant_decls = [
+        VariantDecl(
+          {
+            v_name = "Option";
+            v_ctors = [
+              ("Some", Unbound("`a"));
+              ("None", Nil);
+            ];
+            v_typ_vars = ["`a"];
+          }
+        );
+      ] in
+
       let func_defs = [
         trivial_func_def;
         main_func_def;
       ] in
 
       let mod_decls =
-        [] @
+        variant_decls @
         (List.map (fun func_def -> FuncDef(func_def)) func_defs)
       in
 
