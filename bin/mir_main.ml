@@ -42,13 +42,22 @@ let main = begin
           ExprStmt(
             FuncCall(
               Undecided, "printf", [
-                ValStr("%s\n"); ValVar(Undecided, "my_str")
+                ValStr("%s\n");
+                ValVar(Undecided, "my_str")
               ]
             )
           );
           DeclStmt(
             "my_call", {mut=false}, Undecided,
             FuncCall(Undecided, "trivial", [])
+          );
+          ExprStmt(
+            FuncCall(
+              Undecided, "printf", [
+                ValStr("trivial: %d\n");
+                ValVar(Undecided, "my_call")
+              ]
+            )
           );
           DeclStmt(
             "my_func_var", {mut=false}, Undecided,
@@ -57,6 +66,14 @@ let main = begin
           DeclStmt(
             "my_func_var_call", {mut=false}, Undecided,
             VarInvoke(Undecided, "my_func_var", [])
+          );
+          ExprStmt(
+            FuncCall(
+              Undecided, "printf", [
+                ValStr("trivial (invoke): %d\n");
+                ValVar(Undecided, "my_func_var_call")
+              ]
+            )
           );
           DeclStmt(
             "my_array", {mut=false}, Undecided,
@@ -72,15 +89,43 @@ let main = begin
             "my_array_elem", {mut=false}, Undecided,
             StaticIndexExpr(Undecided, 1, ValVar(Undecided, "my_array"))
           );
+          ExprStmt(
+            FuncCall(
+              Undecided, "printf", [
+                ValStr("my_array_elem: %d\n");
+                ValVar(Undecided, "my_array_elem")
+              ]
+            )
+          );
           DeclDeconStmt(
             [("q", {mut=false}); ("r", {mut=false}); ("s", {mut=false})],
             Undecided,
             ValVar(Undecided, "my_array")
           );
+          ExprStmt(
+            FuncCall(
+              Undecided, "printf", [
+                ValStr("q: %d, r: %d, s: %d\n");
+                ValVar(Undecided, "q");
+                ValVar(Undecided, "r");
+                ValVar(Undecided, "s");
+              ]
+            )
+          );
           DeclDeconStmt(
             [("a", {mut=false}); ("b", {mut=false}); ("c", {mut=false})],
             Undecided,
-            TupleExpr(Undecided, [ValU64(64); ValU32(32); ValU16(16);])
+            TupleExpr(Undecided, [ValU64(64); ValStr("!"); ValU16(16);])
+          );
+          ExprStmt(
+            FuncCall(
+              Undecided, "printf", [
+                ValStr("a: %d, b: %s, c: %d\n");
+                ValVar(Undecided, "a");
+                ValVar(Undecided, "b");
+                ValVar(Undecided, "c");
+              ]
+            )
           );
           DeclStmt(
             "my_block_expr_res", {mut=false}, Undecided,
