@@ -31,7 +31,10 @@ let inject_type = let open Alcotest in [(
           ValBool(true),
           VariantCtorExpr(
             resolved_variant, "Off",
-            TupleExpr(Tuple([I32; String]), [ValI32(123); ValStr("!")])
+            TupleExpr(
+              Tuple([I32; String]),
+              [ValCastExtend(I32, ValI16(123)); ValStr("!")]
+            )
           ),
           VariantCtorExpr(
             resolved_variant, "On",

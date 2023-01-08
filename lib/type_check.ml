@@ -747,14 +747,14 @@ and type_check_expr
         FuncCall(f_ret_t, f_name, exprs_typechecked)
 
     | VarInvoke(_, invocable_name, exprs) ->
-        let (var_t, _) = StrMap.find invocable_name tc_ctxt.vars in
+        let (func_t, _) = StrMap.find invocable_name tc_ctxt.vars in
 
-        let f_fake_params = begin match var_t with
-          | Function(_, args_t_lst) ->
+        let (ret_t, f_fake_params) = begin match func_t with
+          | Function(ret_t, args_t_lst) ->
               let f_fake_params =
                 List.map (fun arg_t -> ((), (), arg_t)) args_t_lst
               in
-              f_fake_params
+              (ret_t, f_fake_params)
           | _ -> failwith "Invocable unexpectedly contains non-function type"
         end in
 
@@ -806,7 +806,7 @@ and type_check_expr
             else failwith "Could not convert expr type to arg type"
         ) exprs_t_non_variadic params_non_variadic_t_lst in
 
-        VarInvoke(var_t, invocable_name, exprs_typechecked)
+        VarInvoke(ret_t, invocable_name, exprs_typechecked)
 
     | ArrayExpr(_, exprs) ->
         let elem_expected_t = begin match expected_t with

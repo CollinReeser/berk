@@ -44,7 +44,8 @@ let main = begin
             FuncCall(Undecided, "trivial", [])
           );
           DeclStmt(
-            "my_func_var", {mut=false}, Undecided, ValFunc(Undecided, "trivial")
+            "my_func_var", {mut=false}, Undecided,
+            ValFunc(Undecided, "trivial")
           );
           DeclStmt(
             "my_func_var_call", {mut=false}, Undecided,

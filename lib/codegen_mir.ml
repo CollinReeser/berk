@@ -89,6 +89,14 @@ let codegen_aggregate builder t vals =
 ;;
 
 let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
+  (* Note that this may either be a "direct" function, ie a direct call to
+  a function signature, or it may be a call against a _pointer to_ a function.
+  LLVM automatically unwraps function pointers, so we don't need to do any
+  extra work here. Note that codegen for functions stored in variables turns
+  into an alloca for a _pointer to a function pointer_, ie, a **func, so when
+  we load a value out of that variable alloca, we get a function _pointer_
+  and not a direct function signature (which, again, LLVM knows how to invoke).
+  *)
   let llvm_func_val = StrMap.find func_name func_ctxt.cur_vars in
 
   let llvm_args =

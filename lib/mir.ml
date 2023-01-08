@@ -285,6 +285,50 @@ let instr_lval instr =
   | Br(_) -> failwith "No resultant lval for br"
   | RetVoid -> failwith "No resultant lval for ret (void)"
 
+(* Wrap the given lval in an alloca, and yield that alloca lval. *)
+let lval_to_alloca mir_ctxt bb lval expected_t =
+  let {t=actual_t; _} = lval in
+
+  let (mir_ctxt, bb, alloca_lval, instructions) = begin match expected_t with
+  | Variant(_, _) as variant_t ->
+      (* Allocate stack space for the variant *)
+      let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
+      let alloca_lval =
+        {t=Ptr(variant_t); kind=Tmp; lname=variant_alloca_varname}
+      in
+      let alloca_instr = Alloca(alloca_lval, variant_t) in
+
+      (* Bitcast the alloca into a form that agrees with the constructed
+      aggregate. *)
+      let (mir_ctxt, bitcast_ptr_varname) = get_varname mir_ctxt in
+      let bitcast_ptr_lval =
+        {t=Ptr(actual_t); kind=Tmp; lname=bitcast_ptr_varname}
+      in
+      let bitcast_instr = UnOp(bitcast_ptr_lval, Bitwise, alloca_lval) in
+
+      (* Store the variant aggregate into the alloca. *)
+      let store_instr = Store(bitcast_ptr_lval, lval) in
+
+      (mir_ctxt, bb, alloca_lval, [alloca_instr; bitcast_instr; store_instr])
+
+  | _ ->
+      (* Allocate stack space for the variant *)
+      let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
+      let alloca_lval =
+        {t=Ptr(expected_t); kind=Tmp; lname=variant_alloca_varname}
+      in
+      let alloca_instr = Alloca(alloca_lval, expected_t) in
+
+      (* Store the variant aggregate into the alloca. *)
+      let store_instr = Store(alloca_lval, lval) in
+
+      (mir_ctxt, bb, alloca_lval, [alloca_instr; store_instr])
+  end in
+
+  let bb = {bb with instrs = bb.instrs @ instructions} in
+
+  (mir_ctxt, bb, alloca_lval)
+
 let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
   let rec _expr_to_mir
     (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * lval)
@@ -321,12 +365,30 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValFunc(func_t, func_name) ->
           ValFunc(func_name) |> literal_to_instr mir_ctxt bb func_t
 
-      | ValVar(_, varname) ->
-          (* For variable access in MIR, we just want to yield the lvar that
-          should already exist for this name. *)
-          let var_value = StrMap.find varname mir_ctxt.lvars in
+      | ValVar(var_t, varname) ->
+          (* For variable access in MIR, we assume the variable is nested inside
+          an alloca that must be loaded from. *)
+          let ptr_lval = StrMap.find varname mir_ctxt.lvars in
+          let {t=ptr_t; _} = ptr_lval in
+          let pointed_t = unwrap_ptr ptr_t in
 
-          (mir_ctxt, bb, var_value)
+          let _ = if var_t <> pointed_t then
+            failwith (
+              Printf.sprintf
+                "Unexpected mismatch in var types: [[ %s ]] [[ %s ]]"
+                (fmt_type var_t)
+                (fmt_type pointed_t)
+            )
+          else
+            ()
+          in
+
+          let (mir_ctxt, load_varname) = get_varname mir_ctxt in
+          let load_lval = {t=var_t; kind=Tmp; lname=load_varname} in
+          let load_instr = Load(load_lval, ptr_lval) in
+          let bb = {bb with instrs = bb.instrs @ [load_instr]} in
+
+          (mir_ctxt, bb, load_lval)
 
       (* FIXME: These casts are are identical in structure; is there a way to
       cleanly collapse their implementations? *)
@@ -398,6 +460,22 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           (mir_ctxt, bb, lval)
 
       | VarInvoke(t, varname, exprs) ->
+          (* For variable access in MIR, we assume the variable is nested inside
+          an alloca that must be loaded from. *)
+
+          (* TODO: Can we combine this loading logic with that for ValVar, since
+          they're both doing a load precisely because we're "reading from a
+          variable", regardless of contents? *)
+
+          let ptr_lval = StrMap.find varname mir_ctxt.lvars in
+          let {t=ptr_t; _} = ptr_lval in
+          let pointed_t = unwrap_ptr ptr_t in
+
+          let (mir_ctxt, load_varname) = get_varname mir_ctxt in
+          let func_lval = {t=pointed_t; kind=Tmp; lname=load_varname} in
+          let load_instr = Load(func_lval, ptr_lval) in
+          let bb = {bb with instrs = bb.instrs @ [load_instr]} in
+
           let ((mir_ctxt, bb), arg_values) =
             List.fold_left_map (
               fun (mir_ctxt, bb) exp ->
@@ -405,10 +483,6 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                 ((mir_ctxt, bb), arg_val)
             ) (mir_ctxt, bb) exprs
           in
-
-          (* For variable access in MIR, we just want to yield the lvar that
-          should already exist for this name. *)
-          let func_lval = StrMap.find varname mir_ctxt.lvars in
 
           let (mir_ctxt, bb, lval, call_instr) = begin match t with
             | Nil ->
@@ -638,7 +712,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (* Assign the variant tag (first field in aggregate), based on the
           specific constructor we're building. *)
-          let ctor_idx = get_variant_ctor_tag_index v_ctors ctor_name in
+          let ctor_idx = get_tag_index_by_variant_ctor v_ctors ctor_name in
           let (mir_ctxt, bb, tag_lval) =
             ValU8(ctor_idx) |> literal_to_instr mir_ctxt bb U8
           in
@@ -676,35 +750,9 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                 (mir_ctxt, bb, ctor_lval, construct_instr)
           end in
 
-          (* Allocate stack space for the variant *)
-          let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
-          let alloca_lval =
-            {t=Ptr(variant_t); kind=Tmp; lname=variant_alloca_varname}
-          in
-          let alloca_instr = Alloca(alloca_lval, variant_t) in
+          let bb = {bb with instrs = bb.instrs @ [construct_instr]} in
 
-          (* Bitcast the alloca into a form that agrees with the constructed
-          aggregate. *)
-          let (mir_ctxt, bitcast_ptr_varname) = get_varname mir_ctxt in
-          let {t=variant_ctor_t; _} = ctor_lval in
-          let bitcast_ptr_lval =
-            {t=Ptr(variant_ctor_t); kind=Tmp; lname=bitcast_ptr_varname}
-          in
-          let bitcast_instr = UnOp(bitcast_ptr_lval, Bitwise, alloca_lval) in
-
-          (* Store the variant aggregate into the alloca. *)
-          let store_instr = Store(bitcast_ptr_lval, ctor_lval) in
-
-          let bb = {
-            bb with instrs = bb.instrs @ [
-              construct_instr;
-              alloca_instr;
-              bitcast_instr;
-              store_instr;
-            ]
-          } in
-
-          (mir_ctxt, bb, alloca_lval)
+          (mir_ctxt, bb, ctor_lval)
 
       | WhileExpr(_, _, _, _)
       | IndexExpr(_, _, _) ->
@@ -720,6 +768,23 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
   let _stmt_to_mir
     (mir_ctxt: mir_ctxt) (bb: bb) (stmt: Ast.stmt) : (mir_ctxt * bb)
   =
+    let assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval expected_t =
+      let (mir_ctxt, bb, alloca_lval) =
+        lval_to_alloca mir_ctxt bb rhs_lval expected_t
+      in
+
+      let lval = {t=Ptr(expected_t); kind=Var; lname=lhs_name} in
+      let assign_instr = Assign(lval, RVar(alloca_lval)) in
+
+      let mir_ctxt = {
+        mir_ctxt with lvars = StrMap.add lhs_name lval mir_ctxt.lvars
+      } in
+
+      let bb = {bb with instrs = bb.instrs @ [assign_instr]} in
+
+      (mir_ctxt, bb)
+    in
+
     match stmt with
     | ExprStmt(exp) ->
         let (mir_ctxt, bb, _) = expr_to_mir mir_ctxt bb exp in
@@ -729,14 +794,10 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
     | DeclStmt(lhs_name, _, t, exp) ->
         let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
 
-        let lval = {t=t; kind=Var; lname=lhs_name} in
-        let assign_instr = Assign(lval, RVar(rhs_lval)) in
+        let (mir_ctxt, bb) =
+          assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval t
+        in
 
-        let mir_ctxt = {
-          mir_ctxt with lvars = StrMap.add lhs_name lval mir_ctxt.lvars
-        } in
-
-        let bb = {bb with instrs = bb.instrs @ [assign_instr]} in
         let mir_ctxt = update_bb mir_ctxt bb in
 
         (mir_ctxt, bb)
@@ -753,10 +814,14 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
           | _ -> failwith "Typecheck failure deconstructing aggr in MIR"
         end in
 
-        let elem_lvals =
-          List.map2 (
-            fun ident elem_t -> {lname=ident; t=elem_t; kind=Var}
-          ) idents aggregate_types
+        let (mir_ctxt, elem_lvals) =
+          List.fold_left_map (
+            fun mir_ctxt elem_t ->
+              let (mir_ctxt, varname) = get_varname mir_ctxt in
+              let elem_lval = {lname=varname; t=elem_t; kind=Tmp} in
+
+              (mir_ctxt, elem_lval)
+          ) mir_ctxt aggregate_types
         in
 
         let extract_instrs =
@@ -768,19 +833,17 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
           ) elem_lvals
         in
 
-        let idents_lvals = List.combine idents elem_lvals in
+        let bb = {bb with instrs = bb.instrs @ extract_instrs} in
 
-        let (mir_ctxt, _) =
-          List.fold_left_map (
-            fun mir_ctxt (ident, lval) ->
-              let mir_ctxt = {
-                mir_ctxt with lvars = StrMap.add ident lval mir_ctxt.lvars
-              } in
-              (mir_ctxt, ())
-          ) mir_ctxt idents_lvals
+        let idents_lvals_ts = combine3 idents elem_lvals aggregate_types in
+
+        let (mir_ctxt, bb) =
+          List.fold_left (
+            fun (mir_ctxt, bb) (lhs_name, rhs_lval, elem_t) ->
+              assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval elem_t
+          ) (mir_ctxt, bb) idents_lvals_ts
         in
 
-        let bb = {bb with instrs = bb.instrs @ extract_instrs} in
         let mir_ctxt = update_bb mir_ctxt bb in
 
         (mir_ctxt, bb)

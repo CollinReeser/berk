@@ -830,7 +830,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       (* Which "tag" is this variant constructor supposed to be? Find it, then
       assign it to the tag field in the LLVM variant struct. *)
-      let ctor_tag_index = get_variant_ctor_tag_index v_ctors ctor_name in
+      let ctor_tag_index = get_tag_index_by_variant_ctor v_ctors ctor_name in
       let llvm_ctor_tag_index = Llvm.const_int i8_t ctor_tag_index in
 
       let indices = Array.of_list [

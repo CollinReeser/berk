@@ -84,11 +84,15 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
         let (llvm_args_t_lst, is_var_arg) = args_to_llvm args_t_lst in
         let llvm_args_t_arr = Array.of_list llvm_args_t_lst in
 
-        begin if is_var_arg then
+        let func_t = begin if is_var_arg then
           Llvm.var_arg_function_type llvm_ret_t llvm_args_t_arr
         else
           Llvm.function_type llvm_ret_t llvm_args_t_arr
-        end
+        end in
+
+        (* We always work with function _pointers_ as a layer of abstraction,
+        as raw LLVM function types are sizeless and can't be allocated for. *)
+        Llvm.pointer_type func_t
 
     | VarArgSentinel -> failwith "Should not need to determine type for var arg"
     | Unbound(template) ->

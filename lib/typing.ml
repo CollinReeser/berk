@@ -377,6 +377,14 @@ let is_indexable_type arr_t =
       false
 ;;
 
+
+let unwrap_ptr ptr_t =
+  match ptr_t with
+  | Ptr(t) -> t
+  | _ -> failwith "Cannot unwrap non-ptr type"
+;;
+
+
 (* Make concrete the given type, to the extent possible, via the mappings in the
 given string-type-variable-to-type mapping. *)
 let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
@@ -609,7 +617,7 @@ let get_tvars typ =
 ;;
 
 (* Get the index of the given ctor name in the given list of variant ctors *)
-let get_variant_ctor_tag_index v_ctors ctor_name =
+let get_tag_index_by_variant_ctor v_ctors ctor_name =
   let rec _get_variant_ctor_tag_index accum v_ctors_tail =
     begin match v_ctors_tail with
     | [] -> failwith ("Failed to find " ^ ctor_name ^ " within variant")
@@ -622,4 +630,9 @@ let get_variant_ctor_tag_index v_ctors ctor_name =
   in
 
   _get_variant_ctor_tag_index 0 v_ctors
+;;
+
+(* Get the index of the given ctor name in the given list of variant ctors *)
+let get_variant_ctor_by_tag_index v_ctors idx =
+  List.nth v_ctors idx
 ;;

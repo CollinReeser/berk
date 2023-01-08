@@ -35,6 +35,18 @@ let list_to_2_tuples lst =
   | _ -> every_elem [] lst
 ;;
 
+let combine3 lhs mid rhs =
+  let rec _rev_combine3 so_far lhs mid rhs = begin match (lhs, mid, rhs) with
+  | ([], [], []) -> so_far
+  | (x::xs, y::ys, z::zs) ->
+      let so_far = (x, y, z)::so_far in
+      _rev_combine3 so_far xs ys zs
+  | _ -> failwith "combine3 with non-matching lists"
+  end in
+
+  let rev_combined = _rev_combine3 [] lhs mid rhs in
+  List.rev rev_combined
+
 let rec fmt_join_strs delim idents : string =
   match idents with
   | [] -> ""

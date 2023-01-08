@@ -429,6 +429,18 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
               (fmt_type t)
           )
 
+    | (_, VarInvoke(t, _, _)) ->
+        if t = injected_t then
+          exp
+        else if type_extendable_to t injected_t then
+          ValCastExtend(injected_t, exp)
+        else
+          failwith (
+            Printf.sprintf "Cannot inject [[ %s ]] into invoke ret_t [[ %s ]]"
+              (fmt_type injected_t)
+              (fmt_type t)
+          )
+
     | (_, BlockExpr(_, stmts, exp_res)) ->
         (* We're not smart enough yet to influence the types of any expressions
         within the statements within the block. So, just make sure the trailing
@@ -604,7 +616,9 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             (fmt_expr ~print_typ:true "" exp)
         in
         failwith (
-          "Cannot inject type [[ " ^ (fmt_type injected_t) ^ " ]] into expr"
+          Printf.sprintf "Cannot inject type [[ %s ]] into expr [[ %s ]]"
+            (fmt_type injected_t)
+            (fmt_expr ~print_typ:true "" exp)
         )
 
     | (Ptr(_), _) -> failwith "Unimplemented"
