@@ -636,80 +636,6 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           | _ -> failwith "Unexpected non-variant type in variant-ctor-expr"
           end in
 
-          (* Allocate stack space for the variant *)
-          let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
-          let alloca_lval =
-            {t=Ptr(variant_t); kind=Tmp; lname=variant_alloca_varname}
-          in
-          let alloca_instr = Alloca(alloca_lval, variant_t) in
-
-          let bb = {bb with instrs = bb.instrs @ [alloca_instr]} in
-
-          (* Load the variant aggregate itself, with the given (possibly
-          bitcasted) pointer. *)
-          let load_variant mir_ctxt bb variant_t ptr_lval =
-            let (mir_ctxt, variant_varname) = get_varname mir_ctxt in
-            let variant_lval =
-              {t=variant_t; kind=Tmp; lname=variant_varname}
-            in
-            let load_variant_instr = Load(variant_lval, ptr_lval) in
-
-            (mir_ctxt, bb, variant_lval, load_variant_instr)
-          in
-
-          (* This constructor may have associated data. Assign it now. *)
-          let ctor_t = expr_type ctor_arg in
-          let (mir_ctxt, bb, ctor_lval, instrs) = begin match ctor_t with
-            | Nil ->
-                (* "Load" the variant itself from the stack memory, so we can
-                manipulate its fields as an aggregate. *)
-                let (mir_ctxt, bb, variant_lval, load_instr) =
-                  load_variant mir_ctxt bb variant_t alloca_lval
-                in
-
-                (mir_ctxt, bb, variant_lval, [load_instr])
-
-            | _ ->
-                (* Cast the variant to a pointer to its specific constructor
-                layout. *)
-
-                let variant_ctor_t = Tuple([U8; ctor_t]) in
-                let (mir_ctxt, ctor_cast_varname) = get_varname mir_ctxt in
-                let ctor_cast_lval =
-                  {t=Ptr(variant_ctor_t); kind=Tmp; lname=ctor_cast_varname}
-                in
-                let variant_to_ctor_cast_instr =
-                  UnOp(ctor_cast_lval, Bitwise, alloca_lval)
-                in
-
-                (* "Load" the variant itself from the stack memory, so we can
-                manipulate its fields as an aggregate. *)
-
-                let (mir_ctxt, bb, variant_lval, load_instr) =
-                  load_variant mir_ctxt bb variant_ctor_t ctor_cast_lval
-                in
-
-                (* Assign the constructor data to the variant. *)
-
-                let (mir_ctxt, bb, ctor_elem_lval) =
-                  _expr_to_mir mir_ctxt bb ctor_arg
-                in
-
-                let insert_ctor_data_instr =
-                  IntoAggregate(1, ctor_elem_lval, variant_lval)
-                in
-
-                (
-                  mir_ctxt, bb, variant_lval, [
-                    variant_to_ctor_cast_instr;
-                    load_instr;
-                    insert_ctor_data_instr
-                  ]
-                )
-          end in
-
-          let bb = {bb with instrs = bb.instrs @ instrs} in
-
           (* Assign the variant tag (first field in aggregate), based on the
           specific constructor we're building. *)
           let ctor_idx = get_variant_ctor_tag_index v_ctors ctor_name in
@@ -717,11 +643,66 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             ValU8(ctor_idx) |> literal_to_instr mir_ctxt bb U8
           in
 
-          Printf.printf "ValU8 variant tag lval: [[ %s ]]\n" (fmt_lval tag_lval) ;
+          (* This constructor may have associated data. Assign it now. *)
+          let ctor_t = expr_type ctor_arg in
+          let (mir_ctxt, bb, ctor_lval, construct_instr) = begin
+            match ctor_t with
+            | Nil ->
+                let variant_ctor_t = Tuple([U8]) in
 
-          let assign_tag_instr = IntoAggregate(0, tag_lval, ctor_lval) in
+                let (mir_ctxt, varname) = get_varname mir_ctxt in
+                let ctor_lval =
+                  {t=variant_ctor_t; kind=Tmp; lname=varname}
+                in
+                let construct_instr =
+                  ConstructAggregate(ctor_lval, [tag_lval])
+                in
 
-          let bb = {bb with instrs = bb.instrs @ [assign_tag_instr] } in
+                (mir_ctxt, bb, ctor_lval, construct_instr)
+
+            | _ ->
+                let variant_ctor_t = Tuple([U8; ctor_t]) in
+
+                let (mir_ctxt, bb, ctor_elem_lval) =
+                  _expr_to_mir mir_ctxt bb ctor_arg
+                in
+
+                let (mir_ctxt, varname) = get_varname mir_ctxt in
+                let ctor_lval = {t=variant_ctor_t; kind=Tmp; lname=varname} in
+                let construct_instr =
+                  ConstructAggregate(ctor_lval, [tag_lval; ctor_elem_lval])
+                in
+
+                (mir_ctxt, bb, ctor_lval, construct_instr)
+          end in
+
+          (* Allocate stack space for the variant *)
+          let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
+          let alloca_lval =
+            {t=Ptr(variant_t); kind=Tmp; lname=variant_alloca_varname}
+          in
+          let alloca_instr = Alloca(alloca_lval, variant_t) in
+
+          (* Bitcast the alloca into a form that agrees with the constructed
+          aggregate. *)
+          let (mir_ctxt, bitcast_ptr_varname) = get_varname mir_ctxt in
+          let {t=variant_ctor_t; _} = ctor_lval in
+          let bitcast_ptr_lval =
+            {t=Ptr(variant_ctor_t); kind=Tmp; lname=bitcast_ptr_varname}
+          in
+          let bitcast_instr = UnOp(bitcast_ptr_lval, Bitwise, alloca_lval) in
+
+          (* Store the variant aggregate into the alloca. *)
+          let store_instr = Store(bitcast_ptr_lval, ctor_lval) in
+
+          let bb = {
+            bb with instrs = bb.instrs @ [
+              construct_instr;
+              alloca_instr;
+              bitcast_instr;
+              store_instr;
+            ]
+          } in
 
           (mir_ctxt, bb, alloca_lval)
 

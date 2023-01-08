@@ -42,28 +42,24 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
             | _ -> Some(_berk_t_to_llvm_t typ)
         ) ctors in
 
-        let typ_sizes = List.map llvm_sizeof llvm_nonempty_typs in
+        let _ = if List.length ctors > 255 then
+          failwith "Variants with >255 constructors not implemented"
+        else
+          ()
+        in
 
+        let typ_sizes = List.map llvm_sizeof llvm_nonempty_typs in
         let largest = List.fold_left max 0 typ_sizes in
-        let llvm_variant_t = begin
+
+        let union_t = begin
           if largest = 0
           then
-            let llvm_union_tag = Llvm.i8_type llvm_ctxt in
-            let llvm_t_arr = Array.of_list [llvm_union_tag] in
-            let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
-
-            llvm_union_t
+            Tuple([U8])
           else
-            let llvm_union_tag = Llvm.i8_type llvm_ctxt in
-            let llvm_union_dummy = Llvm.i8_type llvm_ctxt in
-            let llvm_union_vals = Llvm.array_type llvm_union_dummy largest in
-            let llvm_t_arr = Array.of_list [llvm_union_tag; llvm_union_vals] in
-            let llvm_union_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
-
-            llvm_union_t
+            Tuple([U8; Array(U8, largest)])
         end in
 
-        llvm_variant_t
+        _berk_t_to_llvm_t union_t
 
     | Function(ret_t, args_t_lst) ->
         let llvm_ret_t = _berk_t_to_llvm_t ret_t in
