@@ -221,20 +221,26 @@ let fmt_bb ({name; instrs} : bb) =
     name
     (List.fold_left (^) "" (List.map fmt_instr instrs))
 
-let fmt_mir_ctxt {f_name; f_params; f_ret_t; bbs; _} =
+let fmt_mir_ctxt {f_name; f_params; f_ret_t; bbs=bbs_map; _} =
   let open Printf in
-  let bbs = List.map (fun (_, bb) -> bb) (StrMap.bindings bbs) in
+  let bbs = List.map (fun (_, bb) -> bb) (StrMap.bindings bbs_map) in
   let f_params_fmted =
     fmt_join_strs ", " (
       List.map (fun (n, t) -> sprintf "%s: %s" n (fmt_type t)) f_params
     )
   in
 
-  sprintf "\nfn %s(%s) -> %s:\n%s"
-    f_name
-    f_params_fmted
-    (fmt_type f_ret_t)
-    (List.fold_left (^) "" (List.map fmt_bb bbs))
+  if StrMap.is_empty bbs_map then
+    sprintf "\ndecl fn %s(%s) -> %s\n"
+      f_name
+      f_params_fmted
+      (fmt_type f_ret_t)
+  else
+    sprintf "\nfn %s(%s) -> %s:\n%s"
+      f_name
+      f_params_fmted
+      (fmt_type f_ret_t)
+      (List.fold_left (^) "" (List.map fmt_bb bbs))
 
 let pprint_mir_ctxt ppf mir_ctxt =
   Format.fprintf ppf "%s" (fmt_mir_ctxt mir_ctxt)
@@ -868,7 +874,9 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
     f_name = f_name;
     f_params = (List.map (fun (param_name, _, t) -> (param_name, t)) f_params);
     f_ret_t = f_ret_t;
-    name_gen = 0; lvars = StrMap.empty; bbs = StrMap.empty
+    name_gen = 0;
+    lvars = StrMap.empty;
+    bbs = StrMap.empty
   } in
   let bb_entry = {name="entry"; instrs=[]} in
   let ((mir_ctxt, _), _) =
@@ -878,6 +886,18 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
         ((mir_ctxt, cur_bb), ())
     ) (mir_ctxt, bb_entry) f_stmts
   in
+
+  mir_ctxt
+
+let func_decl_to_mir ({f_name; f_params; f_ret_t} : func_decl_t) =
+  let mir_ctxt = {
+    f_name = f_name;
+    f_params = (List.map (fun (param_name, _, t) -> (param_name, t)) f_params);
+    f_ret_t = f_ret_t;
+    name_gen = 0;
+    lvars = StrMap.empty;
+    bbs = StrMap.empty
+  } in
 
   mir_ctxt
 

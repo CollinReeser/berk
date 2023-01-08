@@ -39,6 +39,13 @@ let main = begin
           DeclStmt(
             "my_str", {mut=false}, Undecided, ValStr("Hello, world!")
           );
+          ExprStmt(
+            FuncCall(
+              Undecided, "printf", [
+                ValStr("%s\n"); ValVar(Undecided, "my_str")
+              ]
+            )
+          );
           DeclStmt(
             "my_call", {mut=false}, Undecided,
             FuncCall(Undecided, "trivial", [])
@@ -121,6 +128,19 @@ let main = begin
         );
       ] in
 
+      let func_decls = [
+        FuncExternDecl(
+          {
+            f_name = "printf";
+            f_params = [
+              ("fmt", def_var_qual, String);
+              ("vargs", def_var_qual, VarArgSentinel);
+            ];
+            f_ret_t = I32;
+          }
+        );
+      ] in
+
       let func_defs = [
         trivial_func_def;
         main_func_def;
@@ -128,6 +148,7 @@ let main = begin
 
       let mod_decls =
         variant_decls @
+        func_decls @
         (List.map (fun func_def -> FuncDef(func_def)) func_defs)
       in
 
@@ -160,9 +181,11 @@ let main = begin
         List.filter_map (
           fun mod_decl ->
             begin match mod_decl with
-              | FuncExternDecl(_)
               | VariantDecl(_) -> None
 
+              | FuncExternDecl(func_decl) ->
+                  let mir_ctxt = func_decl_to_mir func_decl in
+                  Some(mir_ctxt)
               | FuncDef(f_ast) ->
                   let mir_ctxt = func_to_mir f_ast in
                   Some(mir_ctxt)

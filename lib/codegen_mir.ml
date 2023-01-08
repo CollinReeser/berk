@@ -412,20 +412,34 @@ let codegen_func_bbs llvm_ctxt builder func_ctxt (mir_ctxt : mir_ctxt) =
   func_ctxt
 ;;
 
-let codegen_func_mir
-  llvm_ctxt the_fpm builder mod_ctxt
-  ({f_name; f_params; f_ret_t; _} as mir_ctxt : mir_ctxt)
-=
+
+let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_t; _} =
+  (* Return the pair of all the non-variadic function parameter types, and
+  whether the parameter list ends with a variadic-args sentinel. Fails if
+  ill-formed. *)
+  (* TODO: This is a modified copy of what is in ast.ml, and we need to marry
+  these two. *)
+  let rec get_static_f_params f_params =
+    begin match f_params with
+    | [] -> ([], false)
+    | [(_, VarArgSentinel)] -> ([], true)
+    | (_, VarArgSentinel)::_ ->
+        failwith "Variadic arguments may exist only once, at end of param list"
+    | (_, x)::xs ->
+        let (rest, is_vararg) = get_static_f_params xs in
+        (x::rest, is_vararg)
+    end
+  in
+
   (* Generate the LLVM context for defining a new function. *)
   let llvm_ret_t = mod_ctxt.berk_t_to_llvm_t f_ret_t in
+  let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
   let llvm_param_t_lst =
-    List.map (
-      fun (_, t) -> mod_ctxt.berk_t_to_llvm_t t
-    ) f_params
+    List.map (mod_ctxt.berk_t_to_llvm_t) f_params_non_variadic
   in
   let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
   let func_sig_t =
-    if false (* is_var_arg *)
+    if is_var_arg
     then Llvm.var_arg_function_type llvm_ret_t llvm_param_t_arr
     else Llvm.function_type llvm_ret_t llvm_param_t_arr
   in
@@ -435,6 +449,14 @@ let codegen_func_mir
   at the _end_ of function codegen, is what permits self recursion. *)
   let func_sigs = StrMap.add f_name new_func mod_ctxt.func_sigs in
   let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
+
+  (mod_ctxt, new_func)
+
+
+let codegen_func_mir
+  llvm_ctxt the_fpm builder mod_ctxt ({f_params; _} as mir_ctxt : mir_ctxt)
+=
+  let (mod_ctxt, new_func) = codegen_func_decl_mir mod_ctxt mir_ctxt in
 
 
   (* ??? *)
@@ -493,14 +515,25 @@ let codegen_func_mir
   mod_ctxt
 ;;
 
-let codegen_func_mirs llvm_ctxt the_fpm builder mod_gen_ctxt mir_ctxts =
+let codegen_func_mirs
+  llvm_ctxt the_fpm builder
+  (mod_gen_ctxt : module_gen_context)
+  (mir_ctxts : mir_ctxt list)
+=
   let _ =
-    List.fold_left_map (
+    List.fold_left (
       fun mod_gen_ctxt mir_ctxt ->
-        let mod_gen_ctxt =
-          codegen_func_mir llvm_ctxt the_fpm builder mod_gen_ctxt mir_ctxt
-        in
-        (mod_gen_ctxt, ())
+        let ({bbs; _} : mir_ctxt) = mir_ctxt in
+        if StrMap.is_empty bbs then
+          let (mod_gen_ctxt, _) =
+            codegen_func_decl_mir mod_gen_ctxt mir_ctxt
+          in
+          mod_gen_ctxt
+        else
+          let mod_gen_ctxt =
+            codegen_func_mir llvm_ctxt the_fpm builder mod_gen_ctxt mir_ctxt
+          in
+          mod_gen_ctxt
     ) mod_gen_ctxt mir_ctxts
   in
 

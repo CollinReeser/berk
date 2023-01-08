@@ -191,7 +191,8 @@ let rec codegen_mod_decls llvm_ctxt the_mod the_fpm builder mod_decls =
 and codegen_mod_decl llvm_ctxt the_fpm builder mod_ctxt mod_decl =
   match mod_decl with
   | FuncExternDecl(f_decl_ast) ->
-      codegen_func_decl mod_ctxt f_decl_ast
+      let (mod_ctxt, _) = codegen_func_decl mod_ctxt f_decl_ast in
+      mod_ctxt
 
   | FuncDef(f_ast) ->
       codegen_func llvm_ctxt the_fpm builder mod_ctxt f_ast
@@ -202,29 +203,6 @@ and codegen_mod_decl llvm_ctxt the_fpm builder mod_ctxt mod_decl =
 
 
 and codegen_func_decl mod_ctxt {f_name; f_params; f_ret_t} =
-  let llvm_ret_t = mod_ctxt.berk_t_to_llvm_t f_ret_t in
-  let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
-  let llvm_param_t_lst =
-    List.map (mod_ctxt.berk_t_to_llvm_t) f_params_non_variadic
-  in
-  let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
-  let func_sig_t =
-    if is_var_arg
-    then Llvm.var_arg_function_type llvm_ret_t llvm_param_t_arr
-    else Llvm.function_type llvm_ret_t llvm_param_t_arr
-  in
-  let new_func = Llvm.declare_function f_name func_sig_t mod_ctxt.llvm_mod in
-
-  let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
-  let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
-
-  mod_ctxt_up
-
-
-and codegen_func
-  llvm_ctxt the_fpm builder mod_ctxt
-  {f_decl = {f_name; f_params; f_ret_t;}; f_stmts;}
-=
   (* Generate the LLVM context for defining a new function. *)
   let llvm_ret_t = mod_ctxt.berk_t_to_llvm_t f_ret_t in
   let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
@@ -241,8 +219,17 @@ and codegen_func
 
   (* Add this new function to our codegen context; doing this now, rather than
   at the _end_ of function codegen, is what permits self recursion. *)
-  let func_sigs_up = StrMap.add f_name new_func mod_ctxt.func_sigs in
-  let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
+  let func_sigs = StrMap.add f_name new_func mod_ctxt.func_sigs in
+  let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
+
+  (mod_ctxt, new_func)
+
+
+and codegen_func
+  llvm_ctxt the_fpm builder mod_ctxt
+  {f_decl = {f_params; _} as f_decl; f_stmts;}
+=
+  let (mod_ctxt, new_func) = codegen_func_decl mod_ctxt f_decl in
 
   let bb = Llvm.append_block llvm_ctxt "entry" new_func in
   let _ = Llvm.position_at_end bb builder in
@@ -269,7 +256,7 @@ and codegen_func
   let func_ctxt = {
     cur_func = new_func;
     cur_vars = init_vars;
-    mod_ctxt = mod_ctxt_up
+    mod_ctxt = mod_ctxt
   } in
 
   (* Codegen the function body statements. *)
@@ -300,7 +287,7 @@ and codegen_func
   (* Optimize the function. *)
   let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
 
-  mod_ctxt_up
+  mod_ctxt
 
 
 and codegen_stmts llvm_ctxt builder func_ctxt stmts =
