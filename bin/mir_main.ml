@@ -149,6 +149,17 @@ let main = begin
             "my_option_some", {mut=false}, Undecided,
             VariantCtorExpr(Undecided, "Some", ValU32(101))
           );
+          DeclStmt(
+            "my_unwrapped_some", {mut=false}, Undecided,
+            MatchExpr(
+              Undecided, ValVar(Undecided, "my_option_some"), [
+                (
+                  Ctor(Undecided, "Some", VarBind(Undecided, "x")),
+                  ValVar(Undecided, "x")
+                )
+              ]
+            )
+          );
           ReturnStmt(
             IfThenElseExpr(
               Undecided,

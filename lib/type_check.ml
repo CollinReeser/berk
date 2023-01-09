@@ -88,6 +88,7 @@ and is_concrete_expr ?(verbose=false) expr =
   let _is_concrete_expr expr = is_concrete_expr ~verbose:verbose expr in
   let _is_concrete_stmt stmt = is_concrete_stmt ~verbose:verbose stmt in
   let _is_concrete_type typ  = is_concrete_type ~verbose:verbose typ in
+  let _is_concrete_patt patt = is_concrete_patt ~verbose:verbose patt in
 
   let res = begin match expr with
   | ValU64(_)  | ValU32(_) | ValU16(_) | ValU8(_)
@@ -138,6 +139,18 @@ and is_concrete_expr ?(verbose=false) expr =
   | VarInvoke(typ, _, exprs) ->
       (_is_concrete_type typ) &&
         (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
+
+  | MatchExpr(typ, matched_exp, pattern_exp_pairs) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr matched_exp) &&
+        (
+          List.fold_left (&&) true (
+            List.map (
+              fun (patt, exp) ->
+                (_is_concrete_patt patt) && (_is_concrete_expr exp)
+            ) pattern_exp_pairs
+          )
+        )
   end in
 
   let _ = if verbose then
@@ -151,6 +164,15 @@ and is_concrete_expr ?(verbose=false) expr =
   in
 
   res
+
+and is_concrete_patt ?(verbose=false) patt =
+  let _is_concrete_patt patt = is_concrete_patt ~verbose:verbose patt in
+  let _is_concrete_type typ  = is_concrete_type ~verbose:verbose typ  in
+
+  begin match patt with
+  | Ctor(t, _, patt) -> (_is_concrete_type t) && (_is_concrete_patt patt)
+  | VarBind(t, _) ->    (_is_concrete_type t)
+  end
 ;;
 
 
@@ -915,6 +937,27 @@ and type_check_expr
         in
 
         VariantCtorExpr(resolved_v_t, ctor_name, ctor_exp_typechecked)
+
+    | MatchExpr(_, matched_expr, pattern_expr_pairs) ->
+        let matched_expr_tc = _type_check_expr matched_expr in
+        let matched_t = expr_type matched_expr_tc in
+
+        let typecheck_pattern_expr_pair (patt, exp) =
+          let (tc_ctxt, patt_tc) = type_check_pattern tc_ctxt matched_t patt in
+          let exp_tc = type_check_expr tc_ctxt Undecided exp in
+
+          (patt_tc, exp_tc)
+        in
+
+        let pattern_expr_pairs_tc =
+          List.map typecheck_pattern_expr_pair pattern_expr_pairs
+        in
+
+        let common_t = common_type_of_lst (
+          List.map (fun (_, exp) -> expr_type exp) pattern_expr_pairs_tc
+        ) in
+
+        MatchExpr(common_t, matched_expr_tc, pattern_expr_pairs_tc)
   end in
 
   (* First, allow the typechecker to try to infer types as much as possible. *)
@@ -961,4 +1004,42 @@ and type_check_expr
   in
 
   exp_typechecked_injected
+
+
+and type_check_pattern
+  (tc_ctxt : typecheck_context) (matched_t : berk_t) (patt : pattern) :
+  typecheck_context * pattern
+=
+  let (tc_ctxt, patt) = begin match patt with
+  | VarBind(_, varname) ->
+      let tc_ctxt = {
+        tc_ctxt with
+          vars = StrMap.add varname (matched_t, {mut=false}) tc_ctxt.vars
+      } in
+
+      (tc_ctxt, VarBind(matched_t, varname))
+
+  | Ctor(_, ctor_name, exp_patt) ->
+      let ctor_exp_t = begin match matched_t with
+      | Variant(_, ctors) ->
+          let (_, ctor_exp_t) = List.find (
+              fun (name, _) -> ctor_name = name
+            ) ctors
+          in
+          ctor_exp_t
+      | _ ->
+          failwith (
+            "Unexpectedly expecting non-variant type in " ^
+            "variant constructor match: " ^ (fmt_type matched_t)
+          )
+      end in
+
+      let (tc_ctxt, exp_patt) =
+        type_check_pattern tc_ctxt ctor_exp_t exp_patt
+      in
+
+      (tc_ctxt, Ctor(matched_t, ctor_name, exp_patt))
+  end in
+
+  (tc_ctxt, patt)
 ;;

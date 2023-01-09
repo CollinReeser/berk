@@ -761,7 +761,8 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           (mir_ctxt, bb, ctor_lval)
 
       | WhileExpr(_, _, _, _)
-      | IndexExpr(_, _, _) ->
+      | IndexExpr(_, _, _)
+      | MatchExpr(_, _, _) ->
           failwith "Unimplemented"
     end in
 

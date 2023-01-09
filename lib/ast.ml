@@ -54,6 +54,31 @@ and expr =
   | TupleExpr of berk_t * expr list
   (* Top-level variant type, ctor name, ctor expr,  *)
   | VariantCtorExpr of berk_t * string * expr
+  (* Match/pattern expression. First expr is value to match on. Remainder are
+  pairs of patterns and their resultant expressions *)
+  | MatchExpr of berk_t * expr * (pattern * expr) list
+
+and pattern =
+  (* ie: Some(_) -> ... *)
+  | Ctor of berk_t * ident_t * pattern
+  (* ie: x -> ... *)
+  | VarBind of berk_t * ident_t
+  (*
+  (* ie: _ -> ... *)
+  | Wild
+  (* ie: (_, _, _) -> ... *)
+  | DeconTuple of berk_t * pattern list
+  (* ie: [_, _, _] -> ... *)
+  | DeconArray of berk_t * pattern list
+  (* ie: (North | West) -> ... *)
+  | Alternate of berk_t * pattern list
+  (* ie: 5 -> ... *)
+  | IntLiteral of berk_t * int
+  (* ie: 1.23 -> ... *)
+  | FloatLiteral of berk_t * string
+  (* ie: <pattern> as x -> ... *)
+  | PatternAs of berk_t * pattern * ident_t
+  *)
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -96,6 +121,7 @@ let expr_type exp =
   | StaticIndexExpr(typ, _, _) -> typ
   | TupleExpr(typ, _) -> typ
   | VariantCtorExpr(typ, _, _) -> typ
+  | MatchExpr(typ, _, _) -> typ
 ;;
 
 let fmt_bin_op op =
@@ -266,6 +292,52 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         ctor_name
         (fmt_expr ~print_typ:print_typ "" expr)
         typ_s
+
+  | MatchExpr(_, matched_exp, pattern_exp_pairs) ->
+      let pattern_exprs_fmt =
+        List.fold_left (^) "" (
+          List.map (
+            fun (pattern, exp) ->
+              let pattern_fmt =
+                fmt_pattern ~print_typ:print_typ (ind) pattern
+              in
+              let exp_fmt =
+                fmt_expr ~init_ind:false ~print_typ:print_typ (ind ^ "  ") exp
+              in
+              Printf.sprintf "%s -> %s\n" pattern_fmt exp_fmt
+          ) pattern_exp_pairs
+        )
+      in
+      Printf.sprintf "%s%smatch %s {\n%s%s}"
+        init_ind
+        typ_s_rev
+        (fmt_expr ~print_typ:print_typ "" matched_exp)
+        pattern_exprs_fmt
+        ind
+
+
+and fmt_pattern ?(print_typ=false) init_ind pattern =
+  let open Printf in
+
+  let _maybe_fmt_type t =
+    if print_typ then
+      sprintf ":%s" (fmt_type t)
+    else
+      ""
+  in
+
+  let rec _fmt_pattern pattern =
+    begin match pattern with
+    | Ctor(t, ctor_name, pattern) ->
+        sprintf "%s(%s)%s" ctor_name (_fmt_pattern pattern) (_maybe_fmt_type t)
+    | VarBind(t, var_name) ->
+        sprintf "%s%s" var_name (_maybe_fmt_type t)
+    end
+  in
+  let pattern_fmt = _fmt_pattern pattern in
+
+  sprintf "%s| %s" init_ind pattern_fmt
+
 
 and fmt_join_idents_quals delim idents_quals : string =
   match idents_quals with
@@ -579,6 +651,20 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
           "Unexpectedly encountered mismatch in variant typing: " ^
           "[[ " ^ (fmt_type injected_t) ^ " ]]"
         )
+
+    | (_, MatchExpr(_, matched_exp, patt_exp_pairs)) ->
+        let patt_exp_pairs_injected =
+          List.map (
+            fun (patt, exp) ->
+              let exp_injected =
+                inject_type_into_expr ~ind:(ind ^ "  ") injected_t exp
+              in
+
+              (patt, exp_injected)
+          ) patt_exp_pairs
+        in
+
+        MatchExpr(injected_t, matched_exp, patt_exp_pairs_injected)
 
     | (U8,  ValU8 (_)) -> exp
     | (U16, ValU16(_)) -> exp

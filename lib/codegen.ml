@@ -891,5 +891,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       let loaded = Llvm.build_load variant_gep variant_ssa_load_name builder in
 
       loaded
+
+  | MatchExpr(_, _, _) -> failwith "Unimplemented"
 ;;
 
