@@ -170,8 +170,11 @@ and is_concrete_patt ?(verbose=false) patt =
   let _is_concrete_type typ  = is_concrete_type ~verbose:verbose typ  in
 
   begin match patt with
+  | PNil -> true
+  | PBool(_) -> true
+  | Wild(t) -> (_is_concrete_type t)
+  | VarBind(t, _) -> (_is_concrete_type t)
   | Ctor(t, _, patt) -> (_is_concrete_type t) && (_is_concrete_patt patt)
-  | VarBind(t, _) ->    (_is_concrete_type t)
   end
 ;;
 
@@ -1011,6 +1014,11 @@ and type_check_pattern
   typecheck_context * pattern
 =
   let (tc_ctxt, patt) = begin match patt with
+  | PNil -> (tc_ctxt, PNil)
+
+  | Wild(_) ->
+      (tc_ctxt, Wild(matched_t))
+
   | VarBind(_, varname) ->
       let tc_ctxt = {
         tc_ctxt with
@@ -1019,9 +1027,17 @@ and type_check_pattern
 
       (tc_ctxt, VarBind(matched_t, varname))
 
+  | PBool(b) ->
+      begin match matched_t with
+      | Bool -> (tc_ctxt, PBool(b))
+      | _ -> failwith "Match expression type does not match bool in pattern"
+      end
+
   | Ctor(_, ctor_name, exp_patt) ->
       let ctor_exp_t = begin match matched_t with
       | Variant(_, ctors) ->
+          (* TODO: This will just fail if the ctor_name does not match. We
+            should have a nicer error message here (ie, "wrong variant") *)
           let (_, ctor_exp_t) = List.find (
               fun (name, _) -> ctor_name = name
             ) ctors
@@ -1043,3 +1059,134 @@ and type_check_pattern
 
   (tc_ctxt, patt)
 ;;
+
+(* Does the LHS pattern dominate the RHS pattern? *)
+let rec pattern_dominates lhs_patt rhs_patt =
+  begin match (lhs_patt, rhs_patt) with
+  | (PNil, PNil) -> true
+
+  | ((Wild(_) | VarBind(_, _)), _) -> true
+
+  | (_, (Wild(_) | VarBind(_, _))) ->
+      Printf.printf "No pattern dominates wildcards other than wildcards.\n" ;
+      false
+
+  | (PBool(lhs_b), PBool(rhs_b)) ->
+      if lhs_b = rhs_b then
+        true
+      else
+        false
+
+  | (Ctor(_, lhs_ctor_name, lhs_patt), Ctor(_, rhs_ctor_name, rhs_patt)) ->
+      if lhs_ctor_name = rhs_ctor_name then
+        pattern_dominates lhs_patt rhs_patt
+      else
+        false
+
+  | (PBool(_), Ctor(_, _, _))
+  | (Ctor(_, _, _), PBool(_)) -> failwith "Non-matching pattern types."
+
+  | (PNil, PBool(_))
+  | (PBool(_), PNil) -> failwith "Non-matching pattern types."
+
+  | (PNil, Ctor(_, _, _))
+  | (Ctor(_, _, _), PNil) -> failwith "Non-matching pattern types."
+
+  end
+
+let filter_dominated lhs_patt rhs_patts =
+  List.filter (fun rhs -> not (pattern_dominates lhs_patt rhs)) rhs_patts
+
+(* Returns a pair. The left list is the list of patterns that are useless
+because the patterns before them are sufficient to match all pattern values, and
+the right list is the list of pattern values not matched by any pattern (lacking
+exhaustion). *)
+let determine_pattern_completeness lhs_patts rhs_patts =
+  let rec _determine_pattern_completeness lhs_patts_useless lhs_patts_rest rhs_patts_rest =
+    begin match (lhs_patts_rest, rhs_patts_rest) with
+    | ([], []) -> ((List.rev lhs_patts_useless), [])
+    | (_, []) -> ((List.rev lhs_patts_useless) @ lhs_patts_rest, [])
+    | ([], _) -> ((List.rev lhs_patts_useless), rhs_patts_rest)
+    | (patt::lhs_patts_rest, _) ->
+        let filtered_rhs_patts = filter_dominated patt rhs_patts_rest in
+        let lhs_patts_useless =
+          if (List.length rhs_patts_rest) = (List.length filtered_rhs_patts)
+          then patt :: lhs_patts_useless
+          else lhs_patts_useless
+        in
+        _determine_pattern_completeness
+          lhs_patts_useless lhs_patts_rest filtered_rhs_patts
+    end
+  in
+
+  _determine_pattern_completeness [] lhs_patts rhs_patts
+
+let rec generate_value_patts t : pattern list =
+  match t with
+  | Undecided -> failwith "Cannot generate values for undecided type"
+  | Unbound(_) -> failwith "Cannot generate values for unbound typevar"
+  | VarArgSentinel -> failwith "Cannot generate values for var-arg sentinel"
+
+  | Nil -> [PNil]
+
+  | U64 | U32 | U16 | U8
+  | I64 | I32 | I16 | I8 -> failwith "Unimplemented"
+
+  | F128 | F64 | F32 -> failwith "Unimplemented"
+
+  | String -> failwith "Unimplemented"
+
+  | Tuple(_) -> failwith "Unimplemented"
+  | Array(_, _) -> failwith "Unimplemented"
+
+  | Ptr(_) -> failwith "Unimplemented"
+  | Function(_, _) -> failwith "Unimplemented"
+
+  | Bool -> [PBool(true); PBool(false)]
+
+  | Variant(_, ctors) ->
+      let ctor_patt_chunks : pattern list list =
+        List.map (
+          fun (ctor_name, ctor_t) ->
+            let ctor_value_patts = generate_value_patts ctor_t in
+            let ctor_patts =
+              List.map (
+                fun value_patt -> Ctor(t, ctor_name, value_patt)
+              ) ctor_value_patts
+            in
+            ctor_patts
+        ) ctors
+      in
+      List.flatten ctor_patt_chunks
+
+let check_patt_usefulness_exhaustion lhs_patts t =
+  let rhs_value_patts = generate_value_patts t in
+  let (useless_lhs, unmatched_rhs) =
+    determine_pattern_completeness lhs_patts rhs_value_patts
+  in
+  match (useless_lhs, unmatched_rhs) with
+  | ([], []) -> ()
+  | (useless, []) ->
+      let useless_fmt =
+        fmt_join_strs "\n" (
+          List.map (fmt_pattern ~print_typ:true "") useless
+        )
+      in
+      failwith (
+        Printf.sprintf "Useless LHS pattern(s): \n%s" useless_fmt
+      )
+
+  | ([], unmatched) ->
+      let unmatched_fmt =
+        fmt_join_strs "\n" (
+          List.map (fmt_pattern ~print_typ:true "") unmatched
+        )
+      in
+      failwith (
+        Printf.sprintf "Unmatched pattern value(s): \n%s" unmatched_fmt
+      )
+
+  | (_, _) ->
+      failwith (
+        "Unexpectedly both useless LHS pattern and unmatched RHS pattern value"
+      )
