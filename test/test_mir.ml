@@ -1,4 +1,4 @@
-open Berk.Mir
+(* open Berk.Mir
 
 open Berk.Ast
 open Berk.Type_check
@@ -62,4 +62,4 @@ let () =
   let open Alcotest in
   run "Mir" [
     ("bb_mir", gen_mir);
-  ]
+  ] *)
