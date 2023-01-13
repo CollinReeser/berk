@@ -174,6 +174,7 @@ and is_concrete_patt ?(verbose=false) patt =
   | PBool(_) -> true
   | Wild(t) -> (_is_concrete_type t)
   | VarBind(t, _) -> (_is_concrete_type t)
+  | PTuple(t, _) -> (_is_concrete_type t)
   | Ctor(t, _, patt) -> (_is_concrete_type t) && (_is_concrete_patt patt)
   end
 ;;
@@ -1008,6 +1009,13 @@ and type_check_expr
 
   exp_typechecked_injected
 
+(* The infrastructure below to typecheck/exhaustion check/usefulness check match
+patterns is inefficient and does not adhere to modern developments in
+efficiently implementing these kinds of checks. This implementation should be
+refactored to respect those developments. See also:
+
+http://cambium.inria.fr/~maranget/papers/warn/index.html
+*)
 
 and type_check_pattern
   (tc_ctxt : typecheck_context) (matched_t : berk_t) (patt : pattern) :
@@ -1030,6 +1038,25 @@ and type_check_pattern
   | PBool(b) ->
       begin match matched_t with
       | Bool -> (tc_ctxt, PBool(b))
+      | _ -> failwith "Match expression type does not match bool in pattern"
+      end
+
+  | PTuple(_, patts) ->
+      begin match matched_t with
+      | Tuple(ts) ->
+          let (tc_ctxt, patts_tc_rev) =
+            List.fold_left2 (
+              fun (tc_ctxt, patts_tc_so_far_rev) t patt ->
+                let (tc_ctxt, patt_tc) = type_check_pattern tc_ctxt t patt in
+
+                (tc_ctxt, patt_tc :: patts_tc_so_far_rev)
+            ) (tc_ctxt, []) ts patts
+          in
+
+          let patts_tc = List.rev patts_tc_rev in
+
+          (tc_ctxt, PTuple(matched_t, patts_tc))
+
       | _ -> failwith "Match expression type does not match bool in pattern"
       end
 
@@ -1063,13 +1090,13 @@ and type_check_pattern
 (* Does the LHS pattern dominate the RHS pattern? *)
 let rec pattern_dominates lhs_patt rhs_patt =
   begin match (lhs_patt, rhs_patt) with
-  | (PNil, PNil) -> true
-
   | ((Wild(_) | VarBind(_, _)), _) -> true
 
   | (_, (Wild(_) | VarBind(_, _))) ->
       Printf.printf "No pattern dominates wildcards other than wildcards.\n" ;
       false
+
+  | (PNil, PNil) -> true
 
   | (PBool(lhs_b), PBool(rhs_b)) ->
       if lhs_b = rhs_b then
@@ -1077,20 +1104,21 @@ let rec pattern_dominates lhs_patt rhs_patt =
       else
         false
 
+  | (PTuple(_, lhs_patts), PTuple(_, rhs_patts)) ->
+      List.fold_left (&&) true (
+        List.map2 pattern_dominates lhs_patts rhs_patts
+      )
+
   | (Ctor(_, lhs_ctor_name, lhs_patt), Ctor(_, rhs_ctor_name, rhs_patt)) ->
       if lhs_ctor_name = rhs_ctor_name then
         pattern_dominates lhs_patt rhs_patt
       else
         false
 
-  | (PBool(_), Ctor(_, _, _))
-  | (Ctor(_, _, _), PBool(_)) -> failwith "Non-matching pattern types."
-
-  | (PNil, PBool(_))
-  | (PBool(_), PNil) -> failwith "Non-matching pattern types."
-
-  | (PNil, Ctor(_, _, _))
-  | (Ctor(_, _, _), PNil) -> failwith "Non-matching pattern types."
+  | (PNil, _)
+  | (PBool(_), _)
+  | (PTuple(_, _), _)
+  | (Ctor(_, _, _), _) -> failwith "Non-matching pattern types."
 
   end
 
@@ -1136,8 +1164,9 @@ let rec generate_value_patts t : pattern list =
 
   | String -> failwith "Unimplemented"
 
-  | Tuple(_) -> failwith "Unimplemented"
   | Array(_, _) -> failwith "Unimplemented"
+  | Tuple(_) -> failwith "Unimplemented"
+
 
   | Ptr(_) -> failwith "Unimplemented"
   | Function(_, _) -> failwith "Unimplemented"

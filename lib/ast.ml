@@ -59,17 +59,22 @@ and expr =
   | MatchExpr of berk_t * expr * (pattern * expr) list
 
 and pattern =
-  (* Placeholder pattern for, eg, variants with no associated values. Should not
-  be generated via input source, but is used internally. *)
-  | PNil
   (* ie: _ -> ... *)
   | Wild of berk_t
   (* ie: x -> ... *)
   | VarBind of berk_t * ident_t
-  (* ie: Some(_) -> ... *)
-  | Ctor of berk_t * ident_t * pattern
+
+  (* Placeholder pattern for, eg, variants with no associated values. Should not
+  be generated via input source, but is used internally. *)
+  | PNil
+
   (* ie: true -> ... *)
   | PBool of bool
+
+  (* ie: (x, y, z) -> ...  *)
+  | PTuple of berk_t * pattern list
+  (* ie: Some(_) -> ... *)
+  | Ctor of berk_t * ident_t * pattern
   (*
   (* ie: (_, _, _) -> ... *)
   | DeconTuple of berk_t * pattern list
@@ -339,10 +344,13 @@ and fmt_pattern ?(print_typ=false) init_ind pattern =
         sprintf "_%s" (_maybe_fmt_type t)
     | VarBind(t, var_name) ->
         sprintf "%s%s" var_name (_maybe_fmt_type t)
-    | Ctor(t, ctor_name, pattern) ->
-        sprintf "%s(%s)%s" ctor_name (_fmt_pattern pattern) (_maybe_fmt_type t)
     | PBool(b) ->
         sprintf "%b%s" b (_maybe_fmt_type Bool)
+    | PTuple(t, patterns) ->
+        let patterns_fmt = List.map _fmt_pattern patterns in
+        sprintf "(%s)%s" (fmt_join_strs ", " patterns_fmt) (_maybe_fmt_type t)
+    | Ctor(t, ctor_name, pattern) ->
+        sprintf "%s(%s)%s" ctor_name (_fmt_pattern pattern) (_maybe_fmt_type t)
     end
   in
   let pattern_fmt = _fmt_pattern pattern in

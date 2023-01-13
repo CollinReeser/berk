@@ -14,9 +14,15 @@ let test_fmt_join_strs expected delim given () =
 
 let test_combine3 check expected lhs mid rhs () =
   check
-    ~msg:"tuplify"
+    ~msg:"combine3"
     ~expected:expected
     ~actual:(combine3 lhs mid rhs)
+
+let test_cartesian_product2 expected lhs rhs () =
+  Alcotest.(check' (list (list int)))
+    ~msg:"cartesian_product2"
+    ~expected:expected
+    ~actual:(cartesian_product2 lhs rhs)
 
 let () =
   let open Alcotest in
@@ -49,6 +55,32 @@ let () =
           [1; 2; 3]
           ["a"; "b"; "c"]
           [100; 200; 300]
+      );
+    ];
+    "cartesian_product2", [
+      test_case "cartesian_product2" `Quick (test_cartesian_product2
+          []
+          [] []
+      );
+      test_case "cartesian_product2" `Quick (test_cartesian_product2
+          [[2; 4]; [1; 4]; [2; 3]; [1; 3]]
+          [1; 2] [3; 4]
+      );
+      test_case "cartesian_product2" `Quick (test_cartesian_product2
+          [[1; 4]; [1; 3]]
+          [1] [3; 4]
+      );
+      test_case "cartesian_product2" `Quick (test_cartesian_product2
+          [[2; 3]; [1; 3]]
+          [1; 2] [3]
+      );
+      test_case "cartesian_product2" `Quick (test_cartesian_product2
+          [[4]; [3]]
+          [] [3; 4]
+      );
+      test_case "cartesian_product2" `Quick (test_cartesian_product2
+          [[2]; [1]]
+          [1; 2] []
       );
     ];
   ]
