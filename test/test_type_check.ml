@@ -27,7 +27,25 @@ let variant_left_right = Variant(
   "LeftRight", [("Left", variant_option_bool); ("Right", variant_option_bool)]
 )
 
+let tuple_t = Tuple([variant_option_bool; variant_left_right])
+
 type lr = Left of bool option | Right of bool option
+
+let gen_tuple_patt lhs rhs =
+  let gen_opt b_opt =
+    begin match b_opt with
+    | None -> Ctor(variant_option_bool, "None", PNil)
+    | Some(b) -> Ctor(variant_option_bool, "Some", PBool(b))
+    end
+  in
+  let lhs = gen_opt lhs in
+  let rhs = begin match rhs with
+  | Left(b_opt) -> Ctor(variant_left_right, "Left", (gen_opt b_opt))
+  | Right(b_opt) -> Ctor(variant_left_right, "Right", (gen_opt b_opt))
+  end in
+
+  [lhs; rhs]
+;;
 
 let pattern_domination = let open Alcotest in [
   (test_case "bool_sanity" `Quick (
@@ -113,6 +131,79 @@ let pattern_domination = let open Alcotest in [
       )
     )
   ));
+  (test_case "tuple_sanity" `Quick (
+    test_pattern_dominates true (
+      Wild(tuple_t)
+    ) (
+      PTuple(tuple_t, gen_tuple_patt None (Left(None)))
+    )
+  ));
+  (test_case "tuple_sanity_match" `Quick (
+    test_pattern_dominates true (
+      PTuple(tuple_t, gen_tuple_patt None (Left(None)))
+    ) (
+      PTuple(tuple_t, gen_tuple_patt None (Left(None)))
+    )
+  ));
+  (test_case "tuple_partial" `Quick (
+    test_pattern_dominates true (
+      PTuple(tuple_t, [
+        Ctor(variant_option_bool, "None", PNil);
+        Wild(variant_left_right)
+      ])
+    ) (
+      PTuple(tuple_t, gen_tuple_patt None (Left(None)))
+    )
+  ));
+  (test_case "tuple_partial" `Quick (
+    test_pattern_dominates true (
+      PTuple(tuple_t, [
+        Wild(variant_option_bool);
+        Ctor(variant_left_right, "Left", Wild(variant_option_bool))
+      ])
+    ) (
+      PTuple(tuple_t, gen_tuple_patt None (Left(None)))
+    )
+  ));
+  (test_case "tuple_nested_match_failure" `Quick (
+    test_pattern_dominates false (
+      PTuple(tuple_t, [
+        Wild(variant_option_bool);
+        Ctor(
+          variant_left_right, "Left",
+          Ctor(variant_option_bool, "Some", PBool(true))
+        )
+      ])
+    ) (
+      PTuple(tuple_t, gen_tuple_patt None (Left(None)))
+    )
+  ));
+  (test_case "tuple_nested_match_failure" `Quick (
+    test_pattern_dominates false (
+      PTuple(tuple_t, [
+        Wild(variant_option_bool);
+        Ctor(
+          variant_left_right, "Left",
+          Ctor(variant_option_bool, "Some", PBool(true))
+        )
+      ])
+    ) (
+      PTuple(tuple_t, gen_tuple_patt None (Left(Some(false))))
+    )
+  ));
+  (test_case "tuple_nested_match_sanity" `Quick (
+    test_pattern_dominates true (
+      PTuple(tuple_t, [
+        Wild(variant_option_bool);
+        Ctor(
+          variant_left_right, "Left",
+          Ctor(variant_option_bool, "Some", PBool(false))
+        )
+      ])
+    ) (
+      PTuple(tuple_t, gen_tuple_patt None (Left(Some(false))))
+    )
+  ));
 ]
 
 let value_patts = let open Alcotest in [
@@ -161,41 +252,26 @@ let value_patts = let open Alcotest in [
       variant_left_right
   ));
   (test_case "tuple_of_variants" `Quick (
-    let gen_expected lhs rhs =
-      let gen_opt b_opt =
-        begin match b_opt with
-        | None -> Ctor(variant_option_bool, "None", PNil)
-        | Some(b) -> Ctor(variant_option_bool, "Some", PBool(b))
-        end
-      in
-      let lhs = gen_opt lhs in
-      let rhs = begin match rhs with
-      | Left(b_opt) -> Ctor(variant_left_right, "Left", (gen_opt b_opt))
-      | Right(b_opt) -> Ctor(variant_left_right, "Right", (gen_opt b_opt))
-      end in
-      [lhs; rhs]
-    in
-    let tuple_t = Tuple([variant_option_bool; variant_left_right]) in
     test_generate_value_patts
       [
-        PTuple(tuple_t, gen_expected None          (Left(Some(true))));
-        PTuple(tuple_t, gen_expected None          (Left(Some(false))));
-        PTuple(tuple_t, gen_expected None          (Left(None)));
-        PTuple(tuple_t, gen_expected None          (Right(Some(true))));
-        PTuple(tuple_t, gen_expected None          (Right(Some(false))));
-        PTuple(tuple_t, gen_expected None          (Right(None)));
-        PTuple(tuple_t, gen_expected (Some(false)) (Left(Some(true))));
-        PTuple(tuple_t, gen_expected (Some(false)) (Left(Some(false))));
-        PTuple(tuple_t, gen_expected (Some(false)) (Left(None)));
-        PTuple(tuple_t, gen_expected (Some(false)) (Right(Some(true))));
-        PTuple(tuple_t, gen_expected (Some(false)) (Right(Some(false))));
-        PTuple(tuple_t, gen_expected (Some(false)) (Right(None)));
-        PTuple(tuple_t, gen_expected (Some(true))  (Left(Some(true))));
-        PTuple(tuple_t, gen_expected (Some(true))  (Left(Some(false))));
-        PTuple(tuple_t, gen_expected (Some(true))  (Left(None)));
-        PTuple(tuple_t, gen_expected (Some(true))  (Right(Some(true))));
-        PTuple(tuple_t, gen_expected (Some(true))  (Right(Some(false))));
-        PTuple(tuple_t, gen_expected (Some(true))  (Right(None)));
+        PTuple(tuple_t, gen_tuple_patt None          (Left(Some(true))));
+        PTuple(tuple_t, gen_tuple_patt None          (Left(Some(false))));
+        PTuple(tuple_t, gen_tuple_patt None          (Left(None)));
+        PTuple(tuple_t, gen_tuple_patt None          (Right(Some(true))));
+        PTuple(tuple_t, gen_tuple_patt None          (Right(Some(false))));
+        PTuple(tuple_t, gen_tuple_patt None          (Right(None)));
+        PTuple(tuple_t, gen_tuple_patt (Some(false)) (Left(Some(true))));
+        PTuple(tuple_t, gen_tuple_patt (Some(false)) (Left(Some(false))));
+        PTuple(tuple_t, gen_tuple_patt (Some(false)) (Left(None)));
+        PTuple(tuple_t, gen_tuple_patt (Some(false)) (Right(Some(true))));
+        PTuple(tuple_t, gen_tuple_patt (Some(false)) (Right(Some(false))));
+        PTuple(tuple_t, gen_tuple_patt (Some(false)) (Right(None)));
+        PTuple(tuple_t, gen_tuple_patt (Some(true))  (Left(Some(true))));
+        PTuple(tuple_t, gen_tuple_patt (Some(true))  (Left(Some(false))));
+        PTuple(tuple_t, gen_tuple_patt (Some(true))  (Left(None)));
+        PTuple(tuple_t, gen_tuple_patt (Some(true))  (Right(Some(true))));
+        PTuple(tuple_t, gen_tuple_patt (Some(true))  (Right(Some(false))));
+        PTuple(tuple_t, gen_tuple_patt (Some(true))  (Right(None)));
       ]
       tuple_t
   ));
