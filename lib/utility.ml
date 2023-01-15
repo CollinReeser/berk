@@ -93,8 +93,9 @@ output like:
   [b; e; f];
   [b; e; g];
 ]
- *)
 
+FIXME: This is a very inefficient implementation, with no tail recursion.
+ *)
 let rec cartesian_product (lists : _ list list) : _ list list =
   begin match lists with
   | [] -> []
