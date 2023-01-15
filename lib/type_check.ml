@@ -1165,8 +1165,10 @@ let rec generate_value_patts t : pattern list =
   | String -> failwith "Unimplemented"
 
   | Array(_, _) -> failwith "Unimplemented"
-  | Tuple(_) -> failwith "Unimplemented"
-
+  | Tuple(ts) ->
+      let ts_patts = List.map generate_value_patts ts in
+      let ts_patts_cart_prod = cartesian_product ts_patts in
+      List.map (fun ts_patt -> PTuple(t, ts_patt)) ts_patts_cart_prod
 
   | Ptr(_) -> failwith "Unimplemented"
   | Function(_, _) -> failwith "Unimplemented"
