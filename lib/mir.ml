@@ -318,7 +318,7 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
       (mir_ctxt, bb, alloca_lval, [alloca_instr; bitcast_instr; store_instr])
 
   | _ ->
-      (* Allocate stack space for the variant *)
+      (* Allocate stack space for the value *)
       let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
       let alloca_lval =
         {t=Ptr(expected_t); kind=Tmp; lname=variant_alloca_varname}
