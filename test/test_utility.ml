@@ -18,11 +18,11 @@ let test_combine3 check expected lhs mid rhs () =
     ~expected:expected
     ~actual:(combine3 lhs mid rhs)
 
-let test_cartesian_product2 expected lhs rhs () =
+let test_cartesian_product expected given () =
   Alcotest.(check' (list (list int)))
     ~msg:"cartesian_product2"
     ~expected:expected
-    ~actual:(cartesian_product2 lhs rhs)
+    ~actual:(cartesian_product given)
 
 let () =
   let open Alcotest in
@@ -57,30 +57,41 @@ let () =
           [100; 200; 300]
       );
     ];
-    "cartesian_product2", [
-      test_case "cartesian_product2" `Quick (test_cartesian_product2
+    "cartesian_product", [
+      test_case "cartesian_product" `Quick (test_cartesian_product
           []
-          [] []
+          []
       );
-      test_case "cartesian_product2" `Quick (test_cartesian_product2
-          [[2; 4]; [1; 4]; [2; 3]; [1; 3]]
-          [1; 2] [3; 4]
+      test_case "cartesian_product" `Quick (test_cartesian_product
+          [[1]; [2]]
+          [[1; 2]]
       );
-      test_case "cartesian_product2" `Quick (test_cartesian_product2
-          [[1; 4]; [1; 3]]
-          [1] [3; 4]
+      test_case "cartesian_product" `Quick (test_cartesian_product
+          [[2; 3]; [2; 4]; [1; 3]; [1; 4]]
+          [[1; 2]; [3; 4]]
       );
-      test_case "cartesian_product2" `Quick (test_cartesian_product2
+      test_case "cartesian_product" `Quick (test_cartesian_product
+          [[1; 3]; [1; 4]]
+          [[1]; [3; 4]]
+      );
+      test_case "cartesian_product" `Quick (test_cartesian_product
           [[2; 3]; [1; 3]]
-          [1; 2] [3]
+          [[1; 2]; [3]]
       );
-      test_case "cartesian_product2" `Quick (test_cartesian_product2
-          [[4]; [3]]
-          [] [3; 4]
+      test_case "cartesian_product" `Quick (test_cartesian_product
+          [[3]; [4]]
+          [[]; [3; 4]]
       );
-      test_case "cartesian_product2" `Quick (test_cartesian_product2
-          [[2]; [1]]
-          [1; 2] []
+      test_case "cartesian_product" `Quick (test_cartesian_product
+          [[1]; [2]]
+          [[1; 2]; []]
+      );
+      test_case "cartesian_product" `Quick (test_cartesian_product
+          [
+            [2; 4; 5]; [2; 4; 6]; [2; 4; 7]; [2; 3; 5]; [2; 3; 6]; [2; 3; 7];
+            [1; 4; 5]; [1; 4; 6]; [1; 4; 7]; [1; 3; 5]; [1; 3; 6]; [1; 3; 7]
+          ]
+          [[1; 2]; [3; 4]; [5; 6; 7]]
       );
     ];
   ]
