@@ -760,9 +760,94 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, ctor_lval)
 
+      | MatchExpr(t, matched_exp, patts_to_exps) ->
+          let (mir_ctxt, bb, matched_lval) =
+            _expr_to_mir mir_ctxt bb matched_exp
+          in
+
+          (* Allocate a "first" and "last" block. The first block will be used
+          to get the ball rolling on codegen for match arms, and the last block
+          is what each of the arms will branch to after they're complete. *)
+          let (mir_ctxt, bb_patt_first_name) = get_bbname mir_ctxt in
+          let bb_patt_first = {name=bb_patt_first_name; instrs=[]} in
+
+          let (mir_ctxt, bb_end_name) = get_bbname mir_ctxt in
+          let bb_end = {name=bb_end_name; instrs=[]} in
+
+          (* Alloca for the match expr result to be written into. *)
+          let (mir_ctxt, match_alloca_name) = get_varname mir_ctxt in
+          let match_alloca_lval =
+            {t=Ptr(t); kind=Tmp; lname=match_alloca_name}
+          in
+          let alloca_instr = Alloca(match_alloca_lval, t) in
+
+          let bb = {
+            bb with instrs = bb.instrs @ [alloca_instr; Br(bb_patt_first)]
+          } in
+          let mir_ctxt = update_bb mir_ctxt bb in
+
+          let gen_patt_arms mir_ctxt bb_patt_first bb_end patts_to_exps =
+            (* Returns mir_ctxt. Any other blocks are expected to have already
+            been updated into the mir_ctxt. *)
+            let rec _gen_patt_arms mir_ctxt bb_patt patts_to_exps_rest =
+              begin match patts_to_exps_rest with
+              | [] -> mir_ctxt
+              | [(patt, exp)] ->
+                  (* Since this is the last pattern, both the "then" and the
+                  "else" case both branch to the "end" block. The "else"
+                  case should be impossible. *)
+
+                  (* TODO: Teach this to make attempting to branch to the
+                  "else", which should be impossible, instead cause a halt. *)
+                  let mir_ctxt = pattern_to_mir
+                    mir_ctxt
+                    bb_patt
+                    bb_end
+                    bb_end
+                    matched_lval
+                    patt
+                    exp
+                    match_alloca_lval
+                  in
+                  _gen_patt_arms mir_ctxt bb_end []
+
+              | (patt, exp)::y::zs ->
+                  (* We should be given the "then" bb and need to generate
+                  an "else" bb. *)
+                  let (mir_ctxt, bb_else_name) = get_bbname mir_ctxt in
+                  let bb_else = {name=bb_else_name; instrs=[]} in
+
+                  let mir_ctxt = pattern_to_mir
+                    mir_ctxt
+                    bb_patt
+                    bb_else
+                    bb_end
+                    matched_lval
+                    patt
+                    exp
+                    match_alloca_lval
+                  in
+                  _gen_patt_arms mir_ctxt bb_else (y::zs)
+              end
+            in
+            _gen_patt_arms mir_ctxt bb_patt_first patts_to_exps
+          in
+
+          let mir_ctxt =
+            gen_patt_arms mir_ctxt bb_patt_first bb_end patts_to_exps
+          in
+
+          let (mir_ctxt, match_res_name) = get_varname mir_ctxt in
+          let match_res_lval = {t=t; kind=Tmp; lname=match_res_name} in
+          let match_res_instr = Load(match_res_lval, match_alloca_lval) in
+          let bb_end =
+            {bb_end with instrs = bb_end.instrs @ [match_res_instr]}
+          in
+
+          (mir_ctxt, bb_end, match_res_lval)
+
       | WhileExpr(_, _, _, _)
-      | IndexExpr(_, _, _)
-      | MatchExpr(_, _, _) ->
+      | IndexExpr(_, _, _) ->
           failwith "Unimplemented"
     end in
 
@@ -771,26 +856,111 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
   _expr_to_mir mir_ctxt bb exp
 
+
+(* bb_patt is the pre-created block to (start with) being populated with the
+logic for whether this particular pattern matches the input lval. bb_else is
+where to branch to if the pattern does not match. bb_end is where to branch if
+the pattern does match.
+
+This function is expected to internally generate any blocks needed to capture
+generated MIR for the expression associated with the matched pattern, and the
+caller should not need to care about them.
+
+FIXME: It probably makes more sense for this function _not_ to take a bb_else,
+and instead return the bb that requires being appended with the branch to the
+bb_else that is known only to the caller.
+
+TODO: This will probably need to become smarter if we want to re-use this for
+things like `if let`, `while let`, and `for let`. *)
+and pattern_to_mir
+  mir_ctxt bb_patt bb_else bb_end matched_lval patt exp match_alloca_lval
+=
+  let (mir_ctxt, bb_patt, is_match_lval) =
+    let {t=matched_t; _} = matched_lval in
+    begin match patt with
+    | Wild(_) | PNil ->
+        let (mir_ctxt, bb_patt, unconditional_match_lval) =
+          expr_to_mir mir_ctxt bb_patt (ValBool(true))
+        in
+        (mir_ctxt, bb_patt, unconditional_match_lval)
+
+    | VarBind(_, ident) ->
+        let (mir_ctxt, bb_patt) =
+          assign_rhs_to_decl mir_ctxt bb_patt ident matched_lval matched_t
+        in
+        let (mir_ctxt, bb_patt, unconditional_match_lval) =
+          expr_to_mir mir_ctxt bb_patt (ValBool(true))
+        in
+        (mir_ctxt, bb_patt, unconditional_match_lval)
+
+    | PBool(b) ->
+        let (mir_ctxt, bb_patt, b_lval) =
+          expr_to_mir mir_ctxt bb_patt (ValBool(b))
+        in
+
+        let (mir_ctxt, bool_patt_lname) = get_varname mir_ctxt in
+        let is_match_lval = {t=Bool; kind=Tmp; lname=bool_patt_lname} in
+        let instr = BinOp(is_match_lval, Eq, b_lval, matched_lval) in
+
+        let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [instr]} in
+
+        (mir_ctxt, bb_patt, is_match_lval)
+
+    | PTuple(_, _) -> failwith "Unimplemented"
+    | Ctor(_, _, _) -> failwith "Unimplemented"
+    end in
+
+    (* If match, then branch to new expr bb, else branch to bb_else *)
+
+    let (mir_ctxt, bb_then_name) = get_bbname mir_ctxt in
+    let bb_then = {name=bb_then_name; instrs=[]} in
+
+    let cond_br = CondBr(is_match_lval, bb_then, bb_else) in
+    let bb_patt = {bb_patt with instrs = bb_patt.instrs @ [cond_br]} in
+
+    let (mir_ctxt, bb_then, then_lval) = expr_to_mir mir_ctxt bb_then exp in
+
+    let bb_then = {
+      bb_then with instrs = bb_then.instrs @ [
+        Store(match_alloca_lval, then_lval);
+        Br(bb_end)
+      ]
+    } in
+
+    let mir_ctxt = update_bb mir_ctxt bb_patt in
+    let mir_ctxt = update_bb mir_ctxt bb_then in
+
+    (* Strictly speaking this should not need to be necessary, as the "else"
+    bb will (should) always be passed in as a "then" bb on the next iteration
+    of this function, where the base case is the else block at the end, which
+    is just handled (eventually) by the caller as normal. We include this
+    update here really just so there's a place to put this comment. *)
+    let mir_ctxt = update_bb mir_ctxt bb_else in
+
+    mir_ctxt
+
+
+and assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval expected_t =
+  let (mir_ctxt, bb, alloca_lval) =
+    lval_to_alloca mir_ctxt bb rhs_lval expected_t
+  in
+
+  let lval = {t=Ptr(expected_t); kind=Var; lname=lhs_name} in
+  let assign_instr = Assign(lval, RVar(alloca_lval)) in
+
+  let mir_ctxt = {
+    mir_ctxt with lvars = StrMap.add lhs_name lval mir_ctxt.lvars
+  } in
+
+  let bb = {bb with instrs = bb.instrs @ [assign_instr]} in
+
+  (mir_ctxt, bb)
+
+
 and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
   let _stmt_to_mir
     (mir_ctxt: mir_ctxt) (bb: bb) (stmt: Ast.stmt) : (mir_ctxt * bb)
   =
-    let assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval expected_t =
-      let (mir_ctxt, bb, alloca_lval) =
-        lval_to_alloca mir_ctxt bb rhs_lval expected_t
-      in
-
-      let lval = {t=Ptr(expected_t); kind=Var; lname=lhs_name} in
-      let assign_instr = Assign(lval, RVar(alloca_lval)) in
-
-      let mir_ctxt = {
-        mir_ctxt with lvars = StrMap.add lhs_name lval mir_ctxt.lvars
-      } in
-
-      let bb = {bb with instrs = bb.instrs @ [assign_instr]} in
-
-      (mir_ctxt, bb)
-    in
 
     match stmt with
     | ExprStmt(exp) ->
