@@ -211,6 +211,81 @@ let main = begin
               ]
             )
           );
+          DeclStmt(
+            "my_matched_bool_3", {mut=false}, Undecided,
+            let print_block str i =
+              BlockExpr(
+                Undecided, [
+                  ExprStmt(
+                    FuncCall(Undecided, "printf", [ValStr(str)])
+                  )
+                ],
+                ValU32(i)
+              )
+            in
+            MatchExpr(
+              Undecided,
+              TupleExpr(Undecided, [ValBool(false); ValBool(true)]),
+              [
+                (
+                  PTuple(Undecided, [PBool(true); PBool(true)]),
+                  print_block "TT\n" 1
+                );
+                (
+                  PTuple(Undecided, [PBool(true); PBool(false)]),
+                  print_block "TF\n" 2
+                );
+                (
+                  PTuple(Undecided, [PBool(false); PBool(true)]),
+                  print_block "FT\n" 3
+                );
+                (
+                  PTuple(Undecided, [PBool(false); PBool(false)]),
+                  print_block "FF\n" 4
+                )
+              ]
+            )
+          );
+          DeclStmt(
+            "my_matched_bool_4", {mut=false}, Undecided,
+            let print_block str i =
+              BlockExpr(
+                Undecided, [
+                  ExprStmt(
+                    FuncCall(Undecided, "printf", [ValStr(str)])
+                  )
+                ],
+                ValU32(i)
+              )
+            in
+            let tuple_bools a b c =
+              PTuple(
+                Undecided, [
+                  PTuple(Undecided, [PBool(a); PBool(b)]);
+                  PBool(c)
+                ]
+              )
+            in
+            MatchExpr(
+              Undecided,
+              TupleExpr(
+                Undecided, [
+                  TupleExpr(Undecided, [ValBool(false); ValBool(true)]);
+                  ValBool(false)
+                ]
+              ),
+              [
+                (tuple_bools true true true, print_block "TTT\n" 1);
+                (tuple_bools true true false, print_block "TTF\n" 2);
+                (tuple_bools true false true, print_block "TFT\n" 3);
+                (tuple_bools true false false, print_block "TFF\n" 4);
+                (tuple_bools false true true, print_block "FTT\n" 1);
+                (tuple_bools false true false, print_block "FTF\n" 2);
+                (tuple_bools false false true, print_block "FFT\n" 3);
+                (tuple_bools false false false, print_block "FFF\n" 4);
+              ]
+            )
+          );
           (* DeclStmt(
             "my_matched_tuple", {mut=false}, Undecided,
             MatchExpr(

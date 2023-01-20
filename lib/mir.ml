@@ -927,7 +927,7 @@ things like `if let`, `while let`, and `for let`. *)
 and pattern_to_mir
   mir_ctxt bb_patt bb_else bb_end matched_lval patt exp match_alloca_lval
 =
-  let (mir_ctxt, bb_patt, is_match_lval) =
+  let rec pattern_breakdown_mir mir_ctxt bb_patt bb_else matched_lval patt =
     let {t=matched_t; _} = matched_lval in
     begin match patt with
     | Wild(_) | PNil ->
@@ -958,9 +958,78 @@ and pattern_to_mir
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | PTuple(_, _) -> failwith "Unimplemented"
+    | PTuple(t, patts) ->
+        (* Extract the types out so we can deconstruct the tuple. *)
+        let tuple_elem_ts = begin match t with
+          | Tuple(ts) -> ts
+          | _ -> failwith "Typecheck failure deconstructing aggr in MIR"
+        end in
+
+        (* Get raw lval objects, which will be associated with deconstructing
+        the tuple below. *)
+        let (mir_ctxt, tuple_elem_lvals) =
+          List.fold_left_map (
+            fun mir_ctxt elem_t ->
+              let (mir_ctxt, varname) = get_varname mir_ctxt in
+              let elem_lval = {lname=varname; t=elem_t; kind=Tmp} in
+
+              (mir_ctxt, elem_lval)
+          ) mir_ctxt tuple_elem_ts
+        in
+
+        (* Deconstruct the tuple into the lvals we declared. *)
+        let extract_instrs =
+          List.mapi (
+            fun i lval ->
+              let decon_instr = FromAggregate(lval, i, matched_lval) in
+
+              decon_instr
+          ) tuple_elem_lvals
+        in
+
+        let bb_patt =
+          {bb_patt with instrs = bb_patt.instrs @ extract_instrs}
+        in
+
+        let lvals_patts = List.combine tuple_elem_lvals patts in
+
+        let (mir_ctxt, bb_patt, unconditional_match_lval) =
+          expr_to_mir mir_ctxt bb_patt (ValBool(true))
+        in
+
+        let (mir_ctxt, bb_patt, is_match_lval) =
+          List.fold_left (
+            fun (mir_ctxt, bb_patt, match_lval) (elem_lval, patt) ->
+              (* Make a new bb for considering this part of the tuple
+              pattern, that we'll branch to from the previous part if we've
+              matched so far. *)
+              let (mir_ctxt, bb_tuple_part_name) = get_bbname mir_ctxt in
+              let bb_tuple_part = {name=bb_tuple_part_name; instrs=[]} in
+
+              let cond_br = CondBr(match_lval, bb_tuple_part, bb_else) in
+
+              let bb_patt = {
+                bb_patt with instrs = bb_patt.instrs @ [cond_br]
+              } in
+              let mir_ctxt = update_bb mir_ctxt bb_patt in
+
+              let (mir_ctxt, bb_tuple_part, is_match_lval) =
+                pattern_breakdown_mir
+                  mir_ctxt bb_tuple_part bb_else elem_lval patt
+              in
+
+              (mir_ctxt, bb_tuple_part, is_match_lval)
+          ) (mir_ctxt, bb_patt, unconditional_match_lval) lvals_patts
+        in
+
+        (mir_ctxt, bb_patt, is_match_lval)
+
     | Ctor(_, _, _) -> failwith "Unimplemented"
     end in
+
+    let (mir_ctxt, bb_patt, is_match_lval) =
+      pattern_breakdown_mir mir_ctxt bb_patt bb_else matched_lval patt
+    in
 
     (* If match, then branch to new expr bb, else branch to bb_else *)
 
