@@ -253,11 +253,6 @@ in such an order that a block will not be encountered in the list before it
 is branched to from a previous block. *)
 let control_flow_list mir_ctxt =
   let bbs = StrMap.bindings mir_ctxt.bbs in
-
-  Printf.printf "BBS BINDINGS ORDER:\n\n" ;
-  let _ = List.iter (fun (name, bb) -> Printf.printf "%s -> %s\n" name (fmt_bb bb)) bbs in
-  Printf.printf "BBS BINDINGS ORDER END\n\n" ;
-
   let (_, entry) = List.find (fun (k, _) -> k = "entry") bbs in
 
   (* Yield lists of the basic blocks that the given basic block can branch
@@ -284,7 +279,7 @@ let control_flow_list mir_ctxt =
   let next_queue = get_branches entry in
   let seen = StrSet.add "entry" StrSet.empty in
 
-  (* Build the control flow graph (but in reverse) *)
+  (* Build the control flow graph (but in reverse). *)
   let rec build_control_flow_graph_rev graph_so_far_rev next_queue seen =
     begin match next_queue with
     | [] -> graph_so_far_rev
