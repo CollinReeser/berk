@@ -992,6 +992,9 @@ and pattern_to_mir
 
         let lvals_patts = List.combine tuple_elem_lvals patts in
 
+        (* To start our chain of recursive evaluations of the patterns within
+        the tuple pattern, we begin with an "unconditionally true" success
+        lval (which will get optimized out in LLVM). *)
         let (mir_ctxt, bb_patt, unconditional_match_lval) =
           expr_to_mir mir_ctxt bb_patt (ValBool(true))
         in
