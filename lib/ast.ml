@@ -859,3 +859,198 @@ let rec get_static_f_params f_params =
       let (rest, is_vararg) = get_static_f_params xs in
       (x::rest, is_vararg)
   end
+
+let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
+  (* Yields a uniquified variable name, and the updated mapping containing a
+  binding from the original varname to its new uniquified name. *)
+  let get_unique_varname varname unique_varnames =
+    let rec _get_unique_varname varname uniquified =
+      if StrMap.mem varname unique_varnames then
+        let try_uniq = varname ^ "a" in
+        _get_unique_varname varname try_uniq
+      else
+        let unique_varnames = StrMap.add varname uniquified unique_varnames in
+        (uniquified, unique_varnames)
+    in
+    _get_unique_varname varname varname
+  in
+
+  (* Seed the unique_varnames map with the function parameters. *)
+  let unique_varnames =
+    List.fold_left (
+      fun unique_varnames (param_name, _, _) ->
+        let (_, unique_varnames) =
+          get_unique_varname param_name unique_varnames
+        in
+        unique_varnames
+    ) StrMap.empty f_params
+  in
+
+  let rec _rewrite_stmt stmt unique_varnames =
+    begin match stmt with
+    | DeclStmt(varname, varqual, t, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        let (uniq_varname, unique_varnames) =
+          get_unique_varname varname unique_varnames
+        in
+        (DeclStmt(uniq_varname, varqual, t, exp_rewritten), unique_varnames)
+
+    | DeclDeconStmt(varname_varquals, t, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        let (uniq_varname_varquals, unique_varnames) =
+          List.fold_left (
+            fun (new_varname_varquals, unique_varnames) (varname, varqual) ->
+              let (uniq_varname, unique_varnames) =
+                get_unique_varname varname unique_varnames
+              in
+              ((uniq_varname, varqual)::new_varname_varquals, unique_varnames)
+          ) ([], unique_varnames) varname_varquals
+        in
+        (
+          DeclDeconStmt(uniq_varname_varquals, t, exp_rewritten),
+          unique_varnames
+        )
+
+    | AssignStmt(varname, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        (AssignStmt(varname, exp_rewritten), unique_varnames)
+
+    | AssignDeconStmt(varnames, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        (AssignDeconStmt(varnames, exp_rewritten), unique_varnames)
+
+    | ExprStmt(exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        (ExprStmt(exp_rewritten), unique_varnames)
+
+    | ReturnStmt(exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        (ReturnStmt(exp_rewritten), unique_varnames)
+    end
+
+  and _rewrite_exp exp unique_varnames =
+    begin match exp with
+    | ValU8(_) | ValU16(_) | ValU32(_) | ValU64(_)
+    | ValI8(_) | ValI16(_) | ValI32(_) | ValI64(_)
+    | ValF32(_) | ValF64(_) | ValF128(_)
+    | ValBool(_)
+    | ValStr(_)
+    | ValNil
+    | ValFunc(_, _) ->
+        exp
+
+    | VarInvoke(t, varname, exps) ->
+        let uniq_varname = StrMap.find varname unique_varnames in
+        let exps_rewritten =
+          List.map (
+            fun exp -> _rewrite_exp exp unique_varnames
+          ) exps
+        in
+        VarInvoke(t, uniq_varname, exps_rewritten)
+
+    | ValVar(t, varname) ->
+        let uniq_varname = StrMap.find varname unique_varnames in
+        ValVar(t, uniq_varname)
+
+    | ValCastExtend(t, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        ValCastExtend(t, exp_rewritten)
+
+    | ValCastTrunc(t, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        ValCastTrunc(t, exp_rewritten)
+
+    | ValCastBitwise(t, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        ValCastBitwise(t, exp_rewritten)
+
+    | StaticIndexExpr(t, idx, arr_exp) ->
+        let arr_exp_rewritten = _rewrite_exp arr_exp unique_varnames in
+        StaticIndexExpr(t, idx, arr_exp_rewritten)
+
+    | IndexExpr(t, idx_exp, arr_exp) ->
+        let idx_exp_rewritten = _rewrite_exp idx_exp unique_varnames in
+        let arr_exp_rewritten = _rewrite_exp arr_exp unique_varnames in
+        IndexExpr(t, idx_exp_rewritten, arr_exp_rewritten)
+
+    | BinOp(t, op, exp_lhs, exp_rhs) ->
+        let exp_lhs_rewritten = _rewrite_exp exp_lhs unique_varnames in
+        let exp_rhs_rewritten = _rewrite_exp exp_rhs unique_varnames in
+        BinOp(t, op, exp_lhs_rewritten, exp_rhs_rewritten)
+
+    | IfThenElseExpr(t, exp_cond, exp_then, exp_else) ->
+        let exp_cond_rewritten = _rewrite_exp exp_cond unique_varnames in
+        let exp_then_rewritten = _rewrite_exp exp_then unique_varnames in
+        let exp_else_rewritten = _rewrite_exp exp_else unique_varnames in
+        IfThenElseExpr(
+          t, exp_cond_rewritten, exp_then_rewritten, exp_else_rewritten
+        )
+
+    | TupleExpr(t, exps) ->
+        let exps_rewritten =
+          List.map (
+            fun exp -> _rewrite_exp exp unique_varnames
+          ) exps
+        in
+        TupleExpr(t, exps_rewritten)
+
+    | ArrayExpr(t, exps) ->
+        let exps_rewritten =
+          List.map (
+            fun exp -> _rewrite_exp exp unique_varnames
+          ) exps
+        in
+        ArrayExpr(t, exps_rewritten)
+
+    | FuncCall(t, func_name, exps) ->
+        let exps_rewritten =
+          List.map (
+            fun exp -> _rewrite_exp exp unique_varnames
+          ) exps
+        in
+        FuncCall(t, func_name, exps_rewritten)
+
+    | BlockExpr(t, stmts, exp) ->
+        let (stmts_rewritten_rev, unique_varnames) =
+          List.fold_left (
+            fun (stmts_rewritten_rev, unique_varnames) stmt ->
+              let (rewritten_stmt, unique_varnames) =
+                _rewrite_stmt stmt unique_varnames
+              in
+              (rewritten_stmt :: stmts_rewritten_rev, unique_varnames)
+          ) ([], unique_varnames) stmts
+        in
+        let stmts_rewritten = List.rev stmts_rewritten_rev in
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        BlockExpr(t, stmts_rewritten, exp_rewritten)
+
+    | VariantCtorExpr(t, ctor_name, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        VariantCtorExpr(t, ctor_name, exp_rewritten)
+
+    | MatchExpr(t, exp_match, patt_exp_pairs) ->
+        let exp_match_rewritten = _rewrite_exp exp_match unique_varnames in
+
+        (* TODO: Implement this rewrite *)
+        let patt_exp_pairs_rewritten = patt_exp_pairs in
+
+        MatchExpr(t, exp_match_rewritten, patt_exp_pairs_rewritten)
+
+    | WhileExpr(_, _, _, _) -> failwith "Unimplemented"
+
+    end
+  in
+
+  let (stmts_rewritten_rev, _) =
+    List.fold_left (
+      fun (stmts_rewritten_rev, unique_varnames) stmt ->
+        let (stmt_rewritten, unique_varnames) =
+          _rewrite_stmt stmt unique_varnames
+        in
+        (stmt_rewritten :: stmts_rewritten_rev, unique_varnames)
+    ) ([], unique_varnames) f_stmts
+  in
+
+  let rewritten_stmts = List.rev stmts_rewritten_rev in
+
+  {f_decl={f_name; f_params; f_ret_t}; f_stmts=rewritten_stmts}

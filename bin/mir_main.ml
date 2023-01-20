@@ -403,6 +403,8 @@ let main = begin
         main_func_def;
       ] in
 
+      let func_defs = List.map rewrite_to_unique_varnames func_defs in
+
       let mod_decls =
         variant_decls @
         func_decls @
