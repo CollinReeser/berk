@@ -286,6 +286,57 @@ let main = begin
               ]
             )
           );
+          DeclStmt(
+            "my_matched_bool_5", {mut=false}, Undecided,
+            let print_block str var i =
+              BlockExpr(
+                Undecided, [
+                  ExprStmt(
+                    FuncCall(
+                      Undecided, "printf",
+                      [ValStr(str); ValVar(Undecided, var)]
+                    )
+                  )
+                ],
+                ValU32(i)
+              )
+            in
+            let tuple_bools a var c =
+              PTuple(
+                Undecided, [
+                  PTuple(Undecided, [PBool(a); VarBind(Undecided, var)]);
+                  PBool(c)
+                ]
+              )
+            in
+            MatchExpr(
+              Undecided,
+              TupleExpr(
+                Undecided, [
+                  TupleExpr(Undecided, [ValBool(true); ValBool(true)]);
+                  ValBool(false)
+                ]
+              ),
+              [
+                (
+                  tuple_bools true "tv1" true,
+                  print_block "T?T, tv1: %d\n" "tv1" 1
+                );
+                (
+                  tuple_bools true "tv2" false,
+                  print_block "T?F, tv2: %d\n" "tv2" 2
+                );
+                (
+                  tuple_bools false "tv3" true,
+                  print_block "F?T, tv3: %d\n" "tv3" 3
+                );
+                (
+                  tuple_bools false "tv4" false,
+                  print_block "F?F, tv4: %d\n" "tv4" 4
+                );
+              ]
+            )
+          );
           (* DeclStmt(
             "my_matched_tuple", {mut=false}, Undecided,
             MatchExpr(
