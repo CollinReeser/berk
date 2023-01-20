@@ -4,6 +4,7 @@ open Typing
 open Utility
 
 module StrMap = Map.Make(String)
+module StrSet = Set.Make(String)
 
 (* The MIR (mid-level intermediate representation) is a lowering of the
 high-level AST (or HIR). This provides a reduced-complexity but computationally
@@ -244,6 +245,62 @@ let fmt_mir_ctxt {f_name; f_params; f_ret_t; bbs=bbs_map; _} =
 
 let pprint_mir_ctxt ppf mir_ctxt =
   Format.fprintf ppf "%s" (fmt_mir_ctxt mir_ctxt)
+
+(* Utility functions *)
+
+(* Given an MIR context, yield a list of the bbs the MIR context knows about,
+in such an order that a block will not be encountered in the list before it
+is branched to from a previous block. *)
+let control_flow_list mir_ctxt =
+  let bbs = StrMap.bindings mir_ctxt.bbs in
+
+  Printf.printf "BBS BINDINGS ORDER:\n\n" ;
+  let _ = List.iter (fun (name, bb) -> Printf.printf "%s -> %s\n" name (fmt_bb bb)) bbs in
+  Printf.printf "BBS BINDINGS ORDER END\n\n" ;
+
+  let (_, entry) = List.find (fun (k, _) -> k = "entry") bbs in
+
+  (* Yield lists of the basic blocks that the given basic block can branch
+  to. *)
+  let get_branches bb : bb list =
+    let terminator = List.hd (List.rev bb.instrs) in
+    begin match terminator with
+    | Br({name; _}) -> [StrMap.find name mir_ctxt.bbs]
+    | CondBr(_, {name=bb_if_name; _}, {name=bb_else_name; _}) -> [
+        StrMap.find bb_if_name mir_ctxt.bbs;
+        StrMap.find bb_else_name mir_ctxt.bbs
+      ]
+    | Ret(_) -> []
+    | RetVoid -> []
+    | _ ->
+      failwith (
+        Printf.sprintf
+          "Expected terminator, got [ %s ]\n" (fmt_instr terminator)
+      )
+    end
+  in
+
+  let graph_so_far_rev = [entry] in
+  let next_queue = get_branches entry in
+  let seen = StrSet.add "entry" StrSet.empty in
+
+  (* Build the control flow graph (but in reverse) *)
+  let rec build_control_flow_graph_rev graph_so_far_rev next_queue seen =
+    begin match next_queue with
+    | [] -> graph_so_far_rev
+    | {name; _} as next::rest_queue ->
+        if StrSet.exists (fun elem -> elem = name) seen then
+          build_control_flow_graph_rev graph_so_far_rev rest_queue seen
+        else
+          let new_branches = get_branches next in
+          let next_queue = rest_queue @ new_branches in
+          let graph_so_far_rev = next :: graph_so_far_rev in
+          let seen = StrSet.add name seen in
+          build_control_flow_graph_rev graph_so_far_rev next_queue seen
+    end
+  in
+
+  List.rev (build_control_flow_graph_rev graph_so_far_rev next_queue seen)
 
 (* Generating functions. *)
 

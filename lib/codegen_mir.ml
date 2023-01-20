@@ -291,8 +291,24 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       func_ctxt
 
   | BinOp({lname; t; _}, op, {lname=lhs_name; _}, {lname=rhs_name; _}) ->
-      let lhs_val = StrMap.find lhs_name func_ctxt.cur_vars in
-      let rhs_val = StrMap.find rhs_name func_ctxt.cur_vars in
+      let lhs_val =
+        begin match StrMap.find_opt lhs_name func_ctxt.cur_vars with
+        | Some(lhs_val) -> lhs_val
+        | None ->
+            failwith (
+              Printf.sprintf "Could not find bin-op lhs val %s" lhs_name
+            )
+        end
+      in
+      let rhs_val =
+        begin match StrMap.find_opt rhs_name func_ctxt.cur_vars with
+        | Some(rhs_val) -> rhs_val
+        | None ->
+            failwith (
+              Printf.sprintf "Could not find bin-op rhs val %s" rhs_name
+            )
+        end
+      in
 
       let bin_op_val = begin match t with
       | Bool ->
@@ -382,31 +398,26 @@ let codegen_func_bb llvm_ctxt builder func_ctxt ({name; instrs} : bb) =
 ;;
 
 let codegen_func_bbs llvm_ctxt builder func_ctxt (mir_ctxt : mir_ctxt) =
-  let bbs = StrMap.bindings mir_ctxt.bbs in
-  let entry_bb = List.find (fun (k, _) -> k = "entry") bbs in
-  let ordered_bbs : (string * bb) list = begin
-    let others = List.filter (fun (k, _) -> k <> "entry") bbs in
-    entry_bb :: others
-  end in
+  let bbs_control_flow_order = control_flow_list mir_ctxt in
 
   let (llvm_bbs_map, _) =
     List.fold_left_map (
-      fun map_so_far (k, _) ->
-        let llvm_bb = Llvm.append_block llvm_ctxt k func_ctxt.cur_func in
-        (StrMap.add k llvm_bb map_so_far, ())
-    ) StrMap.empty ordered_bbs
+      fun map_so_far {name=bb_name; _} ->
+        let llvm_bb = Llvm.append_block llvm_ctxt bb_name func_ctxt.cur_func in
+        (StrMap.add bb_name llvm_bb map_so_far, ())
+    ) StrMap.empty bbs_control_flow_order
   in
 
   let func_ctxt = {func_ctxt with bbs = llvm_bbs_map} in
 
   let (func_ctxt, _) =
     List.fold_left_map (
-      fun func_ctxt (_, bb) ->
+      fun func_ctxt bb ->
         let func_ctxt =
           codegen_func_bb llvm_ctxt builder func_ctxt bb
         in
         (func_ctxt, ())
-    ) func_ctxt ordered_bbs
+    ) func_ctxt bbs_control_flow_order
   in
 
   func_ctxt

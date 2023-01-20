@@ -155,8 +155,59 @@ let main = begin
               Undecided,
               ValBool(true),
               [
-                (PBool(false), ValU32(1));
-                (PBool(true), ValU32(2));
+                (
+                  PBool(false),
+                  BlockExpr(
+                    Undecided, [
+                      ExprStmt(
+                        FuncCall(Undecided, "printf", [ValStr("False arm!\n")])
+                      )
+                    ],
+                    ValU32(1)
+                  )
+                );
+                (
+                  PBool(true),
+                  BlockExpr(
+                    Undecided, [
+                      ExprStmt(
+                        FuncCall(Undecided, "printf", [ValStr("True arm!\n")])
+                      )
+                    ],
+                    ValU32(2)
+                  )
+                );
+              ]
+            )
+          );
+          DeclStmt(
+            "my_matched_bool_2", {mut=false}, Undecided,
+            MatchExpr(
+              Undecided,
+              ValBool(false),
+              [
+                (
+                  PBool(false),
+                  BlockExpr(
+                    Undecided, [
+                      ExprStmt(
+                        FuncCall(Undecided, "printf", [ValStr("False arm!\n")])
+                      )
+                    ],
+                    ValU32(1)
+                  )
+                );
+                (
+                  PBool(true),
+                  BlockExpr(
+                    Undecided, [
+                      ExprStmt(
+                        FuncCall(Undecided, "printf", [ValStr("True arm!\n")])
+                      )
+                    ],
+                    ValU32(2)
+                  )
+                );
               ]
             )
           );
