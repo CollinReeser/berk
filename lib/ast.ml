@@ -1031,13 +1031,53 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | MatchExpr(t, exp_match, patt_exp_pairs) ->
         let exp_match_rewritten = _rewrite_exp exp_match unique_varnames in
 
-        (* TODO: Implement this rewrite *)
-        let patt_exp_pairs_rewritten = patt_exp_pairs in
-
+        let patt_exp_pairs_rewritten =
+          List.map (
+            fun (patt, exp) ->
+              let (patt_rewritten, unique_varnames) =
+                _rewrite_patt_exp patt unique_varnames
+              in
+              let exp_rewritten = _rewrite_exp exp unique_varnames in
+              (patt_rewritten, exp_rewritten)
+          ) patt_exp_pairs
+        in
         MatchExpr(t, exp_match_rewritten, patt_exp_pairs_rewritten)
 
     | WhileExpr(_, _, _, _) -> failwith "Unimplemented"
 
+    end
+
+  and _rewrite_patt_exp patt unique_varnames =
+    begin match patt with
+    | PNil
+    | Wild(_)
+    | PBool(_) ->
+        (patt, unique_varnames)
+
+    | VarBind(t, varname) ->
+        let (uniq_varname, unique_varnames) =
+          get_unique_varname varname unique_varnames
+        in
+        (VarBind(t, uniq_varname), unique_varnames)
+
+    | PTuple(t, patts) ->
+        let (patts_rewritten_rev, unique_varnames) =
+          List.fold_left (
+            fun (patts_rewritten_rev, unique_varnames) patt ->
+              let (patt_rewritten, unique_varnames) =
+                _rewrite_patt_exp patt unique_varnames
+              in
+              (patt_rewritten :: patts_rewritten_rev, unique_varnames)
+          ) ([], unique_varnames) patts
+        in
+        let patts_rewritten = List.rev patts_rewritten_rev in
+        (PTuple(t, patts_rewritten), unique_varnames)
+
+    | Ctor(t, ctor_name, patt) ->
+        let (patt_rewritten, unique_varnames) =
+          _rewrite_patt_exp patt unique_varnames
+        in
+        (Ctor(t, ctor_name, patt_rewritten), unique_varnames)
     end
   in
 

@@ -319,20 +319,20 @@ let main = begin
               ),
               [
                 (
-                  tuple_bools true "tv1" true,
-                  print_block "T?T, tv1: %d\n" "tv1" 1
+                  tuple_bools true "tv" true,
+                  print_block "T?T, tv: %d\n" "tv" 1
                 );
                 (
-                  tuple_bools true "tv2" false,
-                  print_block "T?F, tv2: %d\n" "tv2" 2
+                  tuple_bools true "tv" false,
+                  print_block "T?F, tv: %d\n" "tv" 2
                 );
                 (
-                  tuple_bools false "tv3" true,
-                  print_block "F?T, tv3: %d\n" "tv3" 3
+                  tuple_bools false "tv" true,
+                  print_block "F?T, tv: %d\n" "tv" 3
                 );
                 (
-                  tuple_bools false "tv4" false,
-                  print_block "F?F, tv4: %d\n" "tv4" 4
+                  tuple_bools false "tv" false,
+                  print_block "F?F, tv: %d\n" "tv" 4
                 );
               ]
             )
