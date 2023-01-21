@@ -864,10 +864,12 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
   (* Yields a uniquified variable name, and the updated mapping containing a
   binding from the original varname to its new uniquified name. *)
   let get_unique_varname varname unique_varnames =
-    let rec _get_unique_varname varname uniquified =
+    let _get_unique_varname varname uniquified =
+      Printf.printf "Finding unique varname for %s, %s" varname uniquified ;
       if StrMap.mem varname unique_varnames then
-        let try_uniq = varname ^ "a" in
-        _get_unique_varname varname try_uniq
+        let uniquified = (StrMap.find varname unique_varnames) ^ "a" in
+        let unique_varnames = StrMap.add varname uniquified unique_varnames in
+        (uniquified, unique_varnames)
       else
         let unique_varnames = StrMap.add varname uniquified unique_varnames in
         (uniquified, unique_varnames)
@@ -1031,15 +1033,21 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | MatchExpr(t, exp_match, patt_exp_pairs) ->
         let exp_match_rewritten = _rewrite_exp exp_match unique_varnames in
 
-        let patt_exp_pairs_rewritten =
-          List.map (
-            fun (patt, exp) ->
+        let (patt_exp_pairs_rewritten_rev, _) =
+          List.fold_left (
+            fun (patt_exp_pairs_rewritten_rev, unique_varnames) (patt, exp) ->
               let (patt_rewritten, unique_varnames) =
                 _rewrite_patt_exp patt unique_varnames
               in
               let exp_rewritten = _rewrite_exp exp unique_varnames in
-              (patt_rewritten, exp_rewritten)
-          ) patt_exp_pairs
+              (
+                (patt_rewritten, exp_rewritten)::patt_exp_pairs_rewritten_rev,
+                unique_varnames
+              )
+          ) ([], unique_varnames) patt_exp_pairs
+        in
+        let patt_exp_pairs_rewritten =
+          List.rev patt_exp_pairs_rewritten_rev
         in
         MatchExpr(t, exp_match_rewritten, patt_exp_pairs_rewritten)
 
