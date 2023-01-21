@@ -431,9 +431,10 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let _ = if var_t <> pointed_t then
             failwith (
               Printf.sprintf
-                "Unexpected mismatch in var types: [[ %s ]] [[ %s ]]"
+                "Unexpected mismatch in var types: [[ %s ]] [[ %s ]] for [%s]"
                 (fmt_type var_t)
                 (fmt_type pointed_t)
+                varname
             )
           else
             ()

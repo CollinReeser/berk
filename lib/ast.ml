@@ -902,15 +902,19 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
 
     | DeclDeconStmt(varname_varquals, t, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in
-        let (uniq_varname_varquals, unique_varnames) =
+        let (uniq_varname_varquals_rev, unique_varnames) =
           List.fold_left (
-            fun (new_varname_varquals, unique_varnames) (varname, varqual) ->
+            fun
+              (new_varname_varquals_rev, unique_varnames)
+              (varname, varqual)
+            ->
               let (uniq_varname, unique_varnames) =
                 get_unique_varname varname unique_varnames
               in
-              ((uniq_varname, varqual)::new_varname_varquals, unique_varnames)
+              ((uniq_varname, varqual)::new_varname_varquals_rev, unique_varnames)
           ) ([], unique_varnames) varname_varquals
         in
+        let uniq_varname_varquals = List.rev uniq_varname_varquals_rev in
         (
           DeclDeconStmt(uniq_varname_varquals, t, exp_rewritten),
           unique_varnames
