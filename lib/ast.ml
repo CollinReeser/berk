@@ -865,7 +865,6 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
   binding from the original varname to its new uniquified name. *)
   let get_unique_varname varname unique_varnames =
     let _get_unique_varname varname uniquified =
-      Printf.printf "Finding unique varname for %s, %s" varname uniquified ;
       if StrMap.mem varname unique_varnames then
         let uniquified = (StrMap.find varname unique_varnames) ^ "a" in
         let unique_varnames = StrMap.add varname uniquified unique_varnames in

@@ -957,6 +957,10 @@ and type_check_expr
           List.map typecheck_pattern_expr_pair pattern_expr_pairs
         in
 
+        let patts = List.map (fun (patt, _) -> patt) pattern_expr_pairs_tc in
+
+        let _ = check_patt_usefulness_exhaustion patts matched_t in
+
         let common_t = common_type_of_lst (
           List.map (fun (_, exp) -> expr_type exp) pattern_expr_pairs_tc
         ) in
@@ -1085,10 +1089,9 @@ and type_check_pattern
   end in
 
   (tc_ctxt, patt)
-;;
 
 (* Does the LHS pattern dominate the RHS pattern? *)
-let rec pattern_dominates lhs_patt rhs_patt =
+and pattern_dominates lhs_patt rhs_patt =
   begin match (lhs_patt, rhs_patt) with
   | ((Wild(_) | VarBind(_, _)), _) -> true
 
@@ -1122,14 +1125,14 @@ let rec pattern_dominates lhs_patt rhs_patt =
 
   end
 
-let filter_dominated lhs_patt rhs_patts =
+and filter_dominated lhs_patt rhs_patts =
   List.filter (fun rhs -> not (pattern_dominates lhs_patt rhs)) rhs_patts
 
 (* Returns a pair. The left list is the list of patterns that are useless
 because the patterns before them are sufficient to match all pattern values, and
 the right list is the list of pattern values not matched by any pattern (lacking
 exhaustion). *)
-let determine_pattern_completeness lhs_patts rhs_patts =
+and determine_pattern_completeness lhs_patts rhs_patts =
   let rec _determine_pattern_completeness lhs_patts_useless lhs_patts_rest rhs_patts_rest =
     begin match (lhs_patts_rest, rhs_patts_rest) with
     | ([], []) -> ((List.rev lhs_patts_useless), [])
@@ -1149,7 +1152,7 @@ let determine_pattern_completeness lhs_patts rhs_patts =
 
   _determine_pattern_completeness [] lhs_patts rhs_patts
 
-let rec generate_value_patts t : pattern list =
+and generate_value_patts t : pattern list =
   match t with
   | Undecided -> failwith "Cannot generate values for undecided type"
   | Unbound(_) -> failwith "Cannot generate values for unbound typevar"
@@ -1191,7 +1194,7 @@ let rec generate_value_patts t : pattern list =
       in
       List.flatten ctor_patt_chunks
 
-let check_patt_usefulness_exhaustion lhs_patts t =
+and check_patt_usefulness_exhaustion lhs_patts t =
   let rhs_value_patts = generate_value_patts t in
   let (useless_lhs, unmatched_rhs) =
     determine_pattern_completeness lhs_patts rhs_value_patts
@@ -1201,22 +1204,20 @@ let check_patt_usefulness_exhaustion lhs_patts t =
   | (useless, []) ->
       let useless_fmt =
         fmt_join_strs "\n" (
-          List.map (fmt_pattern ~print_typ:true "") useless
+          List.map (fmt_pattern ~print_typ:false "") useless
         )
       in
-      failwith (
-        Printf.sprintf "Useless LHS pattern(s): \n%s" useless_fmt
-      )
+      Printf.printf "Useless LHS pattern(s):\n%s\n%!" useless_fmt ;
+      failwith "Match patterns must all be useful."
 
   | ([], unmatched) ->
       let unmatched_fmt =
         fmt_join_strs "\n" (
-          List.map (fmt_pattern ~print_typ:true "") unmatched
+          List.map (fmt_pattern ~print_typ:false "") unmatched
         )
       in
-      failwith (
-        Printf.sprintf "Unmatched pattern value(s): \n%s" unmatched_fmt
-      )
+      Printf.printf "Unmatched pattern value(s):\n%s\n%!" unmatched_fmt ;
+      failwith "Match patterns must be exhaustive."
 
   | (_, _) ->
       failwith (
