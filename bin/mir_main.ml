@@ -355,15 +355,46 @@ let main = begin
           ); *)
           DeclStmt(
             "my_unwrapped_some", {mut=false}, Undecided,
+            let block_result str i =
+              BlockExpr(
+                Undecided, [
+                  ExprStmt(
+                    FuncCall(
+                      Undecided, "printf", [ValStr(str)]
+                    )
+                  )
+                ],
+                ValU32(i)
+              )
+            in
             MatchExpr(
               Undecided, ValVar(Undecided, "my_option_some"), [
                 (
                   Ctor(Undecided, "Some", VarBind(Undecided, "x")),
-                  ValVar(Undecided, "x")
+                  MatchExpr(
+                    Undecided, ValVar(Undecided, "x"), [
+                      (
+                        PTuple(Undecided, [PBool(false); PBool(false)]),
+                        block_result "Unwrapped option (b, b): FF\n" 1
+                      );
+                      (
+                        PTuple(Undecided, [PBool(false); PBool(true)]),
+                        block_result "Unwrapped option (b, b): FT\n" 2
+                      );
+                      (
+                        PTuple(Undecided, [PBool(true); PBool(false)]),
+                        block_result "Unwrapped option (b, b): TF\n" 3
+                      );
+                      (
+                        PTuple(Undecided, [PBool(true); PBool(true)]),
+                        block_result "Unwrapped option (b, b): TT\n" 4
+                      )
+                    ]
+                  )
                 );
                 (
                   Ctor(Undecided, "None", Wild(Undecided)),
-                  TupleExpr(Undecided, [ValBool(false); ValBool(true)])
+                  ValU32(5)
                 )
               ]
             )
