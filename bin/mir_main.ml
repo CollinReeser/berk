@@ -181,7 +181,7 @@ let main = begin
             )
           );
           DeclStmt(
-            "my_matched_bool_2", {mut=false}, Undecided,
+            "my_matched_bool", {mut=false}, Undecided,
             MatchExpr(
               Undecided,
               ValBool(false),
@@ -212,7 +212,7 @@ let main = begin
             )
           );
           DeclStmt(
-            "my_matched_bool_3", {mut=false}, Undecided,
+            "my_matched_bool", {mut=false}, Undecided,
             let print_block str i =
               BlockExpr(
                 Undecided, [
@@ -247,7 +247,7 @@ let main = begin
             )
           );
           DeclStmt(
-            "my_matched_bool_4", {mut=false}, Undecided,
+            "my_matched_bool", {mut=false}, Undecided,
             let print_block str i =
               BlockExpr(
                 Undecided, [
@@ -287,7 +287,7 @@ let main = begin
             )
           );
           DeclStmt(
-            "my_matched_bool_5", {mut=false}, Undecided,
+            "my_matched_bool", {mut=false}, Undecided,
             let print_block str var i =
               BlockExpr(
                 Undecided, [
