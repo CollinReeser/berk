@@ -153,7 +153,7 @@ let fmt_constant constant =
   | ValF32(f) | ValF64(f) -> sprintf "%f" f
   | ValF128(str) -> sprintf "%s" str
   | ValBool(b) -> sprintf "%b" b
-  | ValStr(str) -> sprintf "\"%s\"" str
+  | ValStr(str) -> sprintf "\"%s\"" (String.escaped str)
   | ValFunc(func_name) -> sprintf "fn<%s>" func_name
 
 let fmt_lval ({t; kind; lname} : lval) =
