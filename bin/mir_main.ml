@@ -428,8 +428,6 @@ let main = begin
         main_func_def;
       ] in
 
-      let func_defs = List.map rewrite_to_unique_varnames func_defs in
-
       let mod_decls =
         variant_decls @
         func_decls @
@@ -443,6 +441,20 @@ let main = begin
       in
 
       let mod_decls_typechecked = type_check_mod_decls mod_decls in
+
+      let mod_decls_tc_rewritten =
+        List.map (
+          fun mod_decl ->
+            match mod_decl with
+            | FuncDef(func_def) ->
+                let func_def_rewritten = rewrite_to_unique_varnames func_def in
+                FuncDef(func_def_rewritten)
+
+            | FuncExternDecl(_)
+            | VariantDecl(_) -> mod_decl
+        ) mod_decls_typechecked
+      in
+
       let _ = List.iter (
         fun mod_decl_typechecked ->
           match mod_decl_typechecked with
@@ -459,7 +471,7 @@ let main = begin
               Printf.printf "%s"
                 (fmt_variant_decl ~pretty_unbound:true v_ast_typechecked)
 
-      ) mod_decls_typechecked in
+      ) mod_decls_tc_rewritten in
 
       let mir_ctxts =
         List.filter_map (
@@ -474,7 +486,7 @@ let main = begin
                   let mir_ctxt = func_to_mir f_ast in
                   Some(mir_ctxt)
             end
-        ) mod_decls_typechecked
+        ) mod_decls_tc_rewritten
       in
 
       let _ =
