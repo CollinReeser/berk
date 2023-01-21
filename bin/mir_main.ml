@@ -340,19 +340,6 @@ let main = begin
               ]
             )
           );
-          (* DeclStmt(
-            "my_matched_tuple", {mut=false}, Undecided,
-            MatchExpr(
-              Undecided,
-              TupleExpr(Undecided, [ValBool(true); ValBool(false)]),
-              [
-                (PTuple(Undecided, [PBool(false); PBool(false)]), ValU32(1));
-                (PTuple(Undecided, [PBool(false); PBool(true)]), ValU32(2));
-                (PTuple(Undecided, [PBool(true); PBool(false)]), ValU32(3));
-                (PTuple(Undecided, [PBool(true); PBool(true)]), ValU32(4))
-              ]
-            )
-          ); *)
           DeclStmt(
             "my_unwrapped_some", {mut=false}, Undecided,
             let block_result str i =
