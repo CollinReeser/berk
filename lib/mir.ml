@@ -386,18 +386,17 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
 
   (mir_ctxt, bb, alloca_lval)
 
+let literal_to_instr mir_ctxt bb t ctor =
+  let (mir_ctxt, varname) = get_varname mir_ctxt in
+  let lval = {t=t; kind=Tmp; lname=varname} in
+  let instr = Assign(lval, Constant(ctor)) in
+  let bb = {bb with instrs=bb.instrs @ [instr]} in
+  (mir_ctxt, bb, lval)
+
 let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
   let rec _expr_to_mir
     (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * lval)
   =
-    let literal_to_instr mir_ctxt bb t ctor =
-      let (mir_ctxt, varname) = get_varname mir_ctxt in
-      let lval = {t=t; kind=Tmp; lname=varname} in
-      let instr = Assign(lval, Constant(ctor)) in
-      let bb = {bb with instrs=bb.instrs @ [instr]} in
-      (mir_ctxt, bb, lval)
-    in
-
     let (mir_ctxt, bb, instr) = begin match exp with
       | ValNil -> ValNil |> literal_to_instr mir_ctxt bb Nil
 
@@ -1026,7 +1025,151 @@ and pattern_to_mir
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | Ctor(_, _, _) -> failwith "Unimplemented"
+    | Ctor(t, ctor_name, patt) ->
+        let v_ctors = begin match t with
+        | Variant(_, v_ctors) -> v_ctors
+        | _ -> failwith "Unexpected non-variant type in variant-ctor-patt"
+        end in
+
+        (* Assign the variant tag (first field in aggregate), based on the
+        specific constructor we're building. *)
+        let ctor_idx_expected =
+          get_tag_index_by_variant_ctor v_ctors ctor_name
+        in
+        let (mir_ctxt, bb_patt, tag_expected_lval) =
+          ValU8(ctor_idx_expected) |> literal_to_instr mir_ctxt bb_patt U8
+        in
+
+        (* Extract the variant tag, that we know is at index 0 of a variant
+        constructor "struct". *)
+        let (mir_ctxt, tag_actual_lname) = get_varname mir_ctxt in
+        let tag_actual_lval = {t=U8; kind=Tmp; lname=tag_actual_lname} in
+        let tag_actual_instr =
+          FromAggregate(tag_actual_lval, 0, matched_lval)
+        in
+
+        let (mir_ctxt, tag_match_lname) = get_varname mir_ctxt in
+        let tag_match_lval = {t=U8; kind=Tmp; lname=tag_match_lname} in
+        let tag_match_instr =
+          BinOp(tag_match_lval, Eq, tag_actual_lval, tag_expected_lval)
+        in
+
+        (* Make a new bb for considering the sub-pattern of the ctor. *)
+        let (mir_ctxt, bb_ctor_subpatt_name) = get_bbname mir_ctxt in
+        let bb_ctor_subpatt = {name=bb_ctor_subpatt_name; instrs=[]} in
+
+        let cond_br_instr = CondBr(tag_match_lval, bb_ctor_subpatt, bb_else) in
+
+        let bb_patt = {
+          bb_patt with instrs=bb_patt.instrs @ [
+            tag_actual_instr;
+            tag_match_instr;
+            cond_br_instr
+          ]
+        } in
+
+        let mir_ctxt = update_bb mir_ctxt bb_patt in
+
+        (* We need to extract the value out of the constructor, if there is one,
+        so we can continue the match. *)
+        let (_, ctor_val_t) =
+          List.find (fun (name, _) -> name = ctor_name) v_ctors
+        in
+
+        let (mir_ctxt, bb_ctor_subpatt, is_match_lval) = begin
+          match ctor_val_t with
+          | Nil ->
+              let (mir_ctxt, nil_dummy_lname) = get_varname mir_ctxt in
+              let nil_dummy_lval = {t=Nil; kind=Tmp; lname=nil_dummy_lname} in
+
+              let (mir_ctxt, bb_ctor_subpatt, is_match_lval) =
+                pattern_breakdown_mir
+                  mir_ctxt bb_ctor_subpatt bb_else nil_dummy_lval patt
+              in
+
+              (mir_ctxt, bb_ctor_subpatt, is_match_lval)
+
+          | _ ->
+              Printf.printf "Matched_t: [[ %s ]]\n" (fmt_type matched_t) ;
+
+              let (mir_ctxt, generic_ctor_val_lname) = get_varname mir_ctxt in
+              (* FIXME: This probably isn't right; this should be the type of
+              the generic [N x i8] array of non-zero data contained in the ctor,
+              before it's bitcasted to its real type. *)
+              let generic_ctor_val_lval =
+                {t=ctor_val_t; kind=Tmp; lname=generic_ctor_val_lname}
+              in
+              let generic_ctor_val_instr =
+                FromAggregate(generic_ctor_val_lval, 1, matched_lval)
+              in
+
+              (* At this point we have an [N x i8] array aggregate, but we need
+              to be able to bitcast it to the type we actually need it to be.
+              Since LLVM does not allow bitcasting non-pointers, we need to
+              "pointlessly" push our generic data array into an alloca, so we
+              can bitcast the ptr to the alloca and then extract the data back
+              out in the right type. *)
+
+              (* TODO: We need to figure out how to get the type of the generic
+              array aggregate containing the ctor value. *)
+              let generic_ctor_val_t = ByteArray(ctor_val_t) in
+
+              (* let generic_ctor_val_t = ctor_val_t in *)
+
+              let (mir_ctxt, ctor_val_alloca_lname) = get_varname mir_ctxt in
+              let generic_ctor_val_alloca_lval = {
+                  t=Ptr(generic_ctor_val_t);
+                  kind=Tmp;
+                  lname=ctor_val_alloca_lname
+              } in
+              let generic_ctor_val_alloca_instr =
+                Alloca(generic_ctor_val_alloca_lval, generic_ctor_val_t)
+              in
+
+              let generic_ctor_val_store_instr =
+                Store(generic_ctor_val_alloca_lval, generic_ctor_val_lval)
+              in
+
+              let (mir_ctxt, ctor_val_bitcast_lname) = get_varname mir_ctxt in
+              let ctor_val_bitcast_lval =
+                {t=Ptr(ctor_val_t); kind=Tmp; lname=ctor_val_bitcast_lname}
+              in
+              let ctor_val_bitcast_instr =
+                UnOp(
+                  ctor_val_bitcast_lval, Bitwise, generic_ctor_val_alloca_lval
+                )
+              in
+
+              let (mir_ctxt, ctor_val_load_lname) = get_varname mir_ctxt in
+              let ctor_val_lval =
+                {t=ctor_val_t; kind=Tmp; lname=ctor_val_load_lname}
+              in
+              let ctor_val_load_instr =
+                Load(ctor_val_lval, ctor_val_bitcast_lval)
+              in
+
+              let bb_ctor_subpatt = {
+                bb_ctor_subpatt with instrs=bb_ctor_subpatt.instrs @ [
+                  generic_ctor_val_instr;
+                  generic_ctor_val_alloca_instr;
+                  generic_ctor_val_store_instr;
+                  ctor_val_bitcast_instr;
+                  ctor_val_load_instr;
+                ]
+              } in
+
+              let mir_ctxt = update_bb mir_ctxt bb_ctor_subpatt in
+
+              let (mir_ctxt, bb_ctor_subpatt, is_match_lval) =
+                pattern_breakdown_mir
+                  mir_ctxt bb_ctor_subpatt bb_else ctor_val_lval patt
+              in
+
+              (mir_ctxt, bb_ctor_subpatt, is_match_lval)
+        end in
+
+        (mir_ctxt, bb_ctor_subpatt, is_match_lval)
+
     end in
 
     let (mir_ctxt, bb_patt, is_match_lval) =

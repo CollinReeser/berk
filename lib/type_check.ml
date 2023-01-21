@@ -1175,6 +1175,7 @@ and generate_value_patts t : pattern list =
       List.map (fun ts_patt -> PTuple(t, ts_patt)) ts_patts_cart_prod
 
   | Ptr(_) -> failwith "Unimplemented"
+  | ByteArray(_) -> failwith "Unimplemented"
   | Function(_, _) -> failwith "Unimplemented"
 
   | Bool -> [PBool(true); PBool(false)]

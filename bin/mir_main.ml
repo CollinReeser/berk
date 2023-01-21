@@ -147,7 +147,10 @@ let main = begin
           );
           DeclStmt(
             "my_option_some", {mut=false}, Undecided,
-            VariantCtorExpr(Undecided, "Some", ValU32(101))
+            VariantCtorExpr(
+              Undecided, "Some",
+              TupleExpr(Undecided, [ValBool(true); ValBool(false)])
+            )
           );
           DeclStmt(
             "my_matched_bool", {mut=false}, Undecided,
@@ -350,17 +353,21 @@ let main = begin
               ]
             )
           ); *)
-          (* DeclStmt(
+          DeclStmt(
             "my_unwrapped_some", {mut=false}, Undecided,
             MatchExpr(
               Undecided, ValVar(Undecided, "my_option_some"), [
                 (
                   Ctor(Undecided, "Some", VarBind(Undecided, "x")),
                   ValVar(Undecided, "x")
+                );
+                (
+                  Ctor(Undecided, "None", Wild(Undecided)),
+                  TupleExpr(Undecided, [ValBool(false); ValBool(true)])
                 )
               ]
             )
-          ); *)
+          );
           ReturnStmt(
             IfThenElseExpr(
               Undecided,

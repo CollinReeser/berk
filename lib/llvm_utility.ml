@@ -5,8 +5,6 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
     begin match typ with
     | Nil -> Llvm.void_type llvm_ctxt
 
-    | Ptr(pointed_t) -> Llvm.pointer_type (_berk_t_to_llvm_t pointed_t)
-
     | U64 | I64 -> Llvm.i64_type llvm_ctxt
     | U32 | I32 -> Llvm.i32_type llvm_ctxt
     | U16 | I16 -> Llvm.i16_type llvm_ctxt
@@ -60,6 +58,14 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
         end in
 
         _berk_t_to_llvm_t union_t
+
+    | Ptr(pointed_t) -> Llvm.pointer_type (_berk_t_to_llvm_t pointed_t)
+
+    | ByteArray(actual_t) ->
+        let llvm_actual_t = _berk_t_to_llvm_t actual_t in
+        let sizeof = llvm_sizeof llvm_actual_t in
+        let byte_array_t = Array(U8, sizeof) in
+        _berk_t_to_llvm_t byte_array_t
 
     | Function(ret_t, args_t_lst) ->
         let llvm_ret_t = _berk_t_to_llvm_t ret_t in

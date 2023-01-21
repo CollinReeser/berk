@@ -438,6 +438,20 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     )
   else
     match (injected_t, exp) with
+    | (Undecided, _) -> failwith "Refuse to inject undecided type into expr"
+
+    | (Unbound(a), _) ->
+        let exp_t = expr_type exp in
+        begin match exp_t with
+        | Unbound(b) ->
+            if a = b then
+              exp
+            else
+              failwith "Refuse to bind typevar to dissimilar typevar"
+        | _ ->
+            exp
+        end
+
     | (
         Function(inj_ret_t, inj_args_t_lst), (
           ValFunc(Function(has_ret_t, has_args_t_lst), _) |
@@ -461,28 +475,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             failwith "Cannot extend func ret type to injected"
         else
           failwith "Cannot inject function type with non-matching args"
-
-
-    | (Function(_, _), _) ->
-        failwith (
-          Printf.sprintf
-            "Cannot inject function type into non-func value: [[ %s ]]"
-            (fmt_expr ~print_typ:true "" exp)
-        )
-
-    | (Undecided, _) -> failwith "Refuse to inject undecided type into expr"
-
-    | (Unbound(a), _) ->
-        let exp_t = expr_type exp in
-        begin match exp_t with
-        | Unbound(b) ->
-            if a = b then
-              exp
-            else
-              failwith "Refuse to bind typevar to dissimilar typevar"
-        | _ ->
-            exp
-        end
 
     | (_, ValCastTrunc  (t, _))
     | (_, ValCastExtend (t, _))
@@ -588,14 +580,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         in
         TupleExpr(injected_t, exp_injected_lst)
 
-    | (Tuple(_), _)
-    | (_, TupleExpr(_, _))
-    | (Array(_, _), _)
-    | (_, ArrayExpr(_, _)) ->
-        failwith (
-          "Cannot inject incompatible aggregate types: " ^ (fmt_type injected_t)
-        )
-
     (* BinOps are an interesting case because they can "switch types"
     arbitrarily deep into a nested bin-op tree, we don't want to eg
     propagate the expectation of a bool due to an eg LessEq op into the
@@ -666,13 +650,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
 
         VariantCtorExpr(injected_t, ctor_name, ctor_exp_injected)
 
-    | (Variant(_, _), _)
-    | (_, VariantCtorExpr(_, _, _)) ->
-        failwith (
-          "Unexpectedly encountered mismatch in variant typing: " ^
-          "[[ " ^ (fmt_type injected_t) ^ " ]]"
-        )
-
     | (_, MatchExpr(_, matched_exp, patt_exp_pairs)) ->
         let patt_exp_pairs_injected =
           List.map (
@@ -728,7 +705,34 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             (fmt_expr ~print_typ:true "" exp)
         )
 
+    | (Tuple(_), _)
+    | (_, TupleExpr(_, _))
+    | (Array(_, _), _)
+    | (_, ArrayExpr(_, _)) ->
+        failwith (
+          Printf.sprintf
+            "Cannot inject incompatible aggregate types: [[ %s ]] into [[ %s ]] given [[ %s ]]"
+            (fmt_type injected_t)
+            (fmt_type exp_t)
+            (fmt_expr "" exp)
+        )
+
+    | (Variant(_, _), _)
+    | (_, VariantCtorExpr(_, _, _)) ->
+        failwith (
+          "Unexpectedly encountered mismatch in variant typing: " ^
+          "[[ " ^ (fmt_type injected_t) ^ " ]]"
+        )
+
+    | (Function(_, _), _) ->
+        failwith (
+          Printf.sprintf
+            "Cannot inject function type into non-func value: [[ %s ]]"
+            (fmt_expr ~print_typ:true "" exp)
+        )
+
     | (Ptr(_), _) -> failwith "Unimplemented"
+    | (ByteArray(_), _) -> failwith "Unimplemented"
 ;;
 
 type v_ctor = (string * berk_t)
