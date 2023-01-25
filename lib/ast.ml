@@ -76,8 +76,6 @@ and pattern =
   (* ie: Some(_) -> ... *)
   | Ctor of berk_t * ident_t * pattern
   (*
-  (* ie: (_, _, _) -> ... *)
-  | DeconTuple of berk_t * pattern list
   (* ie: [_, _, _] -> ... *)
   | DeconArray of berk_t * pattern list
   (* ie: (North | West) -> ... *)
@@ -86,9 +84,9 @@ and pattern =
   | IntLiteral of berk_t * int
   (* ie: 1.23 -> ... *)
   | FloatLiteral of berk_t * string
+  *)
   (* ie: <pattern> as x -> ... *)
   | PatternAs of berk_t * pattern * ident_t
-  *)
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -351,6 +349,8 @@ and fmt_pattern ?(print_typ=false) init_ind pattern =
         sprintf "(%s)%s" (fmt_join_strs ", " patterns_fmt) (_maybe_fmt_type t)
     | Ctor(t, ctor_name, pattern) ->
         sprintf "%s(%s)%s" ctor_name (_fmt_pattern pattern) (_maybe_fmt_type t)
+    | PatternAs(t, pattern, var_name) ->
+        sprintf "%s%s as %s" (_fmt_pattern pattern) (_maybe_fmt_type t) var_name
     end
   in
   let pattern_fmt = _fmt_pattern pattern in
@@ -1093,6 +1093,15 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           _rewrite_patt_exp patt unique_varnames
         in
         (Ctor(t, ctor_name, patt_rewritten), unique_varnames)
+
+    | PatternAs(t, patt, varname) ->
+        let (uniq_varname, unique_varnames) =
+          get_unique_varname varname unique_varnames
+        in
+        let (patt_rewritten, unique_varnames) =
+          _rewrite_patt_exp patt unique_varnames
+        in
+        (PatternAs(t, patt_rewritten, uniq_varname), unique_varnames)
     end
   in
 

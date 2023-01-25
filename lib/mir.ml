@@ -825,15 +825,55 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let (mir_ctxt, bb_end_name) = get_bbname mir_ctxt in
           let bb_end = {name=bb_end_name; instrs=[]} in
 
-          (* Alloca for the match expr result to be written into. *)
-          let (mir_ctxt, match_alloca_name) = get_varname mir_ctxt in
-          let match_alloca_lval =
-            {t=Ptr(t); kind=Tmp; lname=match_alloca_name}
+          (* Depending on whether this is truly a match expression, yielding
+          a value, or instead a match "stmt", yielding nothing, we decide
+          whether we need to allocate/store/load anything. *)
+          let (
+            mir_ctxt,
+            maybe_alloca,
+            do_maybe_store,
+            maybe_load,
+            match_res_lval
+          ) =
+            begin match t with
+              | Nil ->
+                  let (mir_ctxt, bb, nil_lval) =
+                    _expr_to_mir mir_ctxt bb ValNil
+                  in
+
+                  let mir_ctxt = update_bb mir_ctxt bb in
+
+                  (mir_ctxt, [], (fun _ -> []), [], nil_lval)
+
+              | _ ->
+                  (* Alloca for the match expr result to be written into. *)
+                  let (mir_ctxt, match_alloca_name) = get_varname mir_ctxt in
+                  let match_alloca_lval =
+                    {t=Ptr(t); kind=Tmp; lname=match_alloca_name}
+                  in
+                  let maybe_alloca = [Alloca(match_alloca_lval, t)] in
+
+                  let do_maybe_store then_lval =
+                    [Store(match_alloca_lval, then_lval)]
+                  in
+
+                  let (mir_ctxt, match_res_name) = get_varname mir_ctxt in
+                  let match_res_lval = {t=t; kind=Tmp; lname=match_res_name} in
+
+                  let maybe_load = [Load(match_res_lval, match_alloca_lval)] in
+
+                  (
+                    mir_ctxt,
+                    maybe_alloca,
+                    do_maybe_store,
+                    maybe_load,
+                    match_res_lval
+                  )
+            end
           in
-          let alloca_instr = Alloca(match_alloca_lval, t) in
 
           let bb = {
-            bb with instrs = bb.instrs @ [alloca_instr; Br(bb_patt_first)]
+            bb with instrs = bb.instrs @ maybe_alloca @ [Br(bb_patt_first)]
           } in
           let mir_ctxt = update_bb mir_ctxt bb in
 
@@ -858,7 +898,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                     matched_lval
                     patt
                     exp
-                    match_alloca_lval
+                    do_maybe_store
                   in
                   _gen_patt_arms mir_ctxt bb_end []
 
@@ -876,7 +916,7 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                     matched_lval
                     patt
                     exp
-                    match_alloca_lval
+                    do_maybe_store
                   in
                   _gen_patt_arms mir_ctxt bb_else (y::zs)
               end
@@ -888,11 +928,8 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             gen_patt_arms mir_ctxt bb_patt_first bb_end patts_to_exps
           in
 
-          let (mir_ctxt, match_res_name) = get_varname mir_ctxt in
-          let match_res_lval = {t=t; kind=Tmp; lname=match_res_name} in
-          let match_res_instr = Load(match_res_lval, match_alloca_lval) in
           let bb_end =
-            {bb_end with instrs = bb_end.instrs @ [match_res_instr]}
+            {bb_end with instrs = bb_end.instrs @ maybe_load}
           in
 
           (mir_ctxt, bb_end, match_res_lval)
@@ -924,7 +961,7 @@ bb_else that is known only to the caller.
 TODO: This will probably need to become smarter if we want to re-use this for
 things like `if let`, `while let`, and `for let`. *)
 and pattern_to_mir
-  mir_ctxt bb_patt bb_else bb_end matched_lval patt exp match_alloca_lval
+  mir_ctxt bb_patt bb_else bb_end matched_lval patt exp do_maybe_store
 =
   let rec pattern_breakdown_mir mir_ctxt bb_patt bb_else matched_lval patt =
     let {t=matched_t; _} = matched_lval in
@@ -943,6 +980,17 @@ and pattern_to_mir
           expr_to_mir mir_ctxt bb_patt (ValBool(true))
         in
         (mir_ctxt, bb_patt, unconditional_match_lval)
+
+    | PatternAs(_, patt, ident) ->
+        let (mir_ctxt, bb_patt) =
+          assign_rhs_to_decl mir_ctxt bb_patt ident matched_lval matched_t
+        in
+
+        let (mir_ctxt, bb_patt, is_match_lval) =
+          pattern_breakdown_mir mir_ctxt bb_patt bb_else matched_lval patt
+        in
+
+        (mir_ctxt, bb_patt, is_match_lval)
 
     | PBool(b) ->
         let (mir_ctxt, bb_patt, b_lval) =
@@ -1187,11 +1235,10 @@ and pattern_to_mir
 
     let (mir_ctxt, bb_then, then_lval) = expr_to_mir mir_ctxt bb_then exp in
 
+    let maybe_store = do_maybe_store then_lval in
+
     let bb_then = {
-      bb_then with instrs = bb_then.instrs @ [
-        Store(match_alloca_lval, then_lval);
-        Br(bb_end)
-      ]
+      bb_then with instrs = bb_then.instrs @ maybe_store @ [Br(bb_end)]
     } in
 
     let mir_ctxt = update_bb mir_ctxt bb_patt in

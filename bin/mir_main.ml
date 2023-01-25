@@ -386,6 +386,72 @@ let main = begin
               ]
             )
           );
+          ExprStmt(
+            let block_result x y z q r s =
+              BlockExpr(
+                Undecided, [
+                  ExprStmt(
+                    FuncCall(
+                      Undecided, "printf", [
+                        ValStr(
+                          "Individual vals: [%d, %d, %d]\n" ^
+                          "As breakdown: [%d, %d, %d]\n"
+                        );
+                        ValVar(Undecided, x);
+                        ValVar(Undecided, y);
+                        ValVar(Undecided, z);
+                        ValVar(Undecided, q);
+                        ValVar(Undecided, r);
+                        ValVar(Undecided, s)
+                      ]
+                    )
+                  )
+                ],
+                ValNil
+              )
+            in
+            MatchExpr(
+              Undecided,
+              TupleExpr(
+                Undecided, [ValBool(true); ValBool(false); ValBool(true)]
+              ), [
+                (
+                  PatternAs(
+                    Undecided,
+                    PTuple(
+                      Undecided, [
+                        VarBind(Undecided, "tup_a");
+                        VarBind(Undecided, "tup_b");
+                        VarBind(Undecided, "tup_c")
+                      ]
+                    ),
+                    "as_tuple_val"
+                  ),
+                  MatchExpr(
+                    Undecided,
+                    ValVar(Undecided, "as_tuple_val"), [
+                      (
+                        PTuple(
+                          Undecided, [
+                            VarBind(Undecided, "as_tup_a");
+                            VarBind(Undecided, "as_tup_b");
+                            VarBind(Undecided, "as_tup_c")
+                          ]
+                        ),
+                        block_result
+                          "tup_a"
+                          "tup_b"
+                          "tup_c"
+                          "as_tup_a"
+                          "as_tup_b"
+                          "as_tup_c"
+                      )
+                    ]
+                  )
+                );
+              ]
+            )
+          );
           ReturnStmt(
             IfThenElseExpr(
               Undecided,

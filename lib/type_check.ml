@@ -35,6 +35,12 @@ let populate_ctxt_with_params f_params base_vars =
   let added_vars = List.fold_left add_param base_vars f_params in
   added_vars
 
+let add_uniq_varname varname t_qual_pair vars =
+  if StrMap.mem varname vars then
+    failwith (Printf.sprintf "%s already in scope!" varname)
+  else
+    StrMap.add varname t_qual_pair vars
+
 (* Given a variant declaration that may contain some arbitrary number of unbound
 types, a variant constructor name that exists in the given variant declaration,
 and the corresponding value type of the constructor, yield an
@@ -176,6 +182,7 @@ and is_concrete_patt ?(verbose=false) patt =
   | VarBind(t, _) -> (_is_concrete_type t)
   | PTuple(t, _) -> (_is_concrete_type t)
   | Ctor(t, _, patt) -> (_is_concrete_type t) && (_is_concrete_patt patt)
+  | PatternAs(t, patt, _) -> (_is_concrete_type t) && (_is_concrete_patt patt)
   end
 ;;
 
@@ -1034,7 +1041,7 @@ and type_check_pattern
   | VarBind(_, varname) ->
       let tc_ctxt = {
         tc_ctxt with
-          vars = StrMap.add varname (matched_t, {mut=false}) tc_ctxt.vars
+          vars = add_uniq_varname varname (matched_t, {mut=false}) tc_ctxt.vars
       } in
 
       (tc_ctxt, VarBind(matched_t, varname))
@@ -1086,6 +1093,18 @@ and type_check_pattern
       in
 
       (tc_ctxt, Ctor(matched_t, ctor_name, exp_patt))
+
+  | PatternAs(_, patt, varname) ->
+      let (tc_ctxt, patt_typechecked) =
+        type_check_pattern tc_ctxt matched_t patt
+      in
+
+      let tc_ctxt = {
+        tc_ctxt with
+          vars = add_uniq_varname varname (matched_t, {mut=false}) tc_ctxt.vars
+      } in
+
+      (tc_ctxt, PatternAs(matched_t, patt_typechecked, varname))
   end in
 
   (tc_ctxt, patt)
@@ -1117,6 +1136,12 @@ and pattern_dominates lhs_patt rhs_patt =
         pattern_dominates lhs_patt rhs_patt
       else
         false
+
+  | (PatternAs(_, lhs_patt, _), PatternAs(_, rhs_patt, _)) ->
+      pattern_dominates lhs_patt rhs_patt
+
+  | (PatternAs(_, lhs_patt, _), rhs_patt) ->
+      pattern_dominates lhs_patt rhs_patt
 
   | (PNil, _)
   | (PBool(_), _)
