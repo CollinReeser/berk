@@ -1164,7 +1164,11 @@ and determine_pattern_completeness lhs_patts rhs_patts =
     | (_, []) -> ((List.rev lhs_patts_useless) @ lhs_patts_rest, [])
     | ([], _) -> ((List.rev lhs_patts_useless), rhs_patts_rest)
     | (patt::lhs_patts_rest, _) ->
+        (* Non-exhaustion of patterns is when there are remaining pattern values
+        after exhausting all match pattern arms. *)
         let filtered_rhs_patts = filter_dominated patt rhs_patts_rest in
+        (* Useless patterns are patterns that did not dominate any of the
+        remaining pattern values. *)
         let lhs_patts_useless =
           if (List.length rhs_patts_rest) = (List.length filtered_rhs_patts)
           then patt :: lhs_patts_useless
@@ -1177,6 +1181,8 @@ and determine_pattern_completeness lhs_patts rhs_patts =
 
   _determine_pattern_completeness [] lhs_patts rhs_patts
 
+(* This function generates, essentially, the list of all possible permutations
+of pattern values implied by the given type. *)
 and generate_value_patts t : pattern list =
   match t with
   | Undecided -> failwith "Cannot generate values for undecided type"

@@ -472,11 +472,11 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           (mir_ctxt, bb, lval)
 
       | ValCastExtend(t, exp) ->
-          let (mir_ctxt, bb, to_bitwise_lval) = _expr_to_mir mir_ctxt bb exp in
+          let (mir_ctxt, bb, to_extend_lval) = _expr_to_mir mir_ctxt bb exp in
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
           let lval = {t=t; kind=Tmp; lname=varname} in
-          let instr = UnOp(lval, Extend, to_bitwise_lval) in
+          let instr = UnOp(lval, Extend, to_extend_lval) in
 
           let bb = {bb with instrs=bb.instrs @ [instr]} in
 
