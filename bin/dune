@@ -1,7 +1,10 @@
 (executables
- (names main mir_main)
- (public_names berk mir_berk)
+ (names main mir_main lexer_main)
+ (public_names berk mir_berk lexer_berk)
  (libraries
    berk
+   sedlex
  )
+ (preprocess
+  (pps sedlex.ppx))
 )
