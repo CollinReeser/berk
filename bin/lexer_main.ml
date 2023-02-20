@@ -3,7 +3,7 @@ type position = {
   fin: Lexing.position;
 }
 
-and token =
+type token =
 | KWExtern of position
 | LParen of position
 | RParen of position
@@ -116,11 +116,20 @@ let rec print_tokens tokens =
 let tokenize buf =
   let digit = [%sedlex.regexp? '0' .. '9'] in
   let number = [%sedlex.regexp? Plus digit] in
-  let str_simple_inner = [%sedlex.regexp? Star(Compl('"' | '\\'))] in
+
+  let str_simple_inner =
+    [%sedlex.regexp?
+      Star(Compl('"' | '\\'))
+    ] in
+
   let str_escape_inner =
     [%sedlex.regexp?
       Star('\\', any, Star(str_simple_inner))
     ] in
+
+  (* Encode this regex:
+      "[^"\\]*(?:\\.[^"\\]*)*"
+  *)
   let str_reg =
     [%sedlex.regexp?
       '"', str_simple_inner, str_escape_inner, '"'
