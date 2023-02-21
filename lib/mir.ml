@@ -412,6 +412,21 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValI32(x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
       | ValI64(x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
 
+      | ValInt(U8, x) -> ValU8(x) |> literal_to_instr mir_ctxt bb U8
+      | ValInt(U16, x) -> ValU16(x) |> literal_to_instr mir_ctxt bb U16
+      | ValInt(U32, x) -> ValU32(x) |> literal_to_instr mir_ctxt bb U32
+      | ValInt(U64, x) -> ValU64(x) |> literal_to_instr mir_ctxt bb U64
+      | ValInt(I8, x) -> ValI8(x) |> literal_to_instr mir_ctxt bb I8
+      | ValInt(I16, x) -> ValI16(x) |> literal_to_instr mir_ctxt bb I16
+      | ValInt(I32, x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
+      | ValInt(I64, x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
+
+      | ValInt(t, x) ->
+          failwith (
+            Printf.sprintf "Nonsense type [%s] for int [%d] converting to MIR."
+              (fmt_type t) x
+          )
+
       | ValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb F32
       | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb F64
       | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb F128

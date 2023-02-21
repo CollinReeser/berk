@@ -29,6 +29,7 @@ and expr =
   | ValF32 of float
   | ValBool of bool
   | ValStr of string
+  | ValInt of berk_t * int
   | ValVar of berk_t * ident_t
   | ValFunc of berk_t * string
   | ValCastTrunc of berk_t * expr
@@ -113,6 +114,7 @@ let expr_type exp =
   | ValF32(_)  -> F32
   | ValBool(_) -> Bool
   | ValStr(_) -> String
+  | ValInt(typ, _) -> typ
   | ValVar(typ, _) -> typ
   | ValFunc(typ, _) -> typ
   | ValCastTrunc(typ, _) -> typ
@@ -181,6 +183,9 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
 
   | ValStr(str) ->
       Printf.sprintf "%s\"%s\"%s" init_ind (String.escaped str) typ_s
+
+  | ValInt(_, value) ->
+      Printf.sprintf "%s%d%s" init_ind value typ_s
 
   | ValVar(_, id) -> Printf.sprintf "%s%s%s" init_ind id typ_s
 
@@ -680,6 +685,28 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     | (I32, (ValI8(_) | ValI16(_)))             -> ValCastExtend(I32, exp)
     | (I64, (ValI8(_) | ValI16(_) | ValI32(_))) -> ValCastExtend(I64, exp)
 
+    | (U8,  ValInt(U8,  _)) -> exp
+    | (U16, ValInt(U16, _)) -> exp
+    | (U32, ValInt(U32, _)) -> exp
+    | (U64, ValInt(U64, _)) -> exp
+    | (U16, ValInt(U8, _)) ->
+        ValCastExtend(U16, exp)
+    | (U32, (ValInt(U8, _) | ValInt(U16, _))) ->
+        ValCastExtend(U32, exp)
+    | (U64, (ValInt(U8, _) | ValInt(U16, _) | ValInt(U32, _))) ->
+        ValCastExtend(U64, exp)
+
+    | (I8,  ValInt(I8,  _)) -> exp
+    | (I16, ValInt(I16, _)) -> exp
+    | (I32, ValInt(I32, _)) -> exp
+    | (I64, ValInt(I64, _)) -> exp
+    | (I16, ValInt(I8, _)) ->
+        ValCastExtend(I16, exp)
+    | (I32, (ValInt(I8, _) | ValInt(I16, _))) ->
+        ValCastExtend(I32, exp)
+    | (I64, (ValInt(I8, _) | ValInt(I16, _) | ValInt(I32, _))) ->
+        ValCastExtend(I64, exp)
+
     | (F32,  ValF32 (_)) -> exp
     | (F64,  ValF64 (_)) -> exp
     | (F128, ValF128(_)) -> exp
@@ -851,6 +878,20 @@ let fmt_variant_decl
     formatted_ctors
 ;;
 
+let fmt_mod_decl
+  ?(pretty_unbound=false) ?(print_typ = false) mod_decl : string
+=
+  begin match mod_decl with
+  | FuncExternDecl(f_decl) ->
+      Printf.sprintf "%s"(fmt_func_decl ~print_typ:true ~extern:true f_decl)
+
+  | FuncDef(f_ast) ->
+      Printf.sprintf "%s"(fmt_func_ast ~print_typ:print_typ f_ast)
+
+  | VariantDecl(v_ast) ->
+      Printf.sprintf "%s"(fmt_variant_decl ~pretty_unbound:pretty_unbound v_ast)
+  end
+
 (* Return the pair of all the non-variadic function parameter types, and whether
 the parameter list ends with a variadic-args sentinel. Fails if ill-formed. *)
 let rec get_static_f_params f_params =
@@ -945,6 +986,7 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | ValBool(_)
     | ValStr(_)
     | ValNil
+    | ValInt(_, _)
     | ValFunc(_, _) ->
         exp
 

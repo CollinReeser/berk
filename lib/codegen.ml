@@ -393,6 +393,18 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
   | ValU32(n) | ValI32(n) -> Llvm.const_int i32_t n
   | ValU16(n) | ValI16(n) -> Llvm.const_int i16_t n
   | ValU8(n)  | ValI8(n)  -> Llvm.const_int  i8_t n
+
+  | ValInt(U8, n)  | ValInt(I8, n)  -> Llvm.const_int i8_t n
+  | ValInt(U16, n) | ValInt(I16, n) -> Llvm.const_int i16_t n
+  | ValInt(U32, n) | ValInt(I32, n) -> Llvm.const_int i32_t n
+  | ValInt(U64, n) | ValInt(I64, n) -> Llvm.const_int i64_t n
+
+  | ValInt(t, n) ->
+      failwith (
+        Printf.sprintf
+          "Cannot codegen int [%d] with nonsense type [%s]" n (fmt_type t)
+      )
+
   | ValBool(false) -> Llvm.const_int bool_t 0
   | ValBool(true)  -> Llvm.const_int bool_t 1
   | ValF128(str) -> Llvm.const_float_of_string f128_t str

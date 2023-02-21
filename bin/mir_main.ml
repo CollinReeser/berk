@@ -523,20 +523,12 @@ let main = begin
 
       let _ = List.iter (
         fun mod_decl_typechecked ->
-          match mod_decl_typechecked with
-          | FuncExternDecl(f_decl_typechecked) ->
-              Printf.printf "%s"
-                (fmt_func_decl ~print_typ:true ~extern:true f_decl_typechecked)
+          let fmted =
+            fmt_mod_decl
+              ~pretty_unbound:true ~print_typ:true mod_decl_typechecked
+          in
 
-          | FuncDef(f_ast_typechecked) ->
-              Printf.printf "%s%s"
-                (fmt_func_ast f_ast_typechecked)
-                (fmt_func_ast ~print_typ:true f_ast_typechecked)
-
-          | VariantDecl(v_ast_typechecked) ->
-              Printf.printf "%s"
-                (fmt_variant_decl ~pretty_unbound:true v_ast_typechecked)
-
+          Printf.printf "%s" fmted
       ) mod_decls_tc_rewritten in
 
       let mir_ctxts =

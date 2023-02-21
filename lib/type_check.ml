@@ -104,6 +104,8 @@ and is_concrete_expr ?(verbose=false) expr =
   | ValStr(_)
   | ValNil -> true
 
+  | ValInt(typ, _) -> _is_concrete_type typ
+
   | ValVar(typ, _) -> _is_concrete_type typ
 
   | ValFunc(t, _) -> _is_concrete_type t
@@ -621,6 +623,28 @@ and type_check_expr
     | ValBool(b) -> ValBool(b)
 
     | ValStr(s) -> ValStr(s)
+
+    | ValInt(_, i) ->
+        begin match expected_t with
+        | I64 | I32 | I16 | I8 -> ValInt(expected_t, i)
+        | U64 | U32 | U16 | U8 ->
+            if i >= 0 then
+              ValInt(expected_t, i)
+            else
+              failwith (
+                Printf.sprintf
+                  "Unexpectedly expecting uint type [%s] for int [%d]."
+                  (fmt_type expected_t)
+                  i
+              )
+        | _ ->
+            failwith (
+              Printf.sprintf
+                "Unexpectedly expecting non-integral type [%s] for int [%d]."
+                (fmt_type expected_t)
+                i
+            )
+        end
 
     | ValVar(_, id) ->
         let (var_t, _) = StrMap.find id tc_ctxt.vars in
