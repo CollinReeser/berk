@@ -641,7 +641,15 @@ and parse_func_call_args tokens : (token list * expr list) =
 
     begin match rest with
     | RParen(_) :: rest -> (rest, exps_so_far)
-    | _ -> _parse_func_call_args rest exps_so_far
+    | Comma(_) :: rest -> _parse_func_call_args rest exps_so_far
+
+    | tok :: _ ->
+        let fmted = fmt_token tok in
+        failwith (
+          Printf.sprintf
+            "Unexpected token [%s] (args), expected among `,`|`)`." fmted
+        )
+    | [] -> failwith "Unexpected EOF while parsing func call arg list."
     end
   in
 
@@ -663,8 +671,9 @@ let () =
     extern fn printf(fmt: string, ...): i32
 
     fn main(): i8 {
-      let my_str := "Hello, world!\n";
-      printf(my_str);
+      let my_str := "Hello, world! [%d]\n";
+      let var := 6;
+      printf(my_str, var);
 
       return 0;
     }

@@ -626,6 +626,8 @@ and type_check_expr
 
     | ValInt(_, i) ->
         begin match expected_t with
+        | Undecided -> ValInt(I32, i)
+
         | I64 | I32 | I16 | I8 -> ValInt(expected_t, i)
         | U64 | U32 | U16 | U8 ->
             if i >= 0 then
@@ -637,6 +639,7 @@ and type_check_expr
                   (fmt_type expected_t)
                   i
               )
+
         | _ ->
             failwith (
               Printf.sprintf
