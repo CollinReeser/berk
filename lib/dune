@@ -2,6 +2,7 @@
  (name berk)
  (modules_without_implementation ir)
  (libraries
+    sedlex
     ctypes.foreign
     llvm
     llvm.analysis
@@ -10,4 +11,6 @@
     llvm.scalar_opts
     llvm.all_backends
  )
+ (preprocess
+  (pps sedlex.ppx))
 )

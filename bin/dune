@@ -3,8 +3,5 @@
  (public_names berk mir_berk lexer_berk)
  (libraries
    berk
-   sedlex
  )
- (preprocess
-  (pps sedlex.ppx))
 )
