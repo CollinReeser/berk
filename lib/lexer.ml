@@ -260,7 +260,9 @@ let tokenize buf =
 
     | str_reg ->
         let lexeme = Sedlexing.Latin1.lexeme buf in
-        let tok = String(get_pos buf, lexeme) in
+        let inside_quotes = String.sub lexeme 1 ((String.length lexeme) - 2) in
+        let unescaped = Scanf.unescaped inside_quotes in
+        let tok = String(get_pos buf, unescaped) in
         _tokenize buf (tok :: tokens)
 
     | Plus xml_blank ->
