@@ -13,7 +13,7 @@ let () =
 
     fn main(): i8 {
       let my_str := "Hello, world! [%d]\n";
-      let var := 6;
+      let var := 6 + 7 * 8 - 9;
       printf(my_str, var);
 
       return 0;

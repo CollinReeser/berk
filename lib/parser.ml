@@ -290,7 +290,7 @@ and parse_sum tokens : (token list * expr) =
 
     | Minus(_) :: rest ->
         let (rest, exp_rhs) = parse_prod rest in
-        let exp = BinOp(Undecided, Add, exp_lhs, exp_rhs) in
+        let exp = BinOp(Undecided, Sub, exp_lhs, exp_rhs) in
         _parse_sum rest exp
 
     | _ -> (tokens, exp_lhs)
