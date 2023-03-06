@@ -9,6 +9,8 @@ type token =
 | KWMut of position
 | KWLet of position
 | KWReturn of position
+| KWIf of position
+| KWElse of position
 | KWi8 of position
 | KWi16 of position
 | KWi32 of position
@@ -25,6 +27,7 @@ type token =
 | Comma of position
 | ColonEqual of position
 | Colon of position
+| EqualEqual of position
 | Equal of position
 | Semicolon of position
 | TriEllipses of position
@@ -166,6 +169,12 @@ let tokenize buf =
     | "return" ->
         let tok = KWReturn(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "if" ->
+        let tok = KWIf(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "else" ->
+        let tok = KWElse(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "i8" ->
         let tok = KWi8(get_pos buf) in
         _tokenize buf (tok :: tokens)
@@ -216,6 +225,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | ":" ->
         let tok = Colon(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "==" ->
+        let tok = EqualEqual(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "=" ->
         let tok = Equal(get_pos buf) in
