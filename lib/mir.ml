@@ -1392,6 +1392,40 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
   _stmt_to_mir mir_ctxt bb stmt
 
+
+(* Perform "clean-up" passes on the basic block, to eg eliminate dead code. *)
+let clean_up_bb_mir (bb : bb) =
+  let rec _remove_dead_mir rev_instrs_left instrs_preserved : instr list =
+    begin match rev_instrs_left with
+    | [] -> instrs_preserved
+
+    (* Keep intructions only until the first terminator. *)
+    | ((Br(_) | CondBr(_) | RetVoid | Ret(_)) as term_instr) :: rest ->
+        _remove_dead_mir rest [term_instr]
+
+    | nonterm_instr :: rest ->
+        _remove_dead_mir rest (nonterm_instr :: instrs_preserved)
+    end
+  in
+
+  let rev_instrs = List.rev bb.instrs in
+  let instrs_preserved = _remove_dead_mir rev_instrs [] in
+
+  let bb = {bb with instrs = instrs_preserved} in
+
+  bb
+
+
+(* Perform "clean-up" passes on the generated MIR. *)
+let clean_up_mir (mir_ctxt : mir_ctxt) =
+  let bbs_control_flow = control_flow_list mir_ctxt in
+  let bbs_cleaned = List.map clean_up_bb_mir bbs_control_flow in
+
+  let mir_ctxt = List.fold_left update_bb mir_ctxt bbs_cleaned in
+
+  mir_ctxt
+
+
 let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
   let mir_ctxt = {
     f_name = f_name;
@@ -1409,6 +1443,8 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
         ((mir_ctxt, cur_bb), ())
     ) (mir_ctxt, bb_entry) f_stmts
   in
+
+  let mir_ctxt = clean_up_mir mir_ctxt in
 
   mir_ctxt
 
