@@ -20,6 +20,9 @@ let () =
     }
   |} in
 
+  Printexc.record_backtrace true ;
+  Llvm.enable_pretty_stacktrace () ;
+
   (* Lexing. *)
   let lexbuf = Sedlexing.Latin1.from_gen (Gen.of_string source_text) in
   let tokens = tokenize lexbuf in
