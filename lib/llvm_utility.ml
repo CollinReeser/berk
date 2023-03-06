@@ -114,7 +114,6 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
 
 
 let initialize_fpm the_fpm =
-  (*
   (* Promote allocas to registers. *)
   Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
   (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
@@ -131,8 +130,6 @@ let initialize_fpm the_fpm =
 
   Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
   Llvm_scalar_opts.add_instruction_combination the_fpm ;
-
-  *)
 
   (* Return value here only indicates whether internal state was modified *)
   Llvm.PassManager.initialize the_fpm
