@@ -11,14 +11,14 @@ let () =
   let source_text = {|
     extern fn printf(fmt: string, ...): i32
 
-    fn fib_t(n: u32, s_last: u32, last: u32): u32 {
+    fn fib_t(n: u64, s_last: u64, last: u64): u64 {
       if (n == 1) {
         return last;
       };
       return fib_t(n - 1, last, s_last + last);
     }
 
-    fn fib(n: u32): u32 {
+    fn fib(n: u64): u64 {
       return fib_t(n, 0, 1);
     }
 
@@ -27,9 +27,9 @@ let () =
     }
 
     fn main(): i8 {
-      let my_str := "Hello, world! [%d] [%d]\n";
+      let my_str := "Hello, world! [%d] [%llu]\n";
       let var := 6 + 7 * 8 - ret_int();
-      let fib_res := fib(40);
+      let fib_res := fib(50);
       printf(my_str, var, fib_res);
 
       return 0;
