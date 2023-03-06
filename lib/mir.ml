@@ -305,12 +305,15 @@ let get_varname ?(prefix="") mir_ctxt : (mir_ctxt * string) =
     Printf.sprintf "%s_%d" prefix mir_ctxt.name_gen
   )
 
+(* Get a unique name, useable to create a new basic block. *)
 let get_bbname mir_ctxt : (mir_ctxt * string) =
   (
     {mir_ctxt with name_gen = mir_ctxt.name_gen + 1},
     Printf.sprintf "bb_%d" mir_ctxt.name_gen
   )
 
+(* Replace the existing basic block in the MIR ctxt with the given bb, keyed
+on the name of the bb. *)
 let update_bb mir_ctxt bb =
   let {name=name; _} = bb in
   let bbs = StrMap.add name bb mir_ctxt.bbs in
@@ -439,7 +442,11 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValVar(var_t, varname) ->
           (* For variable access in MIR, we assume the variable is nested inside
           an alloca that must be loaded from. *)
-          let ptr_lval = StrMap.find varname mir_ctxt.lvars in
+          let ptr_lval = try
+            StrMap.find varname mir_ctxt.lvars
+          with Not_found ->
+            failwith (Printf.sprintf "No known varname [%s]" varname)
+          in
           let {t=ptr_t; _} = ptr_lval in
           let pointed_t = unwrap_ptr ptr_t in
 

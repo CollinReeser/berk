@@ -624,8 +624,15 @@ and type_check_expr
 
     | ValStr(s) -> ValStr(s)
 
-    | ValInt(_, i) ->
+    (* If our generic int type is not yet _any_ inferred/default type, determine
+    one now with the information we have. This may change later, if we have more
+    specific information with which we can better infer a type.
+
+    NOTE: We never wholesale replace ValInt with a more specific type; we
+    want it to remain fluid in case we can make a better inference later. *)
+    | ValInt(Undecided, i) ->
         begin match expected_t with
+        (* Barring more specific information, default to reasonable int type. *)
         | Undecided -> ValInt(I32, i)
 
         | I64 | I32 | I16 | I8 -> ValInt(expected_t, i)
@@ -648,6 +655,10 @@ and type_check_expr
                 i
             )
         end
+
+    (* We have _a_ type for our generic int, so keep it. This may be changed
+    later if we get more information leading to a better inference. *)
+    | ValInt(_, _) -> exp
 
     | ValVar(_, id) ->
         let (var_t, _) = StrMap.find id tc_ctxt.vars in
