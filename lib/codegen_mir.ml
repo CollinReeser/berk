@@ -118,6 +118,15 @@ let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
 
 let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
   begin match instr with
+  | GetArg({lname; _}, i) ->
+      let value = Llvm.param func_ctxt.cur_func i in
+
+      let func_ctxt = {
+        func_ctxt with cur_vars = StrMap.add lname value func_ctxt.cur_vars
+      } in
+
+      func_ctxt
+
   | Alloca({lname; _}, t) ->
       let alloca_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
       let alloca = Llvm.build_alloca alloca_t lname builder in
@@ -465,41 +474,14 @@ let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_t; _} =
 
 
 let codegen_func_mir
-  llvm_ctxt the_fpm builder mod_ctxt ({f_params; _} as mir_ctxt : mir_ctxt)
+  llvm_ctxt the_fpm builder mod_ctxt (mir_ctxt : mir_ctxt)
 =
   let (mod_ctxt, new_func) = codegen_func_decl_mir mod_ctxt mir_ctxt in
-
-
-  (* ??? *)
-
-
-  let init_vars = if List.length f_params > 0 then
-    (* Push the function arguments into allocas so that they are easier to
-    reference as variables within the function body. *)
-    let llvm_params = Array.to_list (Llvm.params new_func) in
-    let arg_to_param_lst = List.combine f_params llvm_params in
-    let llvm_param_allocas = List.map (
-      fun ((id, typ), llvm_param) ->
-        let alloca_typ = mod_ctxt.berk_t_to_llvm_t typ in
-        let alloca = Llvm.build_alloca alloca_typ id builder in
-        let _ : Llvm.llvalue = Llvm.build_store llvm_param alloca builder in
-
-        alloca
-    ) arg_to_param_lst in
-    let arg_to_alloca_lst = List.combine f_params llvm_param_allocas in
-    let init_vars = List.fold_left (
-      fun vars ((id, _), param) -> StrMap.add id param vars
-    ) StrMap.empty arg_to_alloca_lst
-    in
-    init_vars
-  else
-    StrMap.empty
-  in
 
   (* Establish our function-specific codegen context given the above setup. *)
   let func_ctxt = {
     cur_func = new_func;
-    cur_vars = init_vars;
+    cur_vars = StrMap.empty;
     mod_ctxt = mod_ctxt;
     bbs = StrMap.empty;
   } in

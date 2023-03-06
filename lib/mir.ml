@@ -43,6 +43,9 @@ type index =
 
 (* Instruction *)
 type instr =
+(* The lval representation of the function argument at the given index. *)
+| GetArg of lval * int
+(* Create an alloca (stack-allocated space of some size) *)
 | Alloca of lval * berk_t
 (* Store -> lhs is memory target, rhs is stored value *)
 | Store of lval * lval
@@ -126,6 +129,11 @@ let fmt_join_indices idxs =
 let fmt_instr instr =
   let open Printf in
   match instr with
+  | GetArg(lval, i) ->
+      sprintf "  %s = fn_arg[%d]\n"
+        (fmt_lval lval)
+        i
+
   | Alloca(lval, pointed_t) ->
       sprintf "  %s = alloca of %s\n"
         (fmt_lval lval)
@@ -344,6 +352,7 @@ let get_entry mir_ctxt : bb = get_bb mir_ctxt "entry"
 
 let instr_lval instr =
   match instr with
+  | GetArg(lval, _) -> lval
   | Assign(lval, _) -> lval
   | Alloca(lval, _) -> lval
   | Store(lval, _) -> lval
@@ -1426,6 +1435,37 @@ let clean_up_mir (mir_ctxt : mir_ctxt) =
   mir_ctxt
 
 
+(* Populate the given basic block (probably `entry`) with MIR required to
+translate function args into alloca lvals, making those arguments available to
+the rest of MIR generation as named lvars. *)
+let func_args_to_mir (mir_ctxt : mir_ctxt) (bb : bb) =
+  let (mir_ctxt, bb, _) = begin
+    List.fold_left (
+      fun (mir_ctxt, bb, i) (param_name, t) ->
+        let (mir_ctxt, arg_name) = get_varname mir_ctxt in
+        let arg_lval = {t=t; kind=Arg; lname=arg_name} in
+        let arg_instr = GetArg(arg_lval, i) in
+
+        let bb = {bb with instrs = bb.instrs @ [arg_instr]} in
+
+        let (mir_ctxt, bb) =
+          assign_rhs_to_decl mir_ctxt bb param_name arg_lval t
+        in
+
+        (mir_ctxt, bb, i + 1)
+    ) (mir_ctxt, bb, 0) mir_ctxt.f_params
+  end in
+
+  let (mir_ctxt, next_bb_name) = get_bbname mir_ctxt in
+  let next_bb = {name=next_bb_name; instrs=[]} in
+
+  let bb = {bb with instrs = (bb.instrs @ [Br(next_bb)])} in
+  let mir_ctxt = update_bb mir_ctxt bb in
+  let mir_ctxt = update_bb mir_ctxt next_bb in
+
+  (mir_ctxt, next_bb)
+
+
 let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
   let mir_ctxt = {
     f_name = f_name;
@@ -1435,18 +1475,26 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
     lvars = StrMap.empty;
     bbs = StrMap.empty
   } in
+
   let bb_entry = {name="entry"; instrs=[]} in
+
+  (* Ensure any function arguments are made available as named, alloca'd
+  lvars. *)
+  let (mir_ctxt, cur_bb) = func_args_to_mir mir_ctxt bb_entry in
+
+  (* Core generation of MIR for the function body. *)
   let ((mir_ctxt, _), _) =
     List.fold_left_map (
       fun (mir_ctxt, cur_bb) stmt ->
         let (mir_ctxt, cur_bb) = stmt_to_mir mir_ctxt cur_bb stmt in
         ((mir_ctxt, cur_bb), ())
-    ) (mir_ctxt, bb_entry) f_stmts
+    ) (mir_ctxt, cur_bb) f_stmts
   in
 
   let mir_ctxt = clean_up_mir mir_ctxt in
 
   mir_ctxt
+
 
 let func_decl_to_mir ({f_name; f_params; f_ret_t} : func_decl_t) =
   let mir_ctxt = {
@@ -1459,4 +1507,3 @@ let func_decl_to_mir ({f_name; f_params; f_ret_t} : func_decl_t) =
   } in
 
   mir_ctxt
-
