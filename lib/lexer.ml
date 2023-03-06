@@ -123,6 +123,13 @@ let fmt_token tok =
 ;;
 
 
+let fmt_next_token tokens =
+  match tokens with
+  | tok :: _ -> fmt_token tok
+  | [] -> "<nil>"
+;;
+
+
 let print_tokens tokens =
   let fmted = List.map fmt_token tokens in
   List.iter (Printf.printf "%s\n") fmted

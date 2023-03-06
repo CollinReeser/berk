@@ -191,6 +191,32 @@ and parse_stmt_block tokens : (token list * stmt list) =
   end
 
 
+and parse_expr_block tokens : (token list * expr) =
+  begin match tokens with
+  | LBrace(_) :: rest ->
+      let (rest, stmts) = parse_stmts rest in
+      let (rest, exp) = begin
+        try parse_expr rest
+        with Backtrack ->
+        (rest, ValNil)
+      end in
+
+      begin match rest with
+      | RBrace(_) :: rest -> (rest, BlockExpr(Undecided, stmts, exp))
+
+      | tok :: _ ->
+          let fmted = fmt_token tok in
+          failwith (
+            Printf.sprintf
+              "Unexpected token [%s] in expr block, expected `}`" fmted
+          )
+      | [] -> failwith "Unexpected EOF while searching for closing `}`."
+      end
+
+  | _ -> raise Backtrack
+  end
+
+
 and parse_stmts tokens : (token list * stmt list) =
   let rec _parse_stmts tokens stmts_so_far =
     begin match (parse_stmt tokens) with
@@ -305,12 +331,12 @@ and parse_prod tokens : (token list * expr) =
   let rec _parse_prod tokens exp_lhs =
     begin match tokens with
     | Star(_) :: rest ->
-        let (rest, exp_rhs) = parse_value rest in
+        let (rest, exp_rhs) = parse_equality rest in
         let exp = BinOp(Undecided, Mul, exp_lhs, exp_rhs) in
         _parse_prod rest exp
 
     | Slash(_) :: rest ->
-        let (rest, exp_rhs) = parse_value rest in
+        let (rest, exp_rhs) = parse_equality rest in
         let exp = BinOp(Undecided, Div, exp_lhs, exp_rhs) in
         _parse_prod rest exp
 
@@ -318,14 +344,36 @@ and parse_prod tokens : (token list * expr) =
     end
   in
 
-  let (rest, exp_lhs) = parse_value tokens in
+  let (rest, exp_lhs) = parse_equality tokens in
   _parse_prod rest exp_lhs
 
 
+and parse_equality tokens : (token list * expr) =
+  let rec _parse_equality tokens exp_lhs =
+    begin match tokens with
+    | EqualEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_value rest in
+        let exp = BinOp(Undecided, Eq, exp_lhs, exp_rhs) in
+        _parse_equality rest exp
+
+    | _ -> (tokens, exp_lhs)
+    end
+  in
+
+  let (rest, exp_lhs) = parse_value tokens in
+  _parse_equality rest exp_lhs
+
+
 and parse_value tokens : (token list * expr) =
-  try parse_func_call tokens
-  with Backtrack ->
-  parse_expr_atom tokens
+  begin
+    try parse_if_expr tokens
+    with Backtrack ->
+    try parse_expr_block tokens
+    with Backtrack ->
+    try parse_func_call tokens
+    with Backtrack ->
+    parse_expr_atom tokens
+  end
 
 
 and parse_func_call tokens : (token list * expr) =
@@ -361,6 +409,40 @@ and parse_func_call_args tokens : (token list * expr list) =
   in
 
   _parse_func_call_args tokens []
+
+
+and parse_if_expr tokens : (token list * expr) =
+  begin match tokens with
+  | KWIf(_) :: LParen(_) :: rest ->
+      let (rest, cond_exp) = parse_expr rest in
+
+      begin match rest with
+      | RParen(_) :: rest ->
+          let (rest, then_exp) = parse_expr_block rest in
+
+          begin match rest with
+          | KWElse(_) :: rest ->
+              let (rest, else_exp) = parse_expr_block rest in
+              (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, else_exp))
+
+          | _ :: _ ->
+              (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, ValNil))
+
+          | [] -> failwith "Unexpected EOF while parsing if-expr."
+          end
+
+      | tok :: _ ->
+          let fmted = fmt_token tok in
+          failwith (
+            Printf.sprintf
+              "Unexpected token [%s] in if-expr, expected `)`." fmted
+          )
+      | [] -> failwith "Unexpected EOF while parsing func call arg list."
+      end
+
+  | _ ->
+      raise Backtrack
+  end
 
 
 and parse_expr_atom tokens : (token list * expr) =
