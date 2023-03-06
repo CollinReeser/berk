@@ -695,18 +695,55 @@ and type_check_expr
           else failwith "Cannot extend incompatible types"
 
     | BinOp(_, op, lhs, rhs) ->
+        let lhs_typechecked = _type_check_expr lhs in
+        let rhs_typechecked = _type_check_expr rhs in
+
+        (* In the event we have a concrete type for one side, but a generic type
+        for the other (even one that we may have already assigned a tentative
+        type for; these tentative types are permitted to be overridden if we
+        have a better inference), we can fairly infer they should be the same
+        type. *)
+        let (lhs_typechecked, rhs_typechecked) =
+          begin match (lhs_typechecked, rhs_typechecked) with
+          (* We can't infer anything if they're both generic ints. *)
+          | (ValInt(_, _), ValInt(_, _)) -> (lhs_typechecked, rhs_typechecked)
+
+          | (ValInt(lhs_t, ln), rhs_typechecked) ->
+              let rhs_t = expr_type rhs_typechecked in
+              begin match (lhs_t, rhs_t) with
+              (* Other side doesn't have concrete type yet, can't improve. *)
+              | (_, Undecided) -> (lhs_typechecked, rhs_typechecked)
+              (* Assume the other side concrete type is better inference. *)
+              | (_, _) -> (ValInt(rhs_t, ln), rhs_typechecked)
+              end
+
+          | (lhs_typechecked, ValInt(rhs_t, rn)) ->
+              let lhs_t = expr_type lhs_typechecked in
+              begin match (lhs_t, rhs_t) with
+              (* Other side doesn't have concrete type yet, can't improve. *)
+              | (Undecided, _) -> (lhs_typechecked, rhs_typechecked)
+              (* Assume the other side concrete type is better inference. *)
+              | (_, _) -> (lhs_typechecked, ValInt(lhs_t, rn))
+              end
+
+          | _ -> (lhs_typechecked, rhs_typechecked)
+          end
+        in
+
+        (* Double check that we didn't just break assumptions. *)
+        let lhs_typechecked = _type_check_expr lhs_typechecked in
+        let rhs_typechecked = _type_check_expr rhs_typechecked in
+
         begin match op with
         | Add | Sub | Mul | Div | Mod ->
-            let lhs_typechecked = _type_check_expr lhs in
-            let rhs_typechecked = _type_check_expr rhs in
             let lhs_t = expr_type lhs_typechecked in
             let rhs_t = expr_type rhs_typechecked in
             let common_t = common_type_of_lr lhs_t rhs_t in
             BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
 
         | Eq | Ne | Lt | Le | Gt | Ge ->
-            let lhs_typechecked = _type_check_expr lhs in
-            let rhs_typechecked = _type_check_expr rhs in
+            (* TODO: There should be an additional check that these are actually
+            comparable, as relevant. *)
             BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
         end
 
