@@ -1397,6 +1397,20 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
+    | AssignStmt(lhs_name, exp) ->
+        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
+
+        (* This is an assignment to a pre-existing lvalue var, so we just need
+        to find the lval for this var, and then we can directly store the RHS
+        into that existing lval. *)
+        let lhs_alloca_lval = StrMap.find lhs_name mir_ctxt.lvars in
+        let store_instr = Store(lhs_alloca_lval, rhs_lval) in
+
+        let bb = {bb with instrs = bb.instrs @ [store_instr]} in
+        let mir_ctxt = update_bb mir_ctxt bb in
+
+        (mir_ctxt, bb)
+
     | DeclDeconStmt(ident_quals, t, exp) ->
         let (mir_ctxt, bb, aggregate_lval) = expr_to_mir mir_ctxt bb exp in
 
@@ -1453,7 +1467,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | _ -> failwith "Unimplemented"
+    | AssignDeconStmt(_, _) -> failwith "AssignDeconStmt: Unimplemented"
   in
 
   _stmt_to_mir mir_ctxt bb stmt

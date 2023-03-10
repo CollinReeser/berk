@@ -48,6 +48,36 @@ let main = begin
             )
           );
           DeclStmt(
+            "iter", {mut=true}, Undecided,
+            ValInt(Undecided, 0)
+          );
+          ExprStmt(
+            WhileExpr(
+              Undecided,
+              BinOp(
+                Undecided,
+                Lt, ValVar(Undecided, "iter"), ValInt(Undecided, 10)
+              ),
+              [
+                ExprStmt(
+                  FuncCall(
+                    Undecided, "printf", [
+                      ValStr("iter: [%d]\n");
+                      ValVar(Undecided, "iter")
+                    ]
+                  )
+                );
+                AssignStmt(
+                  "iter",
+                  BinOp(
+                    Undecided,
+                    Add, ValVar(Undecided, "iter"), ValInt(Undecided, 1)
+                  )
+                )
+              ]
+            )
+          );
+          DeclStmt(
             "my_call", {mut=false}, Undecided,
             FuncCall(Undecided, "trivial", [])
           );
