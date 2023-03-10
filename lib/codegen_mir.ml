@@ -299,7 +299,10 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | BinOp({lname; t; _}, op, {lname=lhs_name; _}, {lname=rhs_name; _}) ->
+  | BinOp(
+      {lname; t; _},
+      op, {lname=lhs_name; t=lhs_t; _}, {lname=rhs_name; t=rhs_t; _}
+    ) ->
       let lhs_val =
         begin match StrMap.find_opt lhs_name func_ctxt.cur_vars with
         | Some(lhs_val) -> lhs_val
@@ -319,30 +322,23 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         end
       in
 
-      let bin_op_val = begin match t with
-      | Bool ->
-        begin match op with
-        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
-        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
-        | _ -> failwith "Non-equality binop not supported for bool"
-        end
+      let bin_op_val = begin match (lhs_t, rhs_t) with
+      | ((U8 | U16 | U32 | U64), (U8 | U16 | U32 | U64)) ->
+          begin match op with
+          | Add -> Llvm.build_add lhs_val rhs_val "uaddtmp" builder
+          | Sub -> Llvm.build_sub lhs_val rhs_val "usubtmp" builder
+          | Mul -> Llvm.build_mul lhs_val rhs_val "umultmp" builder
+          | Div -> Llvm.build_udiv lhs_val rhs_val "udivtmp" builder
+          | Mod -> Llvm.build_urem lhs_val rhs_val "uremtmp" builder
+          | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
+          | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
+          | Lt -> Llvm.build_icmp Llvm.Icmp.Ult lhs_val rhs_val "uicmptmp" builder
+          | Le -> Llvm.build_icmp Llvm.Icmp.Ule lhs_val rhs_val "uicmptmp" builder
+          | Gt -> Llvm.build_icmp Llvm.Icmp.Ugt lhs_val rhs_val "uicmptmp" builder
+          | Ge -> Llvm.build_icmp Llvm.Icmp.Uge lhs_val rhs_val "uicmptmp" builder
+          end
 
-      | U8 | U16 | U32 | U64 ->
-        begin match op with
-        | Add -> Llvm.build_add lhs_val rhs_val "uaddtmp" builder
-        | Sub -> Llvm.build_sub lhs_val rhs_val "usubtmp" builder
-        | Mul -> Llvm.build_mul lhs_val rhs_val "umultmp" builder
-        | Div -> Llvm.build_udiv lhs_val rhs_val "udivtmp" builder
-        | Mod -> Llvm.build_urem lhs_val rhs_val "uremtmp" builder
-        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
-        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
-        | Lt -> Llvm.build_icmp Llvm.Icmp.Ult lhs_val rhs_val "uicmptmp" builder
-        | Le -> Llvm.build_icmp Llvm.Icmp.Ule lhs_val rhs_val "uicmptmp" builder
-        | Gt -> Llvm.build_icmp Llvm.Icmp.Ugt lhs_val rhs_val "uicmptmp" builder
-        | Ge -> Llvm.build_icmp Llvm.Icmp.Uge lhs_val rhs_val "uicmptmp" builder
-        end
-
-      | I8 | I16 | I32 | I64 ->
+      | ((I8 | I16 | I32 | I64), (I8 | I16 | I32 | I64)) ->
         begin match op with
         | Add -> Llvm.build_add lhs_val rhs_val "iaddtmp" builder
         | Sub -> Llvm.build_sub lhs_val rhs_val "isubtmp" builder
@@ -357,7 +353,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Ge -> Llvm.build_icmp Llvm.Icmp.Sge lhs_val rhs_val "iicmptmp" builder
         end
 
-      | F128 | F64 | F32 ->
+      | ((F128 | F64 | F32), (F128 | F64 | F32)) ->
         begin match op with
         | Add -> Llvm.build_fadd lhs_val rhs_val "faddtmp" builder
         | Sub -> Llvm.build_fsub lhs_val rhs_val "fsubtmp" builder
@@ -371,10 +367,22 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Gt -> Llvm.build_fcmp Llvm.Fcmp.Ugt lhs_val rhs_val "fcmptmp" builder
         | Ge -> Llvm.build_fcmp Llvm.Fcmp.Uge lhs_val rhs_val "fcmptmp" builder
         end
-      | typ ->
+
+
+      | (Bool, Bool) ->
+        begin match op with
+        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
+        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
+        | _ -> failwith "Non-equality binop not supported for bool"
+        end
+
+      | (_, _) ->
         failwith (
           Printf.sprintf
-            "Unexpected expression type in BinOp: %s" (fmt_type typ)
+            "Unexpected expression type in BinOp: [%s]: [%s] op [%s]"
+            (fmt_type t)
+            (fmt_type lhs_t)
+            (fmt_type rhs_t)
         )
       end in
 
