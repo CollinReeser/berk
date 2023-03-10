@@ -1387,6 +1387,8 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
     | DeclStmt(lhs_name, _, t, exp) ->
         let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
 
+        (* This call does all the work of doing an alloca, storing the RHS
+        into the alloca, and associating the named LHS var with the alloca. *)
         let (mir_ctxt, bb) =
           assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval t
         in
