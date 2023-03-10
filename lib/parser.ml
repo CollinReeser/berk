@@ -245,16 +245,32 @@ and parse_stmt tokens : (token list * stmt) option =
       end
     in
 
-    begin match rest with
-    | Semicolon(_) :: rest -> Some(rest, stmt)
+    begin match (stmt, rest) with
+    (* For certain block-based expression-statements, the trailing semicolon
+    is optional. *)
+    | (
+        (
+          ExprStmt(BlockExpr(_, _, _))
+        | ExprStmt(IfThenElseExpr(_, _, _, _))
+        | ExprStmt(WhileExpr(_, _, _, _))
+        | ExprStmt(MatchExpr(_, _, _))
+        ),
+        (
+          (Semicolon(_) :: rest)
+        | rest
+        )
+      ) ->
+        Some(rest, stmt)
 
-    | tok :: _ ->
+    | (_, Semicolon(_) :: rest) -> Some(rest, stmt)
+
+    | (_, tok :: _) ->
         let fmted = fmt_token tok in
         failwith (
           Printf.sprintf
             "Unexpected token [%s] (stmt), expected `;`" fmted
         )
-    | [] -> failwith "Unexpected EOF while parsing stmt."
+    | (_, []) -> failwith "Unexpected EOF while parsing stmt."
     end
 
   with Backtrack ->
