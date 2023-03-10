@@ -734,8 +734,7 @@ let main = begin
                           )
                         )
                       );
-                    ],
-                    ValNil
+                    ]
                   )
                 );
                 ExprStmt(

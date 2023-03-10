@@ -42,7 +42,7 @@ and expr =
   (* if expr, then expr, else expr *)
   | IfThenElseExpr of berk_t * expr * expr * expr
   (* while expr, then stmts, else expr *)
-  | WhileExpr of berk_t * expr * stmt list * expr
+  | WhileExpr of berk_t * expr * stmt list
   (* A direct call to an in-scope named function. *)
   | FuncCall of berk_t * ident_t * expr list
   (* An indirect invocation of a function inside a variable. *)
@@ -123,7 +123,7 @@ let expr_type exp =
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
-  | WhileExpr(typ, _, _, _) -> typ
+  | WhileExpr(typ, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
   | VarInvoke(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
@@ -243,20 +243,18 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         (fmt_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") else_expr)
         ind
 
-  | WhileExpr (_, while_cond, then_stmts, finally_expr) ->
+  | WhileExpr (_, while_cond, then_stmts) ->
       let formatted_stmts =
         List.fold_left (^) "" (
           List.map (fmt_stmt ~print_typ:print_typ (ind ^ "  ")) then_stmts
         )
       in
 
-      Printf.sprintf "%s%swhile (%s) {\n%s%s} finally {\n%s\n%s}"
+      Printf.sprintf "%s%swhile (%s) {\n%s%s}"
         init_ind
         typ_s_rev
         (fmt_expr ~print_typ:print_typ "" while_cond)
         formatted_stmts
-        ind
-        (fmt_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") finally_expr)
         ind
 
   | FuncCall(_, id, exprs) ->
@@ -637,12 +635,11 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
 
         IfThenElseExpr(common_t, cond_exp, then_exp_injected, else_exp_injected)
 
-    | (_, WhileExpr(_, cond_expr, stmts, exp_res)) ->
-        let exp_res_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") injected_t exp_res
-        in
-
-        WhileExpr(injected_t, cond_expr, stmts, exp_res_injected)
+    | (_, WhileExpr(_, cond_expr, stmts)) ->
+        if injected_t <> Nil then
+          failwith "Type of while-expr must be nil."
+        else
+          WhileExpr(Nil, cond_expr, stmts)
 
     | (Variant(_, ctors), VariantCtorExpr(_, ctor_name, ctor_exp)) ->
         let (_, ctor_exp_t) = List.find (
@@ -1100,7 +1097,19 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         in
         MatchExpr(t, exp_match_rewritten, patt_exp_pairs_rewritten)
 
-    | WhileExpr(_, _, _, _) -> failwith "Unimplemented"
+    | WhileExpr(t, exp_cond, stmts) ->
+        let (stmts_rewritten_rev, unique_varnames) =
+          List.fold_left (
+            fun (stmts_rewritten_rev, unique_varnames) stmt ->
+              let (rewritten_stmt, unique_varnames) =
+                _rewrite_stmt stmt unique_varnames
+              in
+              (rewritten_stmt :: stmts_rewritten_rev, unique_varnames)
+          ) ([], unique_varnames) stmts
+        in
+        let stmts_rewritten = List.rev stmts_rewritten_rev in
+        let exp_cond_rewritten = _rewrite_exp exp_cond unique_varnames in
+        WhileExpr(t, exp_cond_rewritten, stmts_rewritten)
 
     end
 

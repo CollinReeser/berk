@@ -619,65 +619,26 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       resolved_val
 
-  | WhileExpr(typ, cond_expr, then_stmts, finally_expr) ->
+  | WhileExpr(_, cond_expr, then_stmts) ->
       let cur_func = func_ctxt.cur_func in
       let bb_cond = Llvm.append_block llvm_ctxt "while_cond" cur_func in
       let bb_then = Llvm.append_block llvm_ctxt "while_then" cur_func in
-      let bb_fin = Llvm.append_block llvm_ctxt "while_fin" cur_func in
       let bb_end = Llvm.append_block llvm_ctxt "while_end" cur_func in
 
-      (* Generate the core while-loop logic. *)
-      let core_while_gen maybe_do_store = begin
-        let _ = Llvm.build_br bb_cond builder in
+      let _ = Llvm.build_br bb_cond builder in
 
-        let _ = Llvm.position_at_end bb_cond builder in
-        let cond_val = _codegen_expr cond_expr in
-        let _ = Llvm.build_cond_br cond_val bb_then bb_fin builder in
+      let _ = Llvm.position_at_end bb_cond builder in
+      let cond_val = _codegen_expr cond_expr in
+      let _ = Llvm.build_cond_br cond_val bb_then bb_end builder in
 
-        let _ = Llvm.position_at_end bb_then builder in
-        let _ = codegen_stmts llvm_ctxt builder func_ctxt then_stmts in
-        let _ = Llvm.build_br bb_cond builder in
+      let _ = Llvm.position_at_end bb_then builder in
+      let _ = codegen_stmts llvm_ctxt builder func_ctxt then_stmts in
+      let _ = Llvm.build_br bb_cond builder in
 
-        let _ = Llvm.position_at_end bb_fin builder in
-        let finally_val = _codegen_expr finally_expr in
-        let _ = maybe_do_store finally_val in
-        let _ = Llvm.build_br bb_end builder in
+      let _ = Llvm.position_at_end bb_end builder in
 
-        let _ = Llvm.position_at_end bb_end builder in
-
-        ()
-      end in
-
-      (* If this while-expr yields a non-nil value, we want to ensure we yield
-      that value. Otherwise, if this while-expr is ultimately nil, we want to
-      avoid attempting to store an undef value into any alloca. *)
-      let resolved_val = begin match typ with
-        | Nil ->
-            let no_store _ = () in
-
-            let () = core_while_gen no_store in
-            let nil_val = _codegen_expr ValNil in
-
-            nil_val
-
-        | _ ->
-            let alloca_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t typ in
-            let alloca =
-              Llvm.build_alloca alloca_typ while_expr_alloc_name builder
-            in
-
-            let do_store llvm_val = begin
-              let _ : Llvm.llvalue = Llvm.build_store llvm_val alloca builder in
-              ()
-            end in
-
-            let _ = core_while_gen do_store in
-            let loaded = Llvm.build_load alloca while_expr_alloc_name builder in
-
-            loaded
-      end in
-
-      resolved_val
+      let nil_val = _codegen_expr ValNil in
+      nil_val
 
   | FuncCall(typ, ident, exprs) ->
       let llvm_func_val = StrMap.find ident func_ctxt.mod_ctxt.func_sigs in

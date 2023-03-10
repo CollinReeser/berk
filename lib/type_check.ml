@@ -135,10 +135,9 @@ and is_concrete_expr ?(verbose=false) expr =
         (_is_concrete_expr expr) &&
         (List.fold_left (&&) true (List.map _is_concrete_stmt stmts))
 
-  | WhileExpr(typ, expr_1, stmts, expr_2) ->
+  | WhileExpr(typ, exp_cond, stmts) ->
       (_is_concrete_type typ) &&
-        (_is_concrete_expr expr_1) &&
-        (_is_concrete_expr expr_2) &&
+        (_is_concrete_expr exp_cond) &&
         (List.fold_left (&&) true (List.map _is_concrete_stmt stmts))
 
   | ArrayExpr(typ, exprs)
@@ -779,14 +778,11 @@ and type_check_expr
           else_expr_typechecked
         )
 
-    | WhileExpr(_, while_cond, then_stmts, finally_expr) ->
+    | WhileExpr(_, while_cond, then_stmts) ->
         let while_cond_typechecked = _type_check_expr while_cond in
         let while_cond_t = expr_type while_cond_typechecked in
 
         let (_, then_stmts_typechecked) = type_check_stmts tc_ctxt then_stmts in
-
-        let finally_expr_typechecked = _type_check_expr finally_expr in
-        let finally_expr_t = expr_type finally_expr_typechecked in
 
         let _ = match while_cond_t with
         | Bool -> ()
@@ -794,10 +790,9 @@ and type_check_expr
         in
 
         WhileExpr(
-          finally_expr_t,
+          Nil,
           while_cond_typechecked,
-          then_stmts_typechecked,
-          finally_expr_typechecked
+          then_stmts_typechecked
         )
 
     | FuncCall(_, f_name, exprs) ->

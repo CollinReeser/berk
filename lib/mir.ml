@@ -981,7 +981,62 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb_end, match_res_lval)
 
-      | WhileExpr(_, _, _, _)
+      | WhileExpr(Nil, cond_expr, then_stmts) ->
+          let (mir_ctxt, cond_bb_name) = get_bbname mir_ctxt in
+          let (mir_ctxt, then_bb_name) = get_bbname mir_ctxt in
+          let (mir_ctxt, end_bb_name) = get_bbname mir_ctxt in
+          let cond_bb = {name=cond_bb_name; instrs=[]} in
+          let then_bb = {name=then_bb_name; instrs=[]} in
+          let end_bb = {name=end_bb_name; instrs=[]} in
+
+          (* Branch from the pre-while bb to the cond bb. *)
+          let bb = {bb with instrs = bb.instrs @ [Br(cond_bb)]} in
+
+          (* Evaluate the condition expression, decide whether to branch into
+          the body of the while, or to the end of the while. *)
+
+          let (mir_ctxt, cond_bb, cond_lval) =
+            _expr_to_mir mir_ctxt cond_bb cond_expr
+          in
+
+          let cond_br = CondBr(cond_lval, then_bb, end_bb) in
+          let cond_bb = {cond_bb with instrs = cond_bb.instrs @ [cond_br]} in
+
+          (* Evaluate the body of the while. *)
+
+          let (mir_ctxt, then_bb) =
+            List.fold_left (
+              fun (mir_ctxt, then_bb) stmt -> stmt_to_mir mir_ctxt then_bb stmt
+            ) (mir_ctxt, then_bb) then_stmts
+          in
+
+          (* Branch from the end of the body of the while back to the
+          conditional. *)
+          let then_bb = {
+            then_bb with instrs = then_bb.instrs @ [Br(cond_bb)]
+          } in
+
+          (* The overall while loop evaluates to Nil.
+
+          TODO: Eventually, it will be possible to yield non-nil values from
+          while loops, with syntax/semantics updates. *)
+          let (mir_ctxt, end_bb, nil_lval) =
+            _expr_to_mir mir_ctxt end_bb ValNil
+          in
+
+          (* Update the MIR context with our updated versions of the basic
+          blocks. *)
+          let (mir_ctxt, _) =
+            List.fold_left_map (
+              fun mir_ctxt bb -> (update_bb mir_ctxt bb, ())
+            ) mir_ctxt [bb; cond_bb; then_bb; end_bb]
+          in
+
+          (mir_ctxt, end_bb, nil_lval)
+
+      | WhileExpr(_, _, _) ->
+          failwith "Unimplemented: while-expr yielding non-nil"
+
       | IndexExpr(_, _, _) ->
           failwith "Unimplemented"
     end in

@@ -252,7 +252,7 @@ and parse_stmt tokens : (token list * stmt) option =
         (
           ExprStmt(BlockExpr(_, _, _))
         | ExprStmt(IfThenElseExpr(_, _, _, _))
-        | ExprStmt(WhileExpr(_, _, _, _))
+        | ExprStmt(WhileExpr(_, _, _))
         | ExprStmt(MatchExpr(_, _, _))
         ),
         (
