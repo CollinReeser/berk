@@ -32,6 +32,13 @@ let () =
       let fib_res := fib(50);
       printf(my_str, var, fib_res);
 
+      let mut iter := 0;
+      while iter < 16 {
+        printf("iter: %d\n", iter);
+
+        iter = iter + 1;
+      }
+
       return 0;
     }
   |} in
@@ -45,7 +52,7 @@ let () =
   print_tokens tokens ;
 
   (* Parsing into module-declaration AST list. *)
-  let mod_decls = parse_tokens tokens in
+  let mod_decls = parse_tokens ~trace:true tokens in
 
   (* Currently require declaration before use, but we build a list of module
   declarations in reverse order. *)

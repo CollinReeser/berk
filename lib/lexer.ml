@@ -11,6 +11,7 @@ type token =
 | KWReturn of position
 | KWIf of position
 | KWElse of position
+| KWWhile of position
 | KWi8 of position
 | KWi16 of position
 | KWi32 of position
@@ -28,7 +29,12 @@ type token =
 | ColonEqual of position
 | Colon of position
 | EqualEqual of position
+| BangEqual of position
 | Equal of position
+| LessEqual of position
+| Lesser of position
+| GreatEqual of position
+| Greater of position
 | Semicolon of position
 | TriEllipses of position
 | BiEllipses of position
@@ -91,6 +97,7 @@ let fmt_token tok =
   | KWReturn(p)    -> Printf.sprintf "return (kw)    : %s"   (fmt_pos p)
   | KWIf(p)        -> Printf.sprintf "if     (kw)    : %s"   (fmt_pos p)
   | KWElse(p)      -> Printf.sprintf "else   (kw)    : %s"   (fmt_pos p)
+  | KWWhile(p)     -> Printf.sprintf "while  (kw)    : %s"   (fmt_pos p)
   | KWi8(p)        -> Printf.sprintf "i8     (kw)    : %s"   (fmt_pos p)
   | KWi16(p)       -> Printf.sprintf "i16    (kw)    : %s"   (fmt_pos p)
   | KWi32(p)       -> Printf.sprintf "i32    (kw)    : %s"   (fmt_pos p)
@@ -108,7 +115,12 @@ let fmt_token tok =
   | ColonEqual(p)  -> Printf.sprintf ":=  (syn)      : %s"   (fmt_pos p)
   | Colon(p)       -> Printf.sprintf ":   (syn)      : %s"   (fmt_pos p)
   | EqualEqual(p)  -> Printf.sprintf "==  (syn)      : %s"   (fmt_pos p)
+  | BangEqual(p)   -> Printf.sprintf "!=  (syn)      : %s"   (fmt_pos p)
   | Equal(p)       -> Printf.sprintf "=   (syn)      : %s"   (fmt_pos p)
+  | LessEqual(p)   -> Printf.sprintf "<=  (syn)      : %s"   (fmt_pos p)
+  | Lesser(p)      -> Printf.sprintf "<   (syn)      : %s"   (fmt_pos p)
+  | GreatEqual(p)  -> Printf.sprintf "<=  (syn)      : %s"   (fmt_pos p)
+  | Greater(p)     -> Printf.sprintf ">   (syn)      : %s"   (fmt_pos p)
   | Semicolon(p)   -> Printf.sprintf ";   (syn)      : %s"   (fmt_pos p)
   | TriEllipses(p) -> Printf.sprintf "... (syn)      : %s"   (fmt_pos p)
   | BiEllipses(p)  -> Printf.sprintf "..  (syn)      : %s"   (fmt_pos p)
@@ -185,6 +197,9 @@ let tokenize buf =
     | "else" ->
         let tok = KWElse(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "while" ->
+        let tok = KWWhile(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "i8" ->
         let tok = KWi8(get_pos buf) in
         _tokenize buf (tok :: tokens)
@@ -239,8 +254,23 @@ let tokenize buf =
     | "==" ->
         let tok = EqualEqual(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "!=" ->
+        let tok = BangEqual(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "=" ->
         let tok = Equal(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "<" ->
+        let tok = Lesser(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "<=" ->
+        let tok = LessEqual(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | ">" ->
+        let tok = Greater(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | ">=" ->
+        let tok = GreatEqual(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | ";" ->
         let tok = Semicolon(get_pos buf) in

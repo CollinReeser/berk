@@ -7,17 +7,27 @@ open Typing
 exception Backtrack
 
 
-let rec parse_tokens tokens : module_decl list =
+let rec parse_tokens ?(trace=false) tokens : module_decl list =
+  let _ = begin
+    if trace then
+      begin
+        Printf.printf "Parsing: [%s] with [%s]\n"
+          __FUNCTION__ (fmt_next_token tokens) ;
+        ()
+      end
+    else ()
+  end in
+
   let rec _parse_tokens tokens mod_decls_so_far =
     begin match tokens with
     | [] -> mod_decls_so_far
 
     | KWExtern(_) :: rest ->
-        let (rest, mod_decl) = parse_extern rest in
+        let (rest, mod_decl) = parse_extern ~ind:" " rest in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
     | KWFn(_) :: rest ->
-        let (rest, func_def) = parse_func rest in
+        let (rest, func_def) = parse_func ~ind:" " rest in
         let mod_decl = FuncDef(func_def) in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
@@ -33,10 +43,20 @@ let rec parse_tokens tokens : module_decl list =
   _parse_tokens tokens []
 
 
-and parse_extern tokens : (token list * module_decl) =
+and parse_extern ?(ind="") tokens : (token list * module_decl) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | KWFn(_) :: rest ->
-      let (rest, f_decl) = parse_func_decl rest in
+      let (rest, f_decl) = parse_func_decl ~ind:ind_next rest in
       (rest, FuncExternDecl(f_decl))
 
   | tok :: _ ->
@@ -49,14 +69,24 @@ and parse_extern tokens : (token list * module_decl) =
   end
 
 
-and parse_func_decl tokens : (token list * func_decl_t) =
+and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | LowIdent(_, f_name) :: LParen(_) :: rest ->
-      let (rest, f_params) = parse_func_params rest in
+      let (rest, f_params) = parse_func_params ~ind:ind_next rest in
 
       begin match rest with
       | Colon(_) :: rest ->
-          let (rest, f_ret_t) = parse_type rest in
+          let (rest, f_ret_t) = parse_type ~ind:ind_next rest in
           (
             rest, {
               f_name=f_name;
@@ -83,28 +113,71 @@ and parse_func_decl tokens : (token list * func_decl_t) =
   end
 
 
-and parse_func_params tokens : (token list * f_param list) =
-  let rec _parse_func_params tokens params_so_far =
-    begin match tokens with
-    | RParen(_) :: rest ->
-        (rest, params_so_far)
+and parse_func_params ?(ind="") tokens : (token list * f_param list) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
 
+  let parse_func_param ?(ind="") tokens params_so_far =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    let (rest, qual) = parse_var_qual ~ind:ind_next tokens in
+
+    begin match rest with
     | LowIdent(_, p_name) :: Colon(_) :: rest ->
-        let (rest, qual, t) = parse_qualed_type rest in
-
+        let (rest, t) = parse_type ~ind:ind_next rest in
         let param = (p_name, qual, t) in
         let params_so_far = params_so_far @ [param] in
 
-        begin match rest with
-        | Comma(_) :: rest -> _parse_func_params rest params_so_far
-        | _ -> _parse_func_params rest params_so_far
-        end
+        (rest, params_so_far)
 
     | TriEllipses(_) :: rest ->
-        let param = ("vargs", {mut=false}, VarArgSentinel) in
+        let param = ("vargs", qual, VarArgSentinel) in
         let params_so_far = params_so_far @ [param] in
 
-        _parse_func_params rest params_so_far
+        (rest, params_so_far)
+
+    | _ :: _ -> (rest, params_so_far)
+
+    | [] -> failwith "Unexpected EOF while parsing `fn` param declaration."
+    end
+  in
+
+  let rec _parse_func_params ?(ind="") tokens params_so_far =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    let (rest, params_so_far) =
+      parse_func_param ~ind:ind_next tokens params_so_far
+    in
+
+    begin match rest with
+    | RParen(_) :: rest ->
+        (rest, params_so_far)
+
+    | Comma(_) :: rest ->
+        _parse_func_params ~ind:ind_next rest params_so_far
 
     | tok :: _ ->
         let fmted = fmt_token tok in
@@ -116,22 +189,20 @@ and parse_func_params tokens : (token list * f_param list) =
     end
   in
 
-  _parse_func_params tokens []
+  _parse_func_params ~ind:ind_next tokens []
 
 
-and parse_qualed_type tokens : (token list * var_qual * berk_t) =
-  begin match tokens with
-  | KWMut(_) :: rest ->
-      let (rest, t) = parse_type rest in
-      (rest, {mut=true}, t)
+and parse_type ?(ind="") tokens : (token list * berk_t) =
+  let _ = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
 
-  | _ ->
-      let (rest, t) = parse_type tokens in
-      (rest, {mut=false}, t)
-  end
-
-
-and parse_type tokens : (token list * berk_t) =
   begin match tokens with
   | KWi8(_)  :: rest -> (rest, I8)
   | KWi16(_) :: rest -> (rest, I16)
@@ -152,9 +223,19 @@ and parse_type tokens : (token list * berk_t) =
   end
 
 
-and parse_func tokens : (token list * func_def_t) =
-  let (rest, f_decl) = parse_func_decl tokens in
-  let (rest, f_stmts) = parse_stmt_block rest in
+and parse_func ?(ind="") tokens : (token list * func_def_t) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let (rest, f_decl) = parse_func_decl ~ind:ind_next tokens in
+  let (rest, f_stmts) = parse_stmt_block ~ind:ind_next rest in
 
   (
     rest, {
@@ -164,10 +245,20 @@ and parse_func tokens : (token list * func_def_t) =
   )
 
 
-and parse_stmt_block tokens : (token list * stmt list) =
+and parse_stmt_block ?(ind="") tokens : (token list * stmt list) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | LBrace(_) :: rest ->
-      let (rest, stmts) = parse_stmts rest in
+      let (rest, stmts) = parse_stmts ~ind:ind_next rest in
 
       begin match rest with
       | RBrace(_) :: rest -> (rest, stmts)
@@ -191,12 +282,22 @@ and parse_stmt_block tokens : (token list * stmt list) =
   end
 
 
-and parse_expr_block tokens : (token list * expr) =
+and parse_expr_block ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | LBrace(_) :: rest ->
-      let (rest, stmts) = parse_stmts rest in
+      let (rest, stmts) = parse_stmts ~ind:ind_next rest in
       let (rest, exp) = begin
-        try parse_expr rest
+        try parse_expr ~ind:ind_next rest
         with Backtrack ->
         (rest, ValNil)
       end in
@@ -217,31 +318,64 @@ and parse_expr_block tokens : (token list * expr) =
   end
 
 
-and parse_stmts tokens : (token list * stmt list) =
-  let rec _parse_stmts tokens stmts_so_far =
-    begin match (parse_stmt tokens) with
-    | Some((rest, stmt)) -> _parse_stmts rest (stmts_so_far @ [stmt])
-    | None -> (tokens, stmts_so_far)
+and parse_stmts ?(ind="") tokens : (token list * stmt list) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let rec _parse_stmts ?(ind="") tokens stmts_so_far =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match (parse_stmt ~ind:ind_next tokens) with
+    | Some((rest, stmt)) ->
+        _parse_stmts ~ind:ind_next rest (stmts_so_far @ [stmt])
+
+    | None ->
+        (tokens, stmts_so_far)
     end
   in
 
-  _parse_stmts tokens []
+  _parse_stmts ~ind:ind_next tokens []
 
 
-and parse_stmt tokens : (token list * stmt) option =
+and parse_stmt ?(ind="") tokens : (token list * stmt) option =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   try
     let (rest, stmt) =
       begin match tokens with
-      | KWLet(_) :: rest -> parse_decl_stmt rest
+      | KWLet(_) :: rest -> parse_decl_stmt ~ind:ind_next rest
 
       | KWReturn(_) :: rest ->
-          let (rest, exp) = parse_expr rest in
+          let (rest, exp) = parse_expr ~ind:ind_next rest in
           (rest, ReturnStmt(exp))
 
       | _ ->
-          try parse_assign_stmt tokens
+          try parse_assign_stmt ~ind:ind_next tokens
           with Backtrack ->
-          parse_expr_stmt tokens
+          parse_expr_stmt ~ind:ind_next tokens
       end
     in
 
@@ -264,12 +398,8 @@ and parse_stmt tokens : (token list * stmt) option =
 
     | (_, Semicolon(_) :: rest) -> Some(rest, stmt)
 
-    | (_, tok :: _) ->
-        let fmted = fmt_token tok in
-        failwith (
-          Printf.sprintf
-            "Unexpected token [%s] (stmt), expected `;`" fmted
-        )
+    | (_, _ :: _) -> None
+
     | (_, []) -> failwith "Unexpected EOF while parsing stmt."
     end
 
@@ -277,15 +407,47 @@ and parse_stmt tokens : (token list * stmt) option =
     None
 
 
-and parse_decl_stmt tokens : (token list * stmt) =
+and parse_var_qual ?(ind="") tokens : (token list * var_qual) =
+  let _ = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
+  | KWMut(_) :: rest -> (rest, {mut=true})
+
+  | (_ :: _) as rest -> (rest, {mut=false})
+
+  | [] -> failwith "Unexpected EOF while parsing let declaration."
+  end
+
+
+and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let (rest, qual) = parse_var_qual ~ind:ind_next tokens in
+
+  begin match rest with
   | LowIdent(_, name) :: ColonEqual(_) :: rest ->
-      let (rest, exp) = parse_expr rest in
-      (rest, DeclStmt(name, {mut=false}, Undecided, exp))
+      let (rest, exp) = parse_expr ~ind:ind_next rest in
+      (rest, DeclStmt(name, qual, Undecided, exp))
 
   | LowIdent(_, name) :: Colon(_) :: rest ->
-      let (rest, qual, t) = parse_qualed_type rest in
-      let (rest, exp) = parse_expr rest in
+      let (rest, t) = parse_type ~ind:ind_next rest in
+      let (rest, exp) = parse_expr ~ind:ind_next rest in
       (rest, DeclStmt(name, qual, t, exp))
 
   (* TODO: Extend to recognize DeclDeconStmt *)
@@ -300,10 +462,20 @@ and parse_decl_stmt tokens : (token list * stmt) =
   end
 
 
-and parse_assign_stmt tokens : (token list * stmt) =
+and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | LowIdent(_, name) :: Equal(_) :: rest ->
-      let (rest, exp) = parse_expr rest in
+      let (rest, exp) = parse_expr ~ind:ind_next rest in
       (rest, AssignStmt(name, exp))
 
   (* TODO: Extend to recognize AssignDeconStmt *)
@@ -312,107 +484,257 @@ and parse_assign_stmt tokens : (token list * stmt) =
   end
 
 
-and parse_expr_stmt tokens : (token list * stmt) =
-  let (rest, exp) = parse_expr tokens in
+and parse_expr_stmt ?(ind="") tokens : (token list * stmt) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let (rest, exp) = parse_expr ~ind:ind_next tokens in
   (rest, ExprStmt(exp))
 
 
-and parse_expr tokens : (token list * expr) =
-  let (rest, exp) = parse_sum tokens in
+and parse_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let (rest, exp) = parse_sum ~ind:ind_next tokens in
   (rest, exp)
 
 
-and parse_sum tokens : (token list * expr) =
-  let rec _parse_sum tokens exp_lhs =
+and parse_sum ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let rec _parse_sum ?(ind="") tokens exp_lhs =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
     begin match tokens with
     | Plus(_) :: rest ->
-        let (rest, exp_rhs) = parse_prod rest in
+        let (rest, exp_rhs) = parse_prod ~ind:ind_next rest in
         let exp = BinOp(Undecided, Add, exp_lhs, exp_rhs) in
-        _parse_sum rest exp
+        _parse_sum ~ind:ind_next rest exp
 
     | Minus(_) :: rest ->
-        let (rest, exp_rhs) = parse_prod rest in
+        let (rest, exp_rhs) = parse_prod ~ind:ind_next rest in
         let exp = BinOp(Undecided, Sub, exp_lhs, exp_rhs) in
-        _parse_sum rest exp
+        _parse_sum ~ind:ind_next rest exp
 
     | _ -> (tokens, exp_lhs)
     end
   in
 
-  let (rest, exp_lhs) = parse_prod tokens in
-  _parse_sum rest exp_lhs
+  let (rest, exp_lhs) = parse_prod ~ind:ind_next tokens in
+  _parse_sum ~ind:ind_next rest exp_lhs
 
 
-and parse_prod tokens : (token list * expr) =
-  let rec _parse_prod tokens exp_lhs =
+and parse_prod ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let rec _parse_prod ?(ind="") tokens exp_lhs =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
     begin match tokens with
     | Star(_) :: rest ->
-        let (rest, exp_rhs) = parse_equality rest in
+        let (rest, exp_rhs) = parse_equality ~ind:ind_next rest in
         let exp = BinOp(Undecided, Mul, exp_lhs, exp_rhs) in
-        _parse_prod rest exp
+        _parse_prod ~ind:ind_next rest exp
 
     | Slash(_) :: rest ->
-        let (rest, exp_rhs) = parse_equality rest in
+        let (rest, exp_rhs) = parse_equality ~ind:ind_next rest in
         let exp = BinOp(Undecided, Div, exp_lhs, exp_rhs) in
-        _parse_prod rest exp
+        _parse_prod ~ind:ind_next rest exp
 
     | _ -> (tokens, exp_lhs)
     end
   in
 
-  let (rest, exp_lhs) = parse_equality tokens in
-  _parse_prod rest exp_lhs
+  let (rest, exp_lhs) = parse_equality ~ind:ind_next tokens in
+  _parse_prod ~ind:ind_next rest exp_lhs
 
 
-and parse_equality tokens : (token list * expr) =
-  let rec _parse_equality tokens exp_lhs =
+and parse_equality ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let rec _parse_equality ?(ind="") tokens exp_lhs =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
     begin match tokens with
     | EqualEqual(_) :: rest ->
-        let (rest, exp_rhs) = parse_value rest in
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
         let exp = BinOp(Undecided, Eq, exp_lhs, exp_rhs) in
-        _parse_equality rest exp
+        _parse_equality ~ind:ind_next rest exp
+
+    | BangEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Ne, exp_lhs, exp_rhs) in
+        _parse_equality ~ind:ind_next rest exp
+
+    | Lesser(_) :: rest ->
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Lt, exp_lhs, exp_rhs) in
+        _parse_equality ~ind:ind_next rest exp
+
+    | LessEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Le, exp_lhs, exp_rhs) in
+        _parse_equality ~ind:ind_next rest exp
+
+    | Greater(_) :: rest ->
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Gt, exp_lhs, exp_rhs) in
+        _parse_equality ~ind:ind_next rest exp
+
+    | GreatEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Ge, exp_lhs, exp_rhs) in
+        _parse_equality ~ind:ind_next rest exp
 
     | _ -> (tokens, exp_lhs)
     end
   in
 
-  let (rest, exp_lhs) = parse_value tokens in
-  _parse_equality rest exp_lhs
+  let (rest, exp_lhs) = parse_value ~ind:ind_next tokens in
+  _parse_equality ~ind:ind_next rest exp_lhs
 
 
-and parse_value tokens : (token list * expr) =
+and parse_value ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin
-    try parse_if_expr tokens
+    try parse_if_expr ~ind:ind_next tokens
     with Backtrack ->
-    try parse_expr_block tokens
+    try parse_while_expr ~ind:ind_next tokens
     with Backtrack ->
-    try parse_func_call tokens
+    try parse_expr_block ~ind:ind_next tokens
     with Backtrack ->
-    parse_expr_atom tokens
+    try parse_func_call ~ind:ind_next tokens
+    with Backtrack ->
+    parse_expr_atom ~ind:ind_next tokens
   end
 
 
-and parse_func_call tokens : (token list * expr) =
+and parse_func_call ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | LowIdent(_, f_name) :: LParen(_) :: RParen(_) :: rest ->
       (rest, FuncCall(Undecided, f_name, []))
 
   | LowIdent(_, f_name) :: LParen(_) :: rest ->
-      let (rest, exps) = parse_func_call_args rest in
+      let (rest, exps) = parse_func_call_args ~ind:ind_next rest in
       (rest, FuncCall(Undecided, f_name, exps))
 
   | _ -> raise Backtrack
   end
 
 
-and parse_func_call_args tokens : (token list * expr list) =
-  let rec _parse_func_call_args tokens exps_so_far : (token list * expr list) =
-    let (rest, exp) = parse_expr tokens in
+and parse_func_call_args ?(ind="") tokens : (token list * expr list) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let rec _parse_func_call_args ?(ind="") tokens exps_so_far =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    let (rest, exp) = parse_expr ~ind:ind_next tokens in
     let exps_so_far = exps_so_far @ [exp] in
 
     begin match rest with
-    | RParen(_) :: rest -> (rest, exps_so_far)
-    | Comma(_) :: rest -> _parse_func_call_args rest exps_so_far
+    | RParen(_) :: rest ->
+        (rest, exps_so_far)
+
+    | Comma(_) :: rest ->
+        _parse_func_call_args ~ind:ind_next rest exps_so_far
 
     | tok :: _ ->
         let fmted = fmt_token tok in
@@ -424,21 +746,31 @@ and parse_func_call_args tokens : (token list * expr list) =
     end
   in
 
-  _parse_func_call_args tokens []
+  _parse_func_call_args ~ind:ind_next tokens []
 
 
-and parse_if_expr tokens : (token list * expr) =
+and parse_if_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | KWIf(_) :: LParen(_) :: rest ->
-      let (rest, cond_exp) = parse_expr rest in
+      let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
 
       begin match rest with
       | RParen(_) :: rest ->
-          let (rest, then_exp) = parse_expr_block rest in
+          let (rest, then_exp) = parse_expr_block ~ind:ind_next rest in
 
           begin match rest with
           | KWElse(_) :: rest ->
-              let (rest, else_exp) = parse_expr_block rest in
+              let (rest, else_exp) = parse_expr_block ~ind:ind_next rest in
               (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, else_exp))
 
           | _ :: _ ->
@@ -461,7 +793,41 @@ and parse_if_expr tokens : (token list * expr) =
   end
 
 
-and parse_expr_atom tokens : (token list * expr) =
+and parse_while_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  begin match tokens with
+  | KWWhile(_) :: rest ->
+      let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
+
+      let (rest, loop_exp) = parse_stmt_block ~ind:ind_next rest in
+
+      (rest, WhileExpr(Undecided, cond_exp, loop_exp))
+
+  | _ ->
+      raise Backtrack
+  end
+
+
+and parse_expr_atom ?(ind="") tokens : (token list * expr) =
+  let _ = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
   begin match tokens with
   | Integer(_, num) :: rest -> (rest, ValInt(Undecided, num))
   | String(_, str) :: rest -> (rest, ValStr(str))
