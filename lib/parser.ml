@@ -447,8 +447,20 @@ and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
 
   | LowIdent(_, name) :: Colon(_) :: rest ->
       let (rest, t) = parse_type ~ind:ind_next rest in
-      let (rest, exp) = parse_expr ~ind:ind_next rest in
-      (rest, DeclStmt(name, qual, t, exp))
+
+      begin match rest with
+      | Equal(_) :: rest ->
+          let (rest, exp) = parse_expr ~ind:ind_next rest in
+          (rest, DeclStmt(name, qual, t, exp))
+
+      | tok :: _ ->
+          let fmted = fmt_token tok in
+          failwith (
+            Printf.sprintf
+              "Unexpected token [%s] (decl_stmt), expected `=`" fmted
+          )
+      | [] -> failwith "Unexpected EOF while parsing let declaration."
+      end
 
   (* TODO: Extend to recognize DeclDeconStmt *)
 

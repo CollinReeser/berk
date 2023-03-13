@@ -32,7 +32,7 @@ let () =
       let fib_res := fib(50);
       printf(my_str, var, fib_res);
 
-      let mut iter := 0;
+      let mut iter: u32 = 0;
       while iter < 16 {
         printf("iter: %d\n", iter);
 
