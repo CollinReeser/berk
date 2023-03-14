@@ -441,7 +441,7 @@ and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
   let (rest, qual) = parse_var_qual ~ind:ind_next tokens in
 
   begin match rest with
-  | LowIdent(_, name) :: ColonEqual(_) :: rest ->
+  | LowIdent(_, name) :: Equal(_) :: rest ->
       let (rest, exp) = parse_expr ~ind:ind_next rest in
       (rest, DeclStmt(name, qual, Undecided, exp))
 

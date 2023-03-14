@@ -27,9 +27,10 @@ let () =
     }
 
     fn main(): i8 {
-      let my_str := "Hello, world! [%d] [%llu]\n";
-      let var := 6 + 7 * 8 - ret_int();
-      let fib_res := fib(50);
+      let my_str = "Hello, world! [%d] [%llu]\n";
+      let var = 6 + 7 * 8 - ret_int();
+      let var2: i32 = 6 + 7 * 8 - ret_int();
+      let fib_res = fib(50);
       printf(my_str, var, fib_res);
 
       let mut iter: u32 = 0;
