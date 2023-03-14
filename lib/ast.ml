@@ -41,8 +41,8 @@ and expr =
   | BlockExpr of berk_t * stmt list * expr
   (* if expr, then expr, else expr *)
   | IfThenElseExpr of berk_t * expr * expr * expr
-  (* while expr, then stmts, else expr *)
-  | WhileExpr of berk_t * expr * stmt list
+  (* while expr, init stmts, cond expr, then stmts *)
+  | WhileExpr of berk_t * stmt list * expr * stmt list
   (* A direct call to an in-scope named function. *)
   | FuncCall of berk_t * ident_t * expr list
   (* An indirect invocation of a function inside a variable. *)
@@ -123,7 +123,7 @@ let expr_type exp =
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
-  | WhileExpr(typ, _, _) -> typ
+  | WhileExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
   | VarInvoke(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
@@ -243,18 +243,33 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         (fmt_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") else_expr)
         ind
 
-  | WhileExpr (_, while_cond, then_stmts) ->
-      let formatted_stmts =
+  | WhileExpr (_, init_stmts, while_cond, then_stmts) ->
+      let formatted_init_stmts = begin
+        let (open_brace, close_brace) =
+          if List.length init_stmts = 1
+          then ("{ ", " } in ")
+          else ("{\n", Printf.sprintf "%s} in " ind)
+        in
+        let formatted_stmts =
+          List.fold_left (^) "" (
+            List.map (fmt_stmt ~print_typ:print_typ (ind ^ "  ")) init_stmts
+          )
+        in
+        Printf.sprintf "%s%s%s" open_brace formatted_stmts close_brace
+      end in
+
+      let formatted_then_stmts =
         List.fold_left (^) "" (
           List.map (fmt_stmt ~print_typ:print_typ (ind ^ "  ")) then_stmts
         )
       in
 
-      Printf.sprintf "%s%swhile (%s) {\n%s%s}"
+      Printf.sprintf "%s%swhile %s%s {\n%s%s}"
         init_ind
         typ_s_rev
+        formatted_init_stmts
         (fmt_expr ~print_typ:print_typ "" while_cond)
-        formatted_stmts
+        formatted_then_stmts
         ind
 
   | FuncCall(_, id, exprs) ->
@@ -635,11 +650,11 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
 
         IfThenElseExpr(common_t, cond_exp, then_exp_injected, else_exp_injected)
 
-    | (_, WhileExpr(_, cond_expr, stmts)) ->
+    | (_, WhileExpr(_, init_stmts, cond_expr, stmts)) ->
         if injected_t <> Nil then
           failwith "Type of while-expr must be nil."
         else
-          WhileExpr(Nil, cond_expr, stmts)
+          WhileExpr(Nil, init_stmts, cond_expr, stmts)
 
     | (Variant(_, ctors), VariantCtorExpr(_, ctor_name, ctor_exp)) ->
         let (_, ctor_exp_t) = List.find (
@@ -1097,19 +1112,30 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         in
         MatchExpr(t, exp_match_rewritten, patt_exp_pairs_rewritten)
 
-    | WhileExpr(t, exp_cond, stmts) ->
-        let (stmts_rewritten_rev, unique_varnames) =
+    | WhileExpr(t, init_stmts, exp_cond, then_stmts) ->
+        let rewrite_stmts varnames stmts =
           List.fold_left (
-            fun (stmts_rewritten_rev, unique_varnames) stmt ->
-              let (rewritten_stmt, unique_varnames) =
-                _rewrite_stmt stmt unique_varnames
+            fun (stmts_rewritten_rev, varnames) stmt ->
+              let (rewritten_stmt, varnames) =
+                _rewrite_stmt stmt varnames
               in
-              (rewritten_stmt :: stmts_rewritten_rev, unique_varnames)
-          ) ([], unique_varnames) stmts
+              (rewritten_stmt :: stmts_rewritten_rev, varnames)
+          ) ([], varnames) stmts
         in
-        let stmts_rewritten = List.rev stmts_rewritten_rev in
+
+        let (init_stmts_rewritten_rev, unique_varnames) =
+          rewrite_stmts unique_varnames init_stmts
+        in
+        let (then_stmts_rewritten_rev, unique_varnames) =
+          rewrite_stmts unique_varnames then_stmts
+        in
+
+        let init_stmts_rewritten = List.rev init_stmts_rewritten_rev in
+        let then_stmts_rewritten = List.rev then_stmts_rewritten_rev in
         let exp_cond_rewritten = _rewrite_exp exp_cond unique_varnames in
-        WhileExpr(t, exp_cond_rewritten, stmts_rewritten)
+        WhileExpr(
+          t, init_stmts_rewritten, exp_cond_rewritten, then_stmts_rewritten
+        )
 
     end
 

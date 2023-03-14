@@ -386,7 +386,7 @@ and parse_stmt ?(ind="") tokens : (token list * stmt) option =
         (
           ExprStmt(BlockExpr(_, _, _))
         | ExprStmt(IfThenElseExpr(_, _, _, _))
-        | ExprStmt(WhileExpr(_, _, _))
+        | ExprStmt(WhileExpr(_, _, _, _))
         | ExprStmt(MatchExpr(_, _, _))
         ),
         (
@@ -817,12 +817,27 @@ and parse_while_expr ?(ind="") tokens : (token list * expr) =
   end in
 
   begin match tokens with
-  | KWWhile(_) :: rest ->
-      let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
+  | KWWhile(_) :: LBrace(_) :: rest ->
+      (* `while { <stmts> } <cond-expr> { <stmts> }` *)
+      let (rest, init_stmts) = parse_stmts ~ind:ind_next rest in
 
+      begin match rest with
+      | RBrace(_) :: rest ->
+          let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
+          let (rest, loop_exp) = parse_stmt_block ~ind:ind_next rest in
+
+          (rest, WhileExpr(Undecided, init_stmts, cond_exp, loop_exp))
+
+      | _ ->
+          failwith "Could not find matching `}` in while-expr init-stmts"
+      end
+
+  | KWWhile(_) :: rest ->
+      (* `while <cond-expr> { <stmts> }` *)
+      let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
       let (rest, loop_exp) = parse_stmt_block ~ind:ind_next rest in
 
-      (rest, WhileExpr(Undecided, cond_exp, loop_exp))
+      (rest, WhileExpr(Undecided, [], cond_exp, loop_exp))
 
   | _ ->
       raise Backtrack

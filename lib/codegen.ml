@@ -619,12 +619,17 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       resolved_val
 
-  | WhileExpr(_, cond_expr, then_stmts) ->
+  | WhileExpr(_, init_stmts, cond_expr, then_stmts) ->
       let cur_func = func_ctxt.cur_func in
+      let bb_init = Llvm.append_block llvm_ctxt "while_init" cur_func in
       let bb_cond = Llvm.append_block llvm_ctxt "while_cond" cur_func in
       let bb_then = Llvm.append_block llvm_ctxt "while_then" cur_func in
       let bb_end = Llvm.append_block llvm_ctxt "while_end" cur_func in
 
+      let _ = Llvm.build_br bb_init builder in
+
+      let _ = Llvm.position_at_end bb_init builder in
+      let _ = codegen_stmts llvm_ctxt builder func_ctxt init_stmts in
       let _ = Llvm.build_br bb_cond builder in
 
       let _ = Llvm.position_at_end bb_cond builder in

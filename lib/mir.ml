@@ -981,16 +981,32 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb_end, match_res_lval)
 
-      | WhileExpr(Nil, cond_expr, then_stmts) ->
+      | WhileExpr(Nil, init_stmts, cond_expr, then_stmts) ->
+          let (mir_ctxt, init_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, cond_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, then_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, end_bb_name) = get_bbname mir_ctxt in
+          let init_bb = {name=init_bb_name; instrs=[]} in
           let cond_bb = {name=cond_bb_name; instrs=[]} in
           let then_bb = {name=then_bb_name; instrs=[]} in
           let end_bb = {name=end_bb_name; instrs=[]} in
 
-          (* Branch from the pre-while bb to the cond bb. *)
-          let bb = {bb with instrs = bb.instrs @ [Br(cond_bb)]} in
+          (* Branch from the pre-while bb to the init bb. *)
+          let bb = {bb with instrs = bb.instrs @ [Br(init_bb)]} in
+
+          (* Evaluate the init stmts for the while. *)
+
+          let (mir_ctxt, init_bb) =
+            List.fold_left (
+              fun (mir_ctxt, init_bb) stmt -> stmt_to_mir mir_ctxt init_bb stmt
+            ) (mir_ctxt, init_bb) init_stmts
+          in
+
+          (* Branch from the end of the init stmts of the while to the first
+          invocation of the conditional. *)
+          let init_bb = {
+            init_bb with instrs = init_bb.instrs @ [Br(cond_bb)]
+          } in
 
           (* Evaluate the condition expression, decide whether to branch into
           the body of the while, or to the end of the while. *)
@@ -1029,12 +1045,12 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let (mir_ctxt, _) =
             List.fold_left_map (
               fun mir_ctxt bb -> (update_bb mir_ctxt bb, ())
-            ) mir_ctxt [bb; cond_bb; then_bb; end_bb]
+            ) mir_ctxt [bb; init_bb; cond_bb; then_bb; end_bb]
           in
 
           (mir_ctxt, end_bb, nil_lval)
 
-      | WhileExpr(_, _, _) ->
+      | WhileExpr(_, _, _, _) ->
           failwith "Unimplemented: while-expr yielding non-nil"
 
       | IndexExpr(_, _, _) ->

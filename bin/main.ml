@@ -671,7 +671,7 @@ let main = begin
               Undecided, [
                 ExprStmt(
                   WhileExpr(
-                    Undecided,
+                    Undecided, [],
                     BinOp(
                       Undecided, Ne,
                       ValVar(Undecided, "cur"),

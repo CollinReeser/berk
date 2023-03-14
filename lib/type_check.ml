@@ -135,10 +135,11 @@ and is_concrete_expr ?(verbose=false) expr =
         (_is_concrete_expr expr) &&
         (List.fold_left (&&) true (List.map _is_concrete_stmt stmts))
 
-  | WhileExpr(typ, exp_cond, stmts) ->
+  | WhileExpr(typ, init_stmts, exp_cond, then_stmts) ->
       (_is_concrete_type typ) &&
         (_is_concrete_expr exp_cond) &&
-        (List.fold_left (&&) true (List.map _is_concrete_stmt stmts))
+        (List.fold_left (&&) true (List.map _is_concrete_stmt init_stmts)) &&
+        (List.fold_left (&&) true (List.map _is_concrete_stmt then_stmts))
 
   | ArrayExpr(typ, exprs)
   | TupleExpr(typ, exprs)
@@ -660,7 +661,11 @@ and type_check_expr
     | ValInt(_, _) -> exp
 
     | ValVar(_, id) ->
-        let (var_t, _) = StrMap.find id tc_ctxt.vars in
+        let (var_t, _) =
+          try StrMap.find id tc_ctxt.vars
+          with Not_found ->
+            failwith (Printf.sprintf "No var [%s] in scope" id)
+        in
         ValVar(var_t, id)
 
     | ValFunc(_, func_name) ->
@@ -778,11 +783,26 @@ and type_check_expr
           else_expr_typechecked
         )
 
-    | WhileExpr(_, while_cond, then_stmts) ->
-        let while_cond_typechecked = _type_check_expr while_cond in
+    | WhileExpr(_, init_stmts, while_cond, then_stmts) ->
+        (* NOTE: We keep the returned tc_ctxt for typechecking the init-stmts,
+        as any declared variables in the init-stmts remain in scope for the
+        while expr and body of the while. *)
+        let (tc_ctxt, init_stmts_typechecked) =
+          type_check_stmts tc_ctxt init_stmts
+        in
+
+        (* We call the top-level `type_check_expr`, and not `_type_check_expr`,
+        because we want to use the tc_ctxt returned by typechecking the
+        init-stmts, because we want visibility into any in-scope init-stmt vars.
+        *)
+        let while_cond_typechecked =
+          type_check_expr tc_ctxt expected_t while_cond
+        in
         let while_cond_t = expr_type while_cond_typechecked in
 
-        let (_, then_stmts_typechecked) = type_check_stmts tc_ctxt then_stmts in
+        let (_, then_stmts_typechecked) =
+          type_check_stmts tc_ctxt then_stmts
+        in
 
         let _ = match while_cond_t with
         | Bool -> ()
@@ -791,6 +811,7 @@ and type_check_expr
 
         WhileExpr(
           Nil,
+          init_stmts_typechecked,
           while_cond_typechecked,
           then_stmts_typechecked
         )

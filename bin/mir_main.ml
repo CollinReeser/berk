@@ -53,7 +53,7 @@ let main = begin
           );
           ExprStmt(
             WhileExpr(
-              Undecided,
+              Undecided, [],
               BinOp(
                 Undecided,
                 Lt, ValVar(Undecided, "iter"), ValInt(Undecided, 10)
@@ -72,6 +72,38 @@ let main = begin
                   BinOp(
                     Undecided,
                     Add, ValVar(Undecided, "iter"), ValInt(Undecided, 1)
+                  )
+                )
+              ]
+            )
+          );
+          ExprStmt(
+            WhileExpr(
+              Undecided,
+              [
+                DeclStmt(
+                  "iter2", {mut=true}, Undecided,
+                  ValInt(Undecided, 0)
+                );
+              ],
+              BinOp(
+                Undecided,
+                Lt, ValVar(Undecided, "iter2"), ValInt(Undecided, 10)
+              ),
+              [
+                ExprStmt(
+                  FuncCall(
+                    Undecided, "printf", [
+                      ValStr("iter2: [%d]\n");
+                      ValVar(Undecided, "iter2")
+                    ]
+                  )
+                );
+                AssignStmt(
+                  "iter2",
+                  BinOp(
+                    Undecided,
+                    Add, ValVar(Undecided, "iter2"), ValInt(Undecided, 1)
                   )
                 )
               ]
