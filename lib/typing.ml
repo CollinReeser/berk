@@ -384,6 +384,13 @@ let is_indexable_type arr_t =
 ;;
 
 
+let unwrap_indexable indexable_t =
+  match indexable_t with
+  | Array(t, _) -> t
+  | _ -> failwith "Cannot unwrap non-indexable type"
+;;
+
+
 let unwrap_ptr ptr_t =
   match ptr_t with
   | Ptr(t) -> t

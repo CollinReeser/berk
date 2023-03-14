@@ -438,10 +438,30 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
       (tc_ctxt_up, DeclDeconStmt(idents_quals, resolved_t, exp_typechecked))
 
-  | AssignStmt(ident, exp) ->
-      let (var_t, {mut}) = StrMap.find ident tc_ctxt.vars in
+  | AssignStmt(lval, exp) ->
+      let (lval_typechecked, lval_t, {mut}) =
+        begin match lval with
+        | ALVar(ident) ->
+            let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
+            (lval, var_t, var_qual)
 
-      let exp_typechecked = type_check_expr tc_ctxt var_t exp in
+        | ALStaticIndex(ident, _) ->
+            let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
+            let inner_t = unwrap_indexable var_t in
+
+            (lval, inner_t, var_qual)
+
+        | ALIndex(ident, exp) ->
+            let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
+            let inner_t = unwrap_indexable var_t in
+
+            let exp_typechecked = type_check_expr tc_ctxt inner_t exp in
+
+            (ALIndex(ident, exp_typechecked), inner_t, var_qual)
+        end
+      in
+
+      let exp_typechecked = type_check_expr tc_ctxt lval_t exp in
       let exp_t = expr_type exp_typechecked in
 
       let _ =
@@ -450,11 +470,20 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
           else failwith "Cannot assign to immutable var"
       in
 
-      if type_convertible_to exp_t var_t
-        then (tc_ctxt, AssignStmt(ident, exp_typechecked))
+      if type_convertible_to exp_t lval_t
+        then (tc_ctxt, AssignStmt(lval_typechecked, exp_typechecked))
         else failwith "Expr for assignment does not typecheck"
 
-  | AssignDeconStmt(idents, exp) ->
+  | AssignDeconStmt(lvals, exp) ->
+      (* TODO: Add support for deconstructed assignment to indexed variables. *)
+      let idents =
+        List.map (
+          fun lval -> match lval with
+          | ALVar(ident) -> ident
+          | _ -> failwith "Unimplemented: AssignDeconStmt for non-ALVar(_)"
+        ) lvals
+      in
+
       let assign_types = List.map (
           fun id ->
             let (var_t, _) = StrMap.find id tc_ctxt.vars in
@@ -503,6 +532,10 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
               else failwith "Mismatch in number of idents vs array expr in assi"
           in
 
+          (* TODO: This is a hack to make it more clear we only support ALVar's
+          in AssignDeconStmt for now. *)
+          let idents = List.map (fun ident -> ALVar(ident)) idents in
+
           (tc_ctxt, AssignDeconStmt(idents, exp_typechecked))
 
         | Tuple(types) ->
@@ -511,6 +544,10 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
               then typecheck_id_typ_pairs idents types
               else failwith "Mismatch in number of idents vs tuple expr in assi"
           in
+
+          (* TODO: This is a hack to make it more clear we only support ALVar's
+          in AssignDeconStmt for now. *)
+          let idents = List.map (fun ident -> ALVar(ident)) idents in
 
           (tc_ctxt, AssignDeconStmt(idents, exp_typechecked))
 

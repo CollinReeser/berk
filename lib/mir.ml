@@ -1413,7 +1413,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | AssignStmt(lhs_name, exp) ->
+    | AssignStmt(ALVar(lhs_name), exp) ->
         let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
 
         (* This is an assignment to a pre-existing lvalue var, so we just need
@@ -1426,6 +1426,12 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         let mir_ctxt = update_bb mir_ctxt bb in
 
         (mir_ctxt, bb)
+
+    | AssignStmt(ALStaticIndex(_, _), _) ->
+        failwith "Unimplemented: MIR for AssignStmt(ALStaticIndex())"
+
+    | AssignStmt(ALIndex(_, _), _) ->
+        failwith "Unimplemented: MIR for AssignStmt(ALIndex())"
 
     | DeclDeconStmt(ident_quals, t, exp) ->
         let (mir_ctxt, bb, aggregate_lval) = expr_to_mir mir_ctxt bb exp in

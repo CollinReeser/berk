@@ -25,6 +25,8 @@ type token =
 | RParen of position
 | LBrace of position
 | RBrace of position
+| LBracket of position
+| RBracket of position
 | Comma of position
 | ColonEqual of position
 | Colon of position
@@ -111,6 +113,8 @@ let fmt_token tok =
   | RParen(p)      -> Printf.sprintf ")   (syn)      : %s"   (fmt_pos p)
   | LBrace(p)      -> Printf.sprintf "{   (syn)      : %s"   (fmt_pos p)
   | RBrace(p)      -> Printf.sprintf "}   (syn)      : %s"   (fmt_pos p)
+  | LBracket(p)    -> Printf.sprintf "[   (syn)      : %s"   (fmt_pos p)
+  | RBracket(p)    -> Printf.sprintf "]   (syn)      : %s"   (fmt_pos p)
   | Comma(p)       -> Printf.sprintf ",   (syn)      : %s"   (fmt_pos p)
   | ColonEqual(p)  -> Printf.sprintf ":=  (syn)      : %s"   (fmt_pos p)
   | Colon(p)       -> Printf.sprintf ":   (syn)      : %s"   (fmt_pos p)
@@ -165,6 +169,14 @@ let tokenize buf =
   (* Encode this regex:
       "[^"\\]*(?:\\.[^"\\]*)*"
   *)
+  let str_reg =
+    [%sedlex.regexp?
+      '"', str_simple_inner, str_escape_inner, '"'
+    ]
+  in
+
+  (* Encode this regex:
+    //.*\n *)
   let str_reg =
     [%sedlex.regexp?
       '"', str_simple_inner, str_escape_inner, '"'
@@ -241,6 +253,12 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "}" ->
         let tok = RBrace(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "[" ->
+        let tok = LBracket(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "]" ->
+        let tok = RBracket(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "," ->
         let tok = Comma(get_pos buf) in

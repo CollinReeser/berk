@@ -486,9 +486,30 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
   end in
 
   begin match tokens with
+  (* var = ... *)
   | LowIdent(_, name) :: Equal(_) :: rest ->
       let (rest, exp) = parse_expr ~ind:ind_next rest in
-      (rest, AssignStmt(name, exp))
+      (rest, AssignStmt(ALVar(name), exp))
+
+  (* var[7] = ... *)
+  | LowIdent(_, name)
+      :: LBracket(_) :: Integer(_, i) :: RBracket(_)
+      :: Equal(_) :: rest
+    ->
+      let (rest, exp) = parse_expr ~ind:ind_next rest in
+      (rest, AssignStmt(ALStaticIndex(name, i), exp))
+
+  (* var[i + 2] = ... *)
+  | LowIdent(_, name) :: LBracket(_) :: rest ->
+      let (rest, indexing_exp) = parse_expr ~ind:ind_next rest in
+
+      begin match rest with
+      | RBracket(_) :: Equal(_) :: rest ->
+          let (rest, exp) = parse_expr ~ind:ind_next rest in
+          (rest, AssignStmt(ALIndex(name, indexing_exp), exp))
+
+      | _ -> failwith "Could not complete parse of indexing assignment."
+      end
 
   (* TODO: Extend to recognize AssignDeconStmt *)
 

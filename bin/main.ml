@@ -47,7 +47,7 @@ let main = begin
                 )
               );
               AssignStmt(
-                "my_inner_var_2", ValVar(Undecided, "my_inner_var_3")
+                ALVar("my_inner_var_2"), ValVar(Undecided, "my_inner_var_3")
               );
             ],
             BinOp(
@@ -201,8 +201,8 @@ let main = begin
       let assign_tuple_unpack_lit_raw = (
         AssignDeconStmt(
           [
-            ("my_tuple_lit_unpack_var_1");
-            ("my_tuple_lit_unpack_var_3");
+            ALVar("my_tuple_lit_unpack_var_1");
+            ALVar("my_tuple_lit_unpack_var_3");
           ],
           TupleExpr(
             Undecided, [
@@ -702,7 +702,7 @@ let main = begin
                           BlockExpr(
                             Undecided, [
                               AssignStmt(
-                                "cur",
+                                ALVar("cur"),
                                 BinOp(
                                   Undecided,
                                   Div,
@@ -716,7 +716,7 @@ let main = begin
                           BlockExpr(
                             Undecided, [
                               AssignStmt(
-                                "cur",
+                                ALVar("cur"),
                                 BinOp(
                                   Undecided,
                                   Add,

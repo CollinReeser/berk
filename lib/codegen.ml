@@ -334,14 +334,29 @@ and codegen_stmt llvm_ctxt builder func_ctxt stmt : func_gen_context =
 
       {func_ctxt with cur_vars = updated_vars}
 
-  | AssignStmt (ident, expr) ->
+  | AssignStmt (ALVar(ident), expr) ->
       let alloca = StrMap.find ident func_ctxt.cur_vars in
       let expr_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ : Llvm.llvalue = Llvm.build_store expr_val alloca builder in
 
       func_ctxt
 
-  | AssignDeconStmt (idents, expr) ->
+  | AssignStmt (ALStaticIndex(_, _), _) ->
+      failwith "Unimplemented: AST Codegen for AssignStmt(ALStaticIndex())"
+
+  | AssignStmt (ALIndex(_, _), _) ->
+      failwith "Unimplemented: AST Codegen for AssignStmt(ALIndex())"
+
+  | AssignDeconStmt (lvals, expr) ->
+      (* TODO: Add support for deconstructed assignment to indexed variables. *)
+      let idents =
+        List.map (
+          fun lval -> match lval with
+          | ALVar(ident) -> ident
+          | _ -> failwith "Unimplemented: AssignDeconStmt for non-ALVar(_)"
+        ) lvals
+      in
+
       let agg_expr = codegen_expr llvm_ctxt builder func_ctxt expr in
       let decon_exprs = deconstruct_aggregate builder idents agg_expr in
 

@@ -68,7 +68,7 @@ let main = begin
                   )
                 );
                 AssignStmt(
-                  "iter",
+                  ALVar("iter"),
                   BinOp(
                     Undecided,
                     Add, ValVar(Undecided, "iter"), ValInt(Undecided, 1)
@@ -100,7 +100,7 @@ let main = begin
                   )
                 );
                 AssignStmt(
-                  "iter2",
+                  ALVar("iter2"),
                   BinOp(
                     Undecided,
                     Add, ValVar(Undecided, "iter2"), ValInt(Undecided, 1)

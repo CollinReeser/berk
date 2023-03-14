@@ -89,11 +89,16 @@ and pattern =
   (* ie: <pattern> as x -> ... *)
   | PatternAs of berk_t * pattern * ident_t
 
+and assign_lval =
+  | ALVar of ident_t
+  | ALStaticIndex of ident_t * int
+  | ALIndex of ident_t * expr
+
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
   | DeclDeconStmt of (ident_t * var_qual) list * berk_t * expr
-  | AssignStmt of ident_t * expr
-  | AssignDeconStmt of ident_t list * expr
+  | AssignStmt of assign_lval * expr
+  | AssignDeconStmt of assign_lval list * expr
   | ExprStmt of expr
   | ReturnStmt of expr
 ;;
@@ -389,6 +394,17 @@ and fmt_join_idents_quals delim idents_quals : string =
         delim
         (fmt_join_idents_quals delim xs)
 
+and fmt_assign_lval ?(print_typ = false) lval =
+  begin match lval with
+  | ALVar(ident) -> ident
+
+  | ALIndex(ident, exp) ->
+      Printf.sprintf "%s[%s]" ident (fmt_expr ~print_typ:print_typ "" exp)
+
+  | ALStaticIndex(ident, i) ->
+      Printf.sprintf "%s[%d]" ident i
+  end
+
 and fmt_stmt ?(print_typ = false) ind stmt =
   match stmt with
   | DeclStmt (ident, qual, btype, ex) ->
@@ -414,16 +430,16 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         typ_s
         (fmt_expr ~print_typ:print_typ ind ex)
 
-  | AssignStmt (ident, ex) ->
+  | AssignStmt (lval, ex) ->
       Printf.sprintf "%s%s = %s;\n"
         ind
-        ident
+        (fmt_assign_lval lval)
         (fmt_expr ~print_typ:print_typ ind ex)
 
-  | AssignDeconStmt (idents, ex) ->
+  | AssignDeconStmt (lvals, ex) ->
       Printf.sprintf "%s(%s) = %s;\n"
         ind
-        (fmt_join_strs ", " idents)
+        (fmt_join_strs ", " (List.map fmt_assign_lval lvals))
         (fmt_expr ~print_typ:print_typ ind ex);
 
   | ExprStmt (ex) ->
