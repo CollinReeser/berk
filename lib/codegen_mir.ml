@@ -553,4 +553,14 @@ let codegen_func_mirs
   let did_mpm_do = Llvm.PassManager.run_module mod_gen_ctxt.llvm_mod the_mpm in
   Printf.printf "Did the MPM do module-level opts? [%B]\n" did_mpm_do ;
 
+  (* Re-apply function optimizations on all functions. Once module-level
+  optimizations are performed, certain function-level optimizations can go
+  further (eg, module-level opts can annotate functions with read-only
+  attributes, allowing function-level opts to merge multiple calls to these
+  "pure" functions). *)
+
+  Llvm.iter_functions (
+    fun f -> Llvm.PassManager.run_function f the_fpm |> ignore
+  ) mod_gen_ctxt.llvm_mod ;
+
   ()
