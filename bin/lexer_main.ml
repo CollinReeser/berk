@@ -42,6 +42,11 @@ let () =
 
       printf("Tuple: left[%d], mid[%d], right[%d]\n", left, middle, right);
 
+      let fn_ptr = ret_int;
+      let fn_ptr_val = fn_ptr.();
+
+      printf("fn ptr val: [%d] [%d]\n", fn_ptr_val, fn_ptr.());
+
       while {let mut iter: u32 = 0;} iter < 16 {
         printf("iter: %d\n", iter);
 

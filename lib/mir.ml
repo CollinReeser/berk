@@ -463,6 +463,9 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
       | ValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb String
 
+      | ValName(_, _) ->
+          failwith "Cannot codegen ValName(): Should have been resolved"
+
       | ValFunc(func_t, func_name) ->
           ValFunc(func_name) |> literal_to_instr mir_ctxt bb func_t
 

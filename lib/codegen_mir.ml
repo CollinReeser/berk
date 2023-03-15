@@ -67,7 +67,11 @@ let codegen_constant
       llvm_gep
 
   | ValFunc(func_name) ->
-      StrMap.find func_name func_ctxt.mod_ctxt.func_sigs
+      try StrMap.find func_name func_ctxt.mod_ctxt.func_sigs
+      with Not_found ->
+        failwith (
+          Printf.sprintf "No func named [%s] for ValFunc codegen" func_name
+        )
 
   end
 ;;

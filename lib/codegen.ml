@@ -446,7 +446,8 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       let loaded : Llvm.llvalue = Llvm.build_load alloca ident builder in
       loaded
 
-  | ValFunc(_, _) -> failwith "Unimplemented"
+  | ValFunc(_, _) -> failwith "Unimplemented: ValFunc"
+  | ValName(_, _) -> failwith "Unimplemented: ValName"
 
   | ValCastTrunc(target_t, exp) ->
     begin

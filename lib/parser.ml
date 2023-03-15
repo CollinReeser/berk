@@ -723,6 +723,8 @@ and parse_value ?(ind="") tokens : (token list * expr) =
   begin
     try parse_tuple_index ~ind:ind_next rest exp
     with Backtrack ->
+    try parse_func_var_call ~ind:ind_next rest exp
+    with Backtrack ->
     (rest, exp)
   end
 
@@ -793,6 +795,29 @@ and parse_func_call_args ?(ind="") tokens : (token list * expr list) =
   in
 
   _parse_func_call_args ~ind:ind_next tokens []
+
+
+and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  begin match tokens with
+  | Dot(_) :: LParen(_) :: RParen(_) :: rest ->
+      (rest, ExprInvoke(Undecided, exp, []))
+
+  | Dot(_) :: LParen(_) :: rest ->
+      let (rest, args) = parse_func_call_args ~ind:ind_next rest in
+      (rest, ExprInvoke(Undecided, exp, args))
+
+  | _ -> raise Backtrack
+  end
 
 
 and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
@@ -1007,7 +1032,7 @@ and parse_expr_atom ?(ind="") tokens : (token list * expr) =
   begin match tokens with
   | Integer(_, num) :: rest -> (rest, ValInt(Undecided, num))
   | String(_, str) :: rest -> (rest, ValStr(str))
-  | LowIdent(_, name) :: rest -> (rest, ValVar(Undecided, name))
+  | LowIdent(_, name) :: rest -> (rest, ValName(Undecided, name))
 
   | _ -> raise Backtrack
   end

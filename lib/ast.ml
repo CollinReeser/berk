@@ -30,8 +30,16 @@ and expr =
   | ValBool of bool
   | ValStr of string
   | ValInt of berk_t * int
+
+  (* These three expression types are really two:
+  - ValVar represents a known, declared/named variable.
+  - ValFunc represents a known function, containing its literal function name.
+  - ValName represents a pre-resolved value of either of the above two.
+  *)
   | ValVar of berk_t * ident_t
-  | ValFunc of berk_t * string
+  | ValFunc of berk_t * ident_t
+  | ValName of berk_t * ident_t
+
   | ValCastTrunc of berk_t * expr
   | ValCastBitwise of berk_t * expr
   | ValCastExtend of berk_t * expr
@@ -123,6 +131,7 @@ let expr_type exp =
   | ValInt(typ, _) -> typ
   | ValVar(typ, _) -> typ
   | ValFunc(typ, _) -> typ
+  | ValName(typ, _) -> typ
   | ValCastTrunc(typ, _) -> typ
   | ValCastBitwise(typ, _) -> typ
   | ValCastExtend(typ, _) -> typ
@@ -197,6 +206,9 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
 
   | ValFunc(_, func_name) ->
       Printf.sprintf "%sfn<%s%s>" init_ind func_name typ_s
+
+  | ValName(_, name) ->
+      Printf.sprintf "%s<unresolved><%s%s>" init_ind name typ_s
 
   | ValCastTrunc (target_t, exp) ->
       Printf.sprintf "%scast_trunc<%s>(%s)%s"
@@ -1035,6 +1047,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | ValVar(t, varname) ->
         let uniq_varname = StrMap.find varname unique_varnames in
         ValVar(t, uniq_varname)
+
+    | ValName(_, _) ->
+        failwith "Cannot rewrite ValName(): Should have been resolved"
 
     | ValCastExtend(t, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in

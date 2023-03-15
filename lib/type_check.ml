@@ -106,9 +106,9 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ValInt(typ, _) -> _is_concrete_type typ
 
-  | ValVar(typ, _) -> _is_concrete_type typ
-
-  | ValFunc(t, _) -> _is_concrete_type t
+  | ValVar(typ, _)
+  | ValFunc(typ, _)
+  | ValName(typ, _) -> _is_concrete_type typ
 
   | ValCastTrunc(typ, expr)
   | ValCastBitwise(typ, expr)
@@ -717,6 +717,29 @@ and type_check_expr
         let func_t = Function(f_ret_t, f_param_t_lst) in
 
         ValFunc(func_t, func_name)
+
+    | ValName(_, name) ->
+        (* "Generic variable" lookup first searches for actual in-scope named
+        variables, and if that fails, searches for functions of the same name,
+        yielding a function pointer. *)
+        begin
+          try
+            let (var_t, _) = StrMap.find name tc_ctxt.vars in
+            ValVar(var_t, name)
+          with Not_found ->
+          try
+            begin
+              let {f_params; f_ret_t; _} =
+                StrMap.find name tc_ctxt.mod_ctxt.func_sigs
+              in
+              let f_param_t_lst = List.map (fun (_, _, t) -> t) f_params in
+              let func_t = Function(f_ret_t, f_param_t_lst) in
+              ValFunc(func_t, name)
+            end
+          with Not_found ->
+            failwith
+              (Printf.sprintf "No variable or function [%s] in scope" name)
+        end
 
     | ValCastTrunc(target_t, exp) ->
         let exp_typechecked = _type_check_expr exp in

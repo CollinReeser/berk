@@ -121,9 +121,13 @@ let main = begin
               ]
             )
           );
+          (* "Generic variable names" that do not appear to resolve to anything
+          in-scope are double-checked against the list of in-scope functions as
+          well. If the "variable" is actually the name of a function, then the
+          value resolves to the function pointer. *)
           DeclStmt(
             "my_func_var", {mut=false}, Undecided,
-            ValFunc(Undecided, "trivial")
+            ValName(Undecided, "trivial")
           );
           DeclStmt(
             "my_func_var_call", {mut=false}, Undecided,
