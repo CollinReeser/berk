@@ -52,8 +52,23 @@ let codegen_constant
   | ValStr(str) ->
       let llvm_str = Llvm.const_stringz llvm_ctxt str in
       let global_str =
-        Llvm.define_global "str" llvm_str func_ctxt.mod_ctxt.llvm_mod
+        Llvm.define_global
+          "str" llvm_str func_ctxt.mod_ctxt.llvm_mod
       in
+      (* These strings are immutable, and their address is insignificant, ie, we
+      care only about their content, not their location.
+
+      Note: Not only do we not want to change these later in the semantics of
+      the language, but if they're marked as being const and having unnamed
+      addresses in LLVM, then optimizations on globals can collapse duplicates
+      into a single global value. *)
+
+      (* FIXME: _Something_ is preventing const, unnamed_addr, identical global
+      strings from being merged, despite module-level global const de-dup
+      optimization being enabled. *)
+      let _ = Llvm.set_global_constant true global_str in
+      let _ = Llvm.set_unnamed_addr true global_str in
+
       let indices = Array.of_list [
         Llvm.const_int i32_t 0;
         Llvm.const_int i32_t 0;

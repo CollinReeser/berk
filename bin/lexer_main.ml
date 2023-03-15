@@ -27,6 +27,14 @@ let () =
     }
 
     fn main(): i8 {
+      let dup_hello_1 = "Hello, world!";
+      let dup_hello_2 = "Hello, world!";
+      let dup_hello_3 = "Hello, world!";
+
+      printf("%s\n", dup_hello_1);
+      printf("%s\n", dup_hello_2);
+      printf("%s\n", dup_hello_3);
+
       let my_str = "Hello, world! [%d] [%llu]\n";
       let var = 6 + 7 * 8 - ret_int();
       let var2: i32 = 6 + 7 * 8 - ret_int();
