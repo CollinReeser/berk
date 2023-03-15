@@ -143,10 +143,14 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ArrayExpr(typ, exprs)
   | TupleExpr(typ, exprs)
-  | FuncCall(typ, _, exprs)
-  | VarInvoke(typ, _, exprs) ->
+  | FuncCall(typ, _, exprs) ->
       (_is_concrete_type typ) &&
         (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
+
+  | ExprInvoke(typ, func_exp, arg_exprs) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr func_exp) &&
+        (List.fold_left (&&) true (List.map _is_concrete_expr arg_exprs))
 
   | MatchExpr(typ, matched_exp, pattern_exp_pairs) ->
       (_is_concrete_type typ) &&
@@ -907,8 +911,9 @@ and type_check_expr
 
         FuncCall(f_ret_t, f_name, exprs_typechecked)
 
-    | VarInvoke(_, invocable_name, exprs) ->
-        let (func_t, _) = StrMap.find invocable_name tc_ctxt.vars in
+    | ExprInvoke(_, func_exp, exprs) ->
+        let func_exp_typechecked = _type_check_expr func_exp in
+        let func_t = expr_type func_exp_typechecked in
 
         let (ret_t, f_fake_params) = begin match func_t with
           | Function(ret_t, args_t_lst) ->
@@ -967,7 +972,7 @@ and type_check_expr
             else failwith "Could not convert expr type to arg type"
         ) exprs_t_non_variadic params_non_variadic_t_lst in
 
-        VarInvoke(ret_t, invocable_name, exprs_typechecked)
+        ExprInvoke(ret_t, func_exp_typechecked, exprs_typechecked)
 
     | ArrayExpr(_, exprs) ->
         let elem_expected_t = begin match expected_t with

@@ -565,29 +565,15 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, lval)
 
-      | VarInvoke(t, varname, exprs) ->
-          (* For variable access in MIR, we assume the variable is nested inside
-          an alloca that must be loaded from. *)
-
-          (* TODO: Can we combine this loading logic with that for ValVar, since
-          they're both doing a load precisely because we're "reading from a
-          variable", regardless of contents? *)
-
-          let ptr_lval = StrMap.find varname mir_ctxt.lvars in
-          let {t=ptr_t; _} = ptr_lval in
-          let pointed_t = unwrap_ptr ptr_t in
-
-          let (mir_ctxt, load_varname) = get_varname mir_ctxt in
-          let func_lval = {t=pointed_t; kind=Tmp; lname=load_varname} in
-          let load_instr = Load(func_lval, ptr_lval) in
-          let bb = {bb with instrs = bb.instrs @ [load_instr]} in
+      | ExprInvoke(t, func_expr, arg_exprs) ->
+          let (mir_ctxt, bb, func_lval) = _expr_to_mir mir_ctxt bb func_expr in
 
           let ((mir_ctxt, bb), arg_values) =
             List.fold_left_map (
               fun (mir_ctxt, bb) exp ->
                 let (mir_ctxt, bb, arg_val) = _expr_to_mir mir_ctxt bb exp in
                 ((mir_ctxt, bb), arg_val)
-            ) (mir_ctxt, bb) exprs
+            ) (mir_ctxt, bb) arg_exprs
           in
 
           let (mir_ctxt, bb, lval, call_instr) = begin match t with

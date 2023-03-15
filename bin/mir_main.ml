@@ -127,7 +127,7 @@ let main = begin
           );
           DeclStmt(
             "my_func_var_call", {mut=false}, Undecided,
-            VarInvoke(Undecided, "my_func_var", [])
+            ExprInvoke(Undecided, ValVar(Undecided, "my_func_var"), [])
           );
           ExprStmt(
             FuncCall(

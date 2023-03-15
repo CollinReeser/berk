@@ -675,7 +675,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       call
 
-  | VarInvoke(_, _, _) -> failwith "Unimplemented"
+  | ExprInvoke(_, _, _) -> failwith "Unimplemented"
 
   | ArrayExpr(typ, exprs) ->
       let llvm_expr_vals = List.map _codegen_expr exprs in

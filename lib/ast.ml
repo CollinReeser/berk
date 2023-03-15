@@ -45,8 +45,9 @@ and expr =
   | WhileExpr of berk_t * stmt list * expr * stmt list
   (* A direct call to an in-scope named function. *)
   | FuncCall of berk_t * ident_t * expr list
-  (* An indirect invocation of a function inside a variable. *)
-  | VarInvoke of berk_t * ident_t * expr list
+  (* An indirect invocation of a function resolved from an expression. *)
+  | ExprInvoke of berk_t * expr * expr list
+  (* An expression representing a statically-sized array. *)
   | ArrayExpr of berk_t * expr list
   (* First expr is index, second is array *)
   | IndexExpr of berk_t * expr * expr
@@ -130,7 +131,7 @@ let expr_type exp =
   | IfThenElseExpr(typ, _, _, _) -> typ
   | WhileExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
-  | VarInvoke(typ, _, _) -> typ
+  | ExprInvoke(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
   | IndexExpr(typ, _, _) -> typ
   | StaticIndexExpr(typ, _, _) -> typ
@@ -284,11 +285,11 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         id
         (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
 
-  | VarInvoke(_, id, exprs) ->
-      Printf.sprintf "%s%s%s->(%s)"
+  | ExprInvoke(_, exp, exprs) ->
+      Printf.sprintf "%s%s%s(%s)"
         init_ind
         typ_s_rev
-        id
+        (fmt_expr ~print_typ:print_typ "" exp)
         (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
 
   | ArrayExpr(_, exprs) ->
@@ -489,7 +490,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     | (
         Function(inj_ret_t, inj_args_t_lst), (
           ValFunc(Function(has_ret_t, has_args_t_lst), _) |
-          VarInvoke(Function(has_ret_t, has_args_t_lst), _, _)
+          ExprInvoke(Function(has_ret_t, has_args_t_lst), _, _)
         )
       ) ->
         let args_match =
@@ -548,7 +549,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
               (fmt_type t)
           )
 
-    | (_, VarInvoke(t, _, _)) ->
+    | (_, ExprInvoke(t, _, _)) ->
         if t = injected_t then
           exp
         else if type_extendable_to t injected_t then
@@ -1022,14 +1023,14 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | ValFunc(_, _) ->
         exp
 
-    | VarInvoke(t, varname, exps) ->
-        let uniq_varname = StrMap.find varname unique_varnames in
+    | ExprInvoke(t, exp, exps) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
         let exps_rewritten =
           List.map (
             fun exp -> _rewrite_exp exp unique_varnames
           ) exps
         in
-        VarInvoke(t, uniq_varname, exps_rewritten)
+        ExprInvoke(t, exp_rewritten, exps_rewritten)
 
     | ValVar(t, varname) ->
         let uniq_varname = StrMap.find varname unique_varnames in
