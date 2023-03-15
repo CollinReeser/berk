@@ -298,14 +298,14 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         typ_s
 
   | StaticIndexExpr(_, idx, arr) ->
-      Printf.sprintf "%s%s[%d]->%s"
+      Printf.sprintf "%s%s.%d:%s"
         init_ind
         (fmt_expr ~print_typ:print_typ "" arr)
         idx
         typ_s
 
   | IndexExpr(_, idx, arr) ->
-      Printf.sprintf "%s%s[%s]->%s"
+      Printf.sprintf "%s%s[%s]:%s"
         init_ind
         (fmt_expr ~print_typ:print_typ "" arr)
         (fmt_expr ~print_typ:print_typ "" idx)
@@ -585,20 +585,24 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         in
         IndexExpr(injected_t, idx_exp, arr_exp_injected)
 
-    | (_, StaticIndexExpr(_, idx, arr_exp)) ->
-        (* We can't use our injection type info to assist with typechecking the
-        index expression, but we _can_ use it to assist in typechecking the
-        indexed array itself, by assuming the array expression type is expected
-        to be an "array of" the target type. *)
-        let arr_t = expr_type arr_exp in
-        let arr_injection_type = begin match arr_t with
-          | Array(_, sz) -> Array(injected_t, sz)
-          | _ -> failwith ("Unexpected non-array type: " ^ (fmt_type arr_t))
+    | (_, StaticIndexExpr(_, idx, agg_exp)) ->
+        let agg_t = expr_type agg_exp in
+
+        (* For the given aggregate, assume the element at the given static index
+        must be the injection type, yielding an injected overall aggregate type.
+        *)
+        let agg_injection_type = begin match agg_t with
+          | Tuple(ts) ->
+              let new_ts = replace ts idx injected_t in
+              Tuple(new_ts)
+          | _ -> failwith ("Unexpected non-aggregate type: " ^ (fmt_type agg_t))
         end in
-        let arr_exp_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") arr_injection_type arr_exp
+
+        (* Inject the expected aggregate type into the actual aggregate exp. *)
+        let agg_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") agg_injection_type agg_exp
         in
-        StaticIndexExpr(injected_t, idx, arr_exp_injected)
+        StaticIndexExpr(injected_t, idx, agg_exp_injected)
 
     | (Array(elem_t, sz), ArrayExpr(_, elem_lst)) ->
         let elem_t_lst = List.init sz (fun _ -> elem_t) in
@@ -1043,9 +1047,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         let exp_rewritten = _rewrite_exp exp unique_varnames in
         ValCastBitwise(t, exp_rewritten)
 
-    | StaticIndexExpr(t, idx, arr_exp) ->
-        let arr_exp_rewritten = _rewrite_exp arr_exp unique_varnames in
-        StaticIndexExpr(t, idx, arr_exp_rewritten)
+    | StaticIndexExpr(t, idx, agg_exp) ->
+        let agg_exp_rewritten = _rewrite_exp agg_exp unique_varnames in
+        StaticIndexExpr(t, idx, agg_exp_rewritten)
 
     | IndexExpr(t, idx_exp, arr_exp) ->
         let idx_exp_rewritten = _rewrite_exp idx_exp unique_varnames in

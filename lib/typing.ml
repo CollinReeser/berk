@@ -391,6 +391,18 @@ let unwrap_indexable indexable_t =
 ;;
 
 
+let unwrap_aggregate_indexable indexable_t i =
+  match indexable_t with
+  | Tuple(ts) ->
+      if i < List.length ts then
+        List.nth ts i
+      else
+        failwith (Printf.sprintf "Invalid index into tuple of arity [%d]" i)
+
+  | _ -> failwith "Cannot unwrap non-indexable type"
+;;
+
+
 let unwrap_ptr ptr_t =
   match ptr_t with
   | Ptr(t) -> t

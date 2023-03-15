@@ -33,6 +33,15 @@ let () =
       let fib_res = fib(50);
       printf(my_str, var, fib_res);
 
+      let mut tup = (1, 2, 3);
+      tup.1 = 4;
+
+      let left = tup.0;
+      let middle = tup.1;
+      let right = tup.2;
+
+      printf("Tuple: left[%d], mid[%d], right[%d]\n", left, middle, right);
+
       while {let mut iter: u32 = 0;} iter < 16 {
         printf("iter: %d\n", iter);
 

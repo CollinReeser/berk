@@ -491,15 +491,13 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
       let (rest, exp) = parse_expr ~ind:ind_next rest in
       (rest, AssignStmt(ALVar(name), exp))
 
-  (* var[7] = ... *)
-  | LowIdent(_, name)
-      :: LBracket(_) :: Integer(_, i) :: RBracket(_)
-      :: Equal(_) :: rest
+  (* tuple_var.1 = ... *)
+  | LowIdent(_, name) :: Dot(_) :: Integer(_, i) :: Equal(_) :: rest
     ->
       let (rest, exp) = parse_expr ~ind:ind_next rest in
       (rest, AssignStmt(ALStaticIndex(name, i), exp))
 
-  (* var[i + 2] = ... *)
+  (* array_var[i + 2] = ... *)
   | LowIdent(_, name) :: LBracket(_) :: rest ->
       let (rest, indexing_exp) = parse_expr ~ind:ind_next rest in
 
@@ -701,7 +699,11 @@ and parse_value ?(ind="") tokens : (token list * expr) =
     else ind
   end in
 
-  begin
+  let (rest, exp) = begin
+    try parse_tuple_expr ~ind:ind_next tokens
+    with Backtrack ->
+    try parse_paren_expr ~ind:ind_next tokens
+    with Backtrack ->
     try parse_if_expr ~ind:ind_next tokens
     with Backtrack ->
     try parse_while_expr ~ind:ind_next tokens
@@ -710,7 +712,18 @@ and parse_value ?(ind="") tokens : (token list * expr) =
     with Backtrack ->
     try parse_func_call ~ind:ind_next tokens
     with Backtrack ->
+    (* try *)
     parse_expr_atom ~ind:ind_next tokens
+    (* with Backtrack *)
+  end in
+
+  (* There are various things that may then be done _to_ a just-evaluated
+  expression, like indexing into arrays/aggregates, invoking functions pointers,
+  etc. *)
+  begin
+    try parse_tuple_index ~ind:ind_next rest exp
+    with Backtrack ->
+    (rest, exp)
   end
 
 
@@ -782,6 +795,121 @@ and parse_func_call_args ?(ind="") tokens : (token list * expr list) =
   _parse_func_call_args ~ind:ind_next tokens []
 
 
+and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
+  let _ = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  begin match tokens with
+  | Dot(_) :: Integer(_, i) :: rest ->
+      (rest, StaticIndexExpr(Undecided, i, exp))
+
+  | _ -> raise Backtrack
+  end
+
+
+and parse_tuple_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  begin match tokens with
+  | LParen(_) :: rest ->
+      let (rest, init_exp) = parse_expr ~ind:ind_next rest in
+
+      (* There must be at least one comma, if this is a tuple. There may be more
+      expressions in this tuple, all comma-delimited. As a special case, it's
+      valid to spell a 1-tuple via `(<expr>,)`. *)
+      begin match rest with
+      (* Is this a 1-tuple? *)
+      | Comma(_) :: RParen(_) :: rest ->
+          (rest, TupleExpr(Undecided, [init_exp]))
+
+      (* This is at least a 2-tuple. *)
+      | Comma(_) :: rest ->
+          let (rest, pair_exp) = parse_expr ~ind:ind_next rest in
+
+          (* At this point, we want to match 0 or more `, <expr>` sequences,
+          followed by a final closing paren. *)
+          let rec _parse_remaining_tuple rest exprs_so_far =
+            begin match rest with
+            | Comma(_) :: rest ->
+                let (rest, next_exp) = parse_expr ~ind:ind_next rest in
+                _parse_remaining_tuple rest (exprs_so_far @ [next_exp])
+
+            | RParen(_) :: rest -> (rest, exprs_so_far)
+
+            | tok :: _ ->
+                let fmted = fmt_token tok in
+                failwith (
+                  Printf.sprintf
+                    "Unexpected token [%s] parsing tuple expr, expected `)`."
+                    fmted
+                )
+            | [] -> failwith "Unexpected EOF while parsing tuple expr."
+            end
+          in
+
+          let (rest, remaining_tuple_exprs) = _parse_remaining_tuple rest [] in
+
+          (
+            rest,
+            TupleExpr(Undecided, [init_exp; pair_exp] @ remaining_tuple_exprs)
+          )
+
+      | _ -> raise Backtrack
+      end
+
+  | _ ->
+      raise Backtrack
+  end
+
+
+and parse_paren_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  begin match tokens with
+  | LParen(_) :: rest ->
+      let (rest, exp) = parse_expr ~ind:ind_next rest in
+
+      begin match rest with
+      | RParen(_) :: rest -> (rest, exp)
+
+      | tok :: _ ->
+          let fmted = fmt_token tok in
+          failwith (
+            Printf.sprintf
+              "Unexpected token [%s] parsing parenthesized expr, expected `)`."
+              fmted
+          )
+      | [] -> failwith "Unexpected EOF while parsing parenthesized expr."
+      end
+
+  | _ ->
+      raise Backtrack
+  end
+
+
 and parse_if_expr ?(ind="") tokens : (token list * expr) =
   let ind_next = begin
     if ind <> "" then
@@ -818,7 +946,7 @@ and parse_if_expr ?(ind="") tokens : (token list * expr) =
             Printf.sprintf
               "Unexpected token [%s] in if-expr, expected `)`." fmted
           )
-      | [] -> failwith "Unexpected EOF while parsing func call arg list."
+      | [] -> failwith "Unexpected EOF while parsing if-expr."
       end
 
   | _ ->

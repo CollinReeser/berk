@@ -1,4 +1,8 @@
 
+let replace lst n elem =
+  List.mapi (fun i x -> if i = n then elem else x) lst;;
+;;
+
 let take lst n =
   let rec _take accum remain n =
     begin match (remain, n) with

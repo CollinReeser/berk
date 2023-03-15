@@ -60,9 +60,10 @@ within the ptr. The RHS lval is the object to index into. *)
 (* Turn a list of separate values into a struct containing those values, whose
 members are in the same order as the given list. *)
 | ConstructAggregate of lval * lval list
-(* At the given index, insert the given lval element into the given aggregate
-value. *)
-| IntoAggregate of int * lval * lval
+(* Where `lval-result`, `index`, lval-orig-aggregate`, `lval-element`, yield
+a new aggregate lval that matches the original aggregate lval, save for the
+element at the given index being replaced by the given element. *)
+| IntoAggregate of lval * int * lval * lval
 (* Yield the lval element at the given index in the given aggregate value. *)
 | FromAggregate of lval * int * lval
 (* The first lval is the return value, and the second lval is the function to be
@@ -188,10 +189,11 @@ let fmt_instr instr =
         (fmt_lval lval)
         (fmt_join_strs "; "(List.map fmt_lval elems))
 
-  | IntoAggregate(i, lval_elem, lval_aggregate) ->
-      sprintf "  insert %s into %s at index %d\n"
-        (fmt_lval lval_elem)
+  | IntoAggregate(lval_res, i, lval_aggregate, lval_elem) ->
+      sprintf "  %s = %s but %s inserted at index %d\n"
+        (fmt_lval lval_res)
         (fmt_lval lval_aggregate)
+        (fmt_lval lval_elem)
         i
 
   | FromAggregate(lval, i, lval_aggregate) ->
@@ -361,7 +363,7 @@ let instr_lval instr =
   | UnOp(lval, _, _) -> lval
   | PtrTo(lval, _, _) -> lval
   | ConstructAggregate(lval, _) -> lval
-  | IntoAggregate(_, _, _) -> failwith "Aggregate insertion yields no value"
+  | IntoAggregate(lval, _, _, _) -> lval
   | FromAggregate(lval, _, _) -> lval
   | Call(lval, _, _) -> lval
   | CallVoid(_, _) -> failwith "No resultant lval for void call"
@@ -1414,11 +1416,12 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         (mir_ctxt, bb)
 
     | AssignStmt(ALVar(lhs_name), exp) ->
-        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
-
         (* This is an assignment to a pre-existing lvalue var, so we just need
         to find the lval for this var, and then we can directly store the RHS
         into that existing lval. *)
+
+        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
+
         let lhs_alloca_lval = StrMap.find lhs_name mir_ctxt.lvars in
         let store_instr = Store(lhs_alloca_lval, rhs_lval) in
 
@@ -1427,8 +1430,37 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | AssignStmt(ALStaticIndex(_, _), _) ->
-        failwith "Unimplemented: MIR for AssignStmt(ALStaticIndex())"
+    | AssignStmt(ALStaticIndex(indexable_name, i), exp) ->
+        (* This is an assignment to a constant index within a statically-known
+        aggregate (tuple, struct). We need to acquire the lvalue itself (some
+        alloca), load the "raw" aggregate within that alloca, then store the RHS
+        into the given index within the aggregate, then store the aggregate back
+        into the alloca. *)
+
+        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
+
+        let {t=loaded_t; _} as agg_alloca_lval =
+          StrMap.find indexable_name mir_ctxt.lvars
+        in
+
+        let (mir_ctxt, load_varname) = get_varname mir_ctxt in
+        let loaded_agg_lval = {t=loaded_t; kind=Tmp; lname=load_varname} in
+        let load_instr = Load(loaded_agg_lval, agg_alloca_lval) in
+
+        let (mir_ctxt, new_agg_varname) = get_varname mir_ctxt in
+        let new_agg_lval = {t=loaded_t; kind=Tmp; lname=new_agg_varname} in
+        let into_instr =
+          IntoAggregate(new_agg_lval, i, loaded_agg_lval, rhs_lval)
+        in
+
+        let store_instr = Store(agg_alloca_lval, new_agg_lval) in
+
+        let bb = {
+          bb with instrs = bb.instrs @ [load_instr; into_instr; store_instr]
+        } in
+        let mir_ctxt = update_bb mir_ctxt bb in
+
+        (mir_ctxt, bb)
 
     | AssignStmt(ALIndex(_, _), _) ->
         failwith "Unimplemented: MIR for AssignStmt(ALIndex())"
@@ -1437,11 +1469,10 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         let (mir_ctxt, bb, aggregate_lval) = expr_to_mir mir_ctxt bb exp in
 
         let idents = List.map (fun (ident, _) -> ident) ident_quals in
-        let decon_sz = List.length idents in
 
         let aggregate_types = begin match t with
-          | Array(t, _) -> List.init decon_sz (fun _ -> t)
           | Tuple(ts) -> ts
+          | Array(_, _) -> failwith "Unimplemented: DeclDeconStmt of static arr"
           | _ -> failwith "Typecheck failure deconstructing aggr in MIR"
         end in
 

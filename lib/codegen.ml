@@ -746,7 +746,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
   | StaticIndexExpr(_, idx, arr_expr) ->
       let arr_typ = expr_type arr_expr in
       let arr_sz = begin match arr_typ with
-        | Array(_, sz) -> sz
+        | Tuple(_) -> failwith "Unimplemented: Static index into tuple"
         | _ ->
           begin
             let pretty_typ = fmt_type arr_typ in

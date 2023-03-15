@@ -445,9 +445,9 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
             let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
             (lval, var_t, var_qual)
 
-        | ALStaticIndex(ident, _) ->
+        | ALStaticIndex(ident, i) ->
             let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
-            let inner_t = unwrap_indexable var_t in
+            let inner_t = unwrap_aggregate_indexable var_t i in
 
             (lval, inner_t, var_qual)
 
@@ -701,7 +701,7 @@ and type_check_expr
         let (var_t, _) =
           try StrMap.find id tc_ctxt.vars
           with Not_found ->
-            failwith (Printf.sprintf "No var [%s] in scope" id)
+            failwith (Printf.sprintf "No variable [%s] in scope" id)
         in
         ValVar(var_t, id)
 
@@ -1014,18 +1014,20 @@ and type_check_expr
             end
           else failwith "Unexpected components of index operation"
 
-    | StaticIndexExpr(_, idx, arr) ->
-        let arr_typechecked = _type_check_expr arr in
-        let arr_t = expr_type arr_typechecked in
+    | StaticIndexExpr(_, idx, agg) ->
+        let agg_typechecked = _type_check_expr agg in
+        let agg_t = expr_type agg_typechecked in
         let static_idx_typechecked = begin
-          match arr_t with
-          | Array(elem_typ, sz) ->
+          match agg_t with
+          | Tuple(ts) ->
             begin
-              if idx < 0 || idx >= sz
-              then failwith "out-of-bounds idx for array"
-              else StaticIndexExpr(elem_typ, idx, arr_typechecked)
+              if idx < 0 || idx >= List.length ts
+              then failwith "out-of-bounds idx for tuple"
+              else
+                let elem_typ = List.nth ts idx in
+                StaticIndexExpr(elem_typ, idx, agg_typechecked)
             end
-          | _ -> failwith "Unexpectedly indexing into non-array"
+          | _ -> failwith "Unexpectedly indexing into non-aggregate"
         end in
 
         static_idx_typechecked

@@ -135,15 +135,6 @@ let main = begin
           )
         )
       ) in
-      let decl_array_static_idx_raw = (
-        DeclStmt(
-          "my_array_static_idx_var", def_var_qual, Undecided,
-          StaticIndexExpr(
-            Undecided, 2,
-            ValVar(Undecided, "my_array_var")
-          )
-        )
-      ) in
       let decl_array_idx_raw = (
         DeclStmt(
           "my_array_idx_var", def_var_qual, Undecided,
@@ -347,7 +338,6 @@ let main = begin
           decl_dodge_recursion_raw;
           decl_call_recursion_raw;
           decl_array_raw;
-          decl_array_static_idx_raw;
           decl_array_idx_raw;
           decl_tuple_raw;
           decl_tuple_unpack_lit_raw;

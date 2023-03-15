@@ -27,6 +27,7 @@ type token =
 | RBrace of position
 | LBracket of position
 | RBracket of position
+| Dot of position
 | Comma of position
 | ColonEqual of position
 | Colon of position
@@ -115,6 +116,7 @@ let fmt_token tok =
   | RBrace(p)      -> Printf.sprintf "}   (syn)      : %s"   (fmt_pos p)
   | LBracket(p)    -> Printf.sprintf "[   (syn)      : %s"   (fmt_pos p)
   | RBracket(p)    -> Printf.sprintf "]   (syn)      : %s"   (fmt_pos p)
+  | Dot(p)         -> Printf.sprintf ".   (syn)      : %s"   (fmt_pos p)
   | Comma(p)       -> Printf.sprintf ",   (syn)      : %s"   (fmt_pos p)
   | ColonEqual(p)  -> Printf.sprintf ":=  (syn)      : %s"   (fmt_pos p)
   | Colon(p)       -> Printf.sprintf ":   (syn)      : %s"   (fmt_pos p)
@@ -259,6 +261,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "]" ->
         let tok = RBracket(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "." ->
+        let tok = Dot(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "," ->
         let tok = Comma(get_pos buf) in
