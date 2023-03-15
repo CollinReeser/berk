@@ -129,8 +129,10 @@ let () =
   let llvm_ctxt = Llvm.global_context () in
   let the_module = Llvm.create_module llvm_ctxt "main" in
   let the_fpm = Llvm.PassManager.create_function the_module in
+  let the_mpm = Llvm.PassManager.create () in
   let builder = Llvm.builder llvm_ctxt in
   let _ = initialize_fpm the_fpm |> ignore in
+  let _ = initialize_mpm the_mpm |> ignore in
 
   let data_layout_str = Llvm.data_layout the_module in
   let data_layout_mod = Llvm_target.DataLayout.of_string data_layout_str in
@@ -155,6 +157,7 @@ let () =
     codegen_func_mirs
       llvm_ctxt
       the_fpm
+      the_mpm
       builder
       mod_gen_ctxt
       mir_ctxts

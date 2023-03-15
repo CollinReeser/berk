@@ -16,9 +16,11 @@ let main = begin
     let llvm_ctxt = Llvm.global_context () in
     let the_module = Llvm.create_module llvm_ctxt "main" in
     let the_fpm = Llvm.PassManager.create_function the_module in
+    let the_mpm = Llvm.PassManager.create () in
     let builder = Llvm.builder llvm_ctxt in
     let _ = begin
       initialize_fpm the_fpm |> ignore ;
+      initialize_mpm the_mpm |> ignore ;
 
       let trivial_func_def = {
         f_decl = {
@@ -650,6 +652,7 @@ let main = begin
         codegen_func_mirs
           llvm_ctxt
           the_fpm
+          the_mpm
           builder
           mod_gen_ctxt
           mir_ctxts

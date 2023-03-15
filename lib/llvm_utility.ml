@@ -118,12 +118,28 @@ let initialize_fpm the_fpm =
   Llvm_scalar_opts.add_memory_to_register_promotion the_fpm ;
   (* Do simple "peephole" optimizations and bit-twiddling optzn. *)
   Llvm_scalar_opts.add_instruction_combination the_fpm ;
-  (* reassociate expressions. *)
+  (* Try to move code out of body of loops, into pre/post loop code.  *)
+  Llvm_scalar_opts.add_licm the_fpm ;
+  (* Try to promote allocas to SSA/registers. *)
+  Llvm_scalar_opts.add_scalar_repl_aggregation the_fpm ;
+  Llvm_scalar_opts.add_scalar_repl_aggregation_ssa the_fpm ;
+  (* Reassociate expressions. *)
   Llvm_scalar_opts.add_reassociation the_fpm ;
   (* Eliminate Common SubExpressions. *)
   Llvm_scalar_opts.add_gvn the_fpm ;
+  (* Constant propagation/merging. *)
+  Llvm_scalar_opts.add_sccp the_fpm ;
+  (* Trivial removal of redundant stores. *)
+  Llvm_scalar_opts.add_dead_store_elimination the_fpm ;
   (* Simplify the control flow graph (deleting unreachable blocks, etc). *)
   Llvm_scalar_opts.add_cfg_simplification the_fpm ;
+  (* Dead-code elimination. *)
+  Llvm_scalar_opts.add_aggressive_dce the_fpm ;
+
+  (* Note: We _don't_ apply tail-call elimination. Default tail-call behavior
+  seems to produce better code, or approximately equivalent code that is easier
+  to read (in simple cases, at least). *)
+  (* Llvm_scalar_opts.add_tail_call_elimination the_fpm ; *)
 
   (* Do some optimizations again, as these have demonstrably reduced more
   code when ran again after the above. *)
@@ -132,7 +148,30 @@ let initialize_fpm the_fpm =
   Llvm_scalar_opts.add_instruction_combination the_fpm ;
 
   (* Return value here only indicates whether internal state was modified *)
-  Llvm.PassManager.initialize the_fpm
+  let _ = Llvm.PassManager.initialize the_fpm in
+  ()
+;;
+
+
+let initialize_mpm the_mpm =
+  (* Propagate constants from callsites into function bodies. *)
+  Llvm_ipo.add_ipsccp the_mpm ;
+  (* Merge duplicate global constants. *)
+  Llvm_ipo.add_constant_merge the_mpm ;
+  (* Optimize non-address-taken globals. *)
+  Llvm_ipo.add_global_optimizer the_mpm ;
+  (* Remove unused arguments to functions. *)
+  Llvm_ipo.add_dead_arg_elimination the_mpm ;
+  (* Pass instead by-value any small RO by-reference args. *)
+  Llvm_ipo.add_argument_promotion the_mpm ;
+  (* Annotate functions with attributes indicating various RO behavior. *)
+  Llvm_ipo.add_function_attrs the_mpm ;
+  (* Inline small functions. *)
+  Llvm_ipo.add_function_inlining the_mpm ;
+  (* Eliminate unreachable/unused globals and functions. *)
+  Llvm_ipo.add_global_dce the_mpm ;
+
+  ()
 ;;
 
 

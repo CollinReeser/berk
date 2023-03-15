@@ -519,13 +519,15 @@ let codegen_func_mir
   end in
 
   (* Optimize the function. *)
-  let _ : bool = Llvm.PassManager.run_function new_func the_fpm in
+  let did_fpm_do = Llvm.PassManager.run_function new_func the_fpm in
+  Printf.printf "Did the FPM do function-level opts on [%s]? [%B]\n"
+    mir_ctxt.f_name did_fpm_do ;
 
   mod_ctxt
 ;;
 
 let codegen_func_mirs
-  llvm_ctxt the_fpm builder
+  llvm_ctxt the_fpm the_mpm builder
   (mod_gen_ctxt : module_gen_context)
   (mir_ctxts : mir_ctxt list)
 =
@@ -545,5 +547,10 @@ let codegen_func_mirs
           mod_gen_ctxt
     ) mod_gen_ctxt mir_ctxts
   in
+
+  Llvm_analysis.assert_valid_module mod_gen_ctxt.llvm_mod ;
+
+  let did_mpm_do = Llvm.PassManager.run_module mod_gen_ctxt.llvm_mod the_mpm in
+  Printf.printf "Did the MPM do module-level opts? [%B]\n" did_mpm_do ;
 
   ()
