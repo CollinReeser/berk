@@ -719,14 +719,36 @@ and parse_value ?(ind="") tokens : (token list * expr) =
 
   (* There are various things that may then be done _to_ a just-evaluated
   expression, like indexing into arrays/aggregates, invoking functions pointers,
-  etc. *)
-  begin
-    try parse_tuple_index ~ind:ind_next rest exp
-    with Backtrack ->
-    try parse_func_var_call ~ind:ind_next rest exp
-    with Backtrack ->
-    (rest, exp)
-  end
+  etc, which can be arbitrarily chained. *)
+  let rec _parse_value ?(ind="") rest exp_so_far =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token rest) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin
+      try
+        let (rest, exp_chain) =
+          parse_tuple_index ~ind:ind_next rest exp_so_far
+        in
+        _parse_value rest exp_chain
+      with Backtrack ->
+      try
+        let (rest, exp_chain) =
+          parse_func_var_call ~ind:ind_next rest exp_so_far
+        in
+        _parse_value rest exp_chain
+      with Backtrack ->
+        (rest, exp_so_far)
+    end
+  in
+
+  _parse_value ~ind:ind_next rest exp
 
 
 and parse_func_call ?(ind="") tokens : (token list * expr) =

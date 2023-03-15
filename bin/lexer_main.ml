@@ -47,6 +47,9 @@ let () =
 
       printf("fn ptr val: [%d] [%d]\n", fn_ptr_val, fn_ptr.());
 
+      let fn_tup = (fib, fib);
+      printf("Double-indirection fib: [%llu]\n", fn_tup.1.(50));
+
       while {let mut iter: u32 = 0;} iter < 16 {
         printf("iter: %d\n", iter);
 
