@@ -276,8 +276,10 @@ let control_flow_list mir_ctxt : bb list =
       | [] -> graph_so_far_rev
       | {name; _} as next::rest_queue ->
           if StrSet.exists (fun elem -> elem = name) seen then
+            (* We've already processed this basic block; skip to next. *)
             build_control_flow_graph_rev graph_so_far_rev rest_queue seen
           else
+            (* Process this basic block, this is first we've seen it. *)
             let new_branches = get_branches next in
             let next_queue = rest_queue @ new_branches in
             let graph_so_far_rev = next :: graph_so_far_rev in
