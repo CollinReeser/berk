@@ -12,7 +12,7 @@ let () =
     extern fn printf(fmt: string, ...): i32
 
     fn fib_t(n: u64, s_last: u64, last: u64): u64 {
-      if (n == 1) {
+      if n == 1 {
         return last;
       };
       return fib_t(n - 1, last, s_last + last);

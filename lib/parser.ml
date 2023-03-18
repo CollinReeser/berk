@@ -969,30 +969,18 @@ and parse_if_expr ?(ind="") tokens : (token list * expr) =
   end in
 
   begin match tokens with
-  | KWIf(_) :: LParen(_) :: rest ->
+  | KWIf(_) :: rest ->
       let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
+      let (rest, then_exp) = parse_expr_block ~ind:ind_next rest in
 
       begin match rest with
-      | RParen(_) :: rest ->
-          let (rest, then_exp) = parse_expr_block ~ind:ind_next rest in
+      | KWElse(_) :: rest ->
+          let (rest, else_exp) = parse_expr_block ~ind:ind_next rest in
+          (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, else_exp))
 
-          begin match rest with
-          | KWElse(_) :: rest ->
-              let (rest, else_exp) = parse_expr_block ~ind:ind_next rest in
-              (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, else_exp))
+      | _ :: _ ->
+          (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, ValNil))
 
-          | _ :: _ ->
-              (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, ValNil))
-
-          | [] -> failwith "Unexpected EOF while parsing if-expr."
-          end
-
-      | tok :: _ ->
-          let fmted = fmt_token tok in
-          failwith (
-            Printf.sprintf
-              "Unexpected token [%s] in if-expr, expected `)`." fmted
-          )
       | [] -> failwith "Unexpected EOF while parsing if-expr."
       end
 
