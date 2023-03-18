@@ -263,14 +263,16 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
 
   | WhileExpr (_, init_stmts, while_cond, then_stmts) ->
       let formatted_init_stmts = begin
-        let (open_brace, close_brace) =
-          if List.length init_stmts = 1
-          then ("{ ", " } in ")
-          else ("{\n", Printf.sprintf "%s} in " ind)
+        let (open_brace, close_brace, ind) =
+          if List.length init_stmts = 0
+          then ("", "", "")
+          else if List.length init_stmts = 1
+          then ("{ ", " } in ", "")
+          else ("{\n", Printf.sprintf "%s} in " ind, ind ^ "  ")
         in
         let formatted_stmts =
           List.fold_left (^) "" (
-            List.map (fmt_stmt ~print_typ:print_typ (ind ^ "  ")) init_stmts
+            List.map (fmt_stmt ~print_typ:print_typ (ind)) init_stmts
           )
         in
         Printf.sprintf "%s%s%s" open_brace formatted_stmts close_brace
