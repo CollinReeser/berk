@@ -26,6 +26,21 @@ let () =
       return 20;
     }
 
+    fn collatz(n: u64) {
+      while {let mut i = n;} i > 1 {
+        printf("%llu\n", i);
+
+        if (i % 2 == 0) {
+          i = i / 2;
+        }
+        else {
+          i = i * 3 + 1;
+        }
+      }
+
+      printf("1\n");
+    }
+
     fn main(): i8 {
       let dup_hello_1 = "Hello, world!";
       let dup_hello_2 = "Hello, world!";
@@ -63,6 +78,8 @@ let () =
 
         iter = iter + 1;
       }
+
+      collatz(3);
 
       return 0;
     }

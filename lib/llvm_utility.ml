@@ -201,7 +201,7 @@ let dump_llvm_ir filename the_module =
 
 
 let generate_executable filename_exe filename_obj =
-  let cmd = Printf.sprintf "clang -o %s %s" filename_exe filename_obj in
+  let cmd = Printf.sprintf "clang -no-pie -o %s %s" filename_exe filename_obj in
   begin match Sys.command cmd with
     | 0 -> Printf.printf "Wrote %s\n" filename_exe
     | n -> Printf.printf "clang failed with %d\n" n
