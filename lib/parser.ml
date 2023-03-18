@@ -541,8 +541,100 @@ and parse_expr ?(ind="") tokens : (token list * expr) =
     else ind
   end in
 
-  let (rest, exp) = parse_sum ~ind:ind_next tokens in
+  let (rest, exp) = parse_equality ~ind:ind_next tokens in
   (rest, exp)
+
+
+and parse_equality ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let rec _parse_equality ?(ind="") tokens exp_lhs =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match tokens with
+    | EqualEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_relation ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Eq, exp_lhs, exp_rhs) in
+        _parse_equality ~ind:ind_next rest exp
+
+    | BangEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_relation ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Ne, exp_lhs, exp_rhs) in
+        _parse_equality ~ind:ind_next rest exp
+
+    | _ -> (tokens, exp_lhs)
+    end
+  in
+
+  let (rest, exp_lhs) = parse_relation ~ind:ind_next tokens in
+  _parse_equality ~ind:ind_next rest exp_lhs
+
+
+and parse_relation ?(ind="") tokens : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let rec _parse_relation ?(ind="") tokens exp_lhs =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match tokens with
+    | Lesser(_) :: rest ->
+        let (rest, exp_rhs) = parse_sum ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Lt, exp_lhs, exp_rhs) in
+        _parse_relation ~ind:ind_next rest exp
+
+    | LessEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_sum ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Le, exp_lhs, exp_rhs) in
+        _parse_relation ~ind:ind_next rest exp
+
+    | Greater(_) :: rest ->
+        let (rest, exp_rhs) = parse_sum ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Gt, exp_lhs, exp_rhs) in
+        _parse_relation ~ind:ind_next rest exp
+
+    | GreatEqual(_) :: rest ->
+        let (rest, exp_rhs) = parse_sum ~ind:ind_next rest in
+        let exp = BinOp(Undecided, Ge, exp_lhs, exp_rhs) in
+        _parse_relation ~ind:ind_next rest exp
+
+    | _ -> (tokens, exp_lhs)
+    end
+  in
+
+  let (rest, exp_lhs) = parse_sum ~ind:ind_next tokens in
+  _parse_relation ~ind:ind_next rest exp_lhs
 
 
 and parse_sum ?(ind="") tokens : (token list * expr) =
@@ -610,82 +702,26 @@ and parse_prod ?(ind="") tokens : (token list * expr) =
 
     begin match tokens with
     | Star(_) :: rest ->
-        let (rest, exp_rhs) = parse_equality ~ind:ind_next rest in
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
         let exp = BinOp(Undecided, Mul, exp_lhs, exp_rhs) in
         _parse_prod ~ind:ind_next rest exp
 
     | Slash(_) :: rest ->
-        let (rest, exp_rhs) = parse_equality ~ind:ind_next rest in
+        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
         let exp = BinOp(Undecided, Div, exp_lhs, exp_rhs) in
         _parse_prod ~ind:ind_next rest exp
 
-    | _ -> (tokens, exp_lhs)
-    end
-  in
-
-  let (rest, exp_lhs) = parse_equality ~ind:ind_next tokens in
-  _parse_prod ~ind:ind_next rest exp_lhs
-
-
-and parse_equality ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
-
-  let rec _parse_equality ?(ind="") tokens exp_lhs =
-    let ind_next = begin
-      if ind <> "" then
-        begin
-          Printf.printf "%sParsing: [%s] with [%s]\n"
-            ind __FUNCTION__ (fmt_next_token tokens) ;
-          (ind ^ " ")
-        end
-      else ind
-    end in
-
-    begin match tokens with
-    | EqualEqual(_) :: rest ->
+    | Percent(_) :: rest ->
         let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
-        let exp = BinOp(Undecided, Eq, exp_lhs, exp_rhs) in
-        _parse_equality ~ind:ind_next rest exp
-
-    | BangEqual(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
-        let exp = BinOp(Undecided, Ne, exp_lhs, exp_rhs) in
-        _parse_equality ~ind:ind_next rest exp
-
-    | Lesser(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
-        let exp = BinOp(Undecided, Lt, exp_lhs, exp_rhs) in
-        _parse_equality ~ind:ind_next rest exp
-
-    | LessEqual(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
-        let exp = BinOp(Undecided, Le, exp_lhs, exp_rhs) in
-        _parse_equality ~ind:ind_next rest exp
-
-    | Greater(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
-        let exp = BinOp(Undecided, Gt, exp_lhs, exp_rhs) in
-        _parse_equality ~ind:ind_next rest exp
-
-    | GreatEqual(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
-        let exp = BinOp(Undecided, Ge, exp_lhs, exp_rhs) in
-        _parse_equality ~ind:ind_next rest exp
+        let exp = BinOp(Undecided, Mod, exp_lhs, exp_rhs) in
+        _parse_prod ~ind:ind_next rest exp
 
     | _ -> (tokens, exp_lhs)
     end
   in
 
   let (rest, exp_lhs) = parse_value ~ind:ind_next tokens in
-  _parse_equality ~ind:ind_next rest exp_lhs
+  _parse_prod ~ind:ind_next rest exp_lhs
 
 
 and parse_value ?(ind="") tokens : (token list * expr) =

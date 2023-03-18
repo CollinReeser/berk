@@ -45,6 +45,7 @@ type token =
 | Minus of position
 | Star of position
 | Slash of position
+| Percent of position
 | LowIdent of position * string
 | CapIdent of position * string
 | Integer of position * int
@@ -134,6 +135,7 @@ let fmt_token tok =
   | Minus(p)       -> Printf.sprintf "-   (syn)      : %s"   (fmt_pos p)
   | Star(p)        -> Printf.sprintf "*   (syn)      : %s"   (fmt_pos p)
   | Slash(p)       -> Printf.sprintf "/   (syn)      : %s"   (fmt_pos p)
+  | Percent(p)     -> Printf.sprintf "%%  (syn)      : %s"   (fmt_pos p)
   | LowIdent(p, s) -> Printf.sprintf "%s (low-ident) : %s" s (fmt_pos p)
   | CapIdent(p, s) -> Printf.sprintf "%s (cap-ident) : %s" s (fmt_pos p)
   | Integer(p, i)  -> Printf.sprintf "%d (integer)   : %s" i (fmt_pos p)
@@ -315,6 +317,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "/" ->
         let tok = Slash(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "%" ->
+        let tok = Percent(get_pos buf) in
         _tokenize buf (tok :: tokens)
 
     | 'A' .. 'Z', Star(id_continue) ->
