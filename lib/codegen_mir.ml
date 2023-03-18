@@ -19,6 +19,37 @@ type func_gen_context = {
   mod_ctxt: module_gen_context
 }
 
+(* Assert that, where applicable, LLVM agreed to use exactly the name given to
+it by the generated MIR for each LLVM value. LLVM producing a non-matching name
+(likely appended with some digits) implies LLVM had to uniquify the value
+because it was already used, which further implies the MIR is not fully
+uniquified itself. *)
+let enforce_mir_llvm_name_agreement mir_name llvm_val =
+  let llvm_name = Llvm.value_name llvm_val in
+
+  if mir_name = "" then
+    failwith (
+      Printf.sprintf
+        "MIR lval names must be non-empty strings! LLVM: [%s]"
+        llvm_name
+    )
+
+  else if llvm_name = "" then
+    (* LLVM will constant-fold on the fly, which can yield unnamed values. We
+    simply accept this. *)
+    llvm_val
+
+  else if mir_name <> llvm_name then
+    failwith (
+      Printf.sprintf
+        "MIR lval name [%s] was not unique; LLVM forced to uniquify with [%s]"
+        mir_name llvm_name
+    )
+
+  else
+    llvm_val
+;;
+
 let codegen_constant
   llvm_ctxt func_ctxt builder constant : Llvm.llvalue
 =
@@ -125,8 +156,17 @@ let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
   in
   let llvm_args = Array.of_list llvm_args in
 
+  (* Generate the function call. If this function returns non-nil, we expect
+  result_name to be a non-empty string, and we expect that result_name to be
+  unique, such that LLVM does not need to further uniquify it. This is important
+  as a sanity check against the MIR being well-formed, ie, the MIR must also
+  have fully unique names everywhere, just like LLVM. *)
   let call_result =
-    Llvm.build_call llvm_func_val llvm_args result_name builder
+    Llvm.build_call llvm_func_val llvm_args result_name builder |>
+    if result_name = "" then
+      Fun.id
+    else
+      enforce_mir_llvm_name_agreement result_name
   in
 
   (* Hint that this should be a tailcall if possible. *)
@@ -148,7 +188,12 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
   | Alloca({lname; _}, t) ->
       let alloca_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
-      let alloca = Llvm.build_alloca alloca_t lname builder in
+
+      let alloca =
+        Llvm.build_alloca alloca_t lname builder |>
+        enforce_mir_llvm_name_agreement lname
+      in
+
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname alloca func_ctxt.cur_vars
       } in
@@ -163,7 +208,12 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
   | Load({lname=name_value; _}, {lname=name_alloca; _}) ->
       let alloca = StrMap.find name_alloca func_ctxt.cur_vars in
-      let value = Llvm.build_load alloca name_alloca builder in
+
+      let value =
+        Llvm.build_load alloca name_value builder |>
+        enforce_mir_llvm_name_agreement name_value
+      in
+
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add name_value value func_ctxt.cur_vars
       } in
@@ -210,7 +260,8 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       let orig_agg_val = StrMap.find orig_agg_name func_ctxt.cur_vars in
 
       let new_agg_val =
-        Llvm.build_insertvalue orig_agg_val elem_val idx "aggtmp" builder
+        Llvm.build_insertvalue orig_agg_val elem_val idx new_agg_name builder |>
+        enforce_mir_llvm_name_agreement new_agg_name
       in
 
       let func_ctxt = {
@@ -222,8 +273,10 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
   | FromAggregate({lname; _}, elem_idx, {lname=agg_name; _}) ->
       let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
+
       let elem_val =
-        Llvm.build_extractvalue agg_value elem_idx "decontmp" builder
+        Llvm.build_extractvalue agg_value elem_idx lname builder |>
+        enforce_mir_llvm_name_agreement lname
       in
 
       let func_ctxt = {
@@ -243,7 +296,10 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       let indices = Array.of_list (List.map index_to_llvm indices) in
       let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
 
-      let llvm_gep = Llvm.build_gep agg_value indices "ptrtotmp" builder in
+      let llvm_gep =
+        Llvm.build_gep agg_value indices lname builder |>
+        enforce_mir_llvm_name_agreement lname
+      in
 
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname llvm_gep func_ctxt.cur_vars
@@ -302,20 +358,23 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
       let op_val = StrMap.find rhs_name func_ctxt.cur_vars in
 
-      let trunc_val = begin match op with
-        | Truncate -> Llvm.build_trunc op_val llvm_t "trunctmp" builder
-        | Bitwise -> Llvm.build_bitcast op_val llvm_t "bitcasttmp" builder
+      let trunc_val =
+        begin match op with
+        | Truncate -> Llvm.build_trunc op_val llvm_t lname builder
+        | Bitwise -> Llvm.build_bitcast op_val llvm_t lname builder
         | Extend ->
             begin match t with
             | U8 | U16 | U32 | U64 ->
-              Llvm.build_zext op_val llvm_t "zexttmp" builder
+              Llvm.build_zext op_val llvm_t lname builder
             | I8 | I16 | I32 | I64 ->
-              Llvm.build_sext op_val llvm_t "sexttmp" builder
+              Llvm.build_sext op_val llvm_t lname builder
             | F32 | F64 | F128 ->
-              Llvm.build_fpext op_val llvm_t "fpexttmp" builder
+              Llvm.build_fpext op_val llvm_t lname builder
             | _ -> failwith "Cannot extend non-numeric type"
             end
-      end in
+        end
+        |> enforce_mir_llvm_name_agreement lname
+      in
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname trunc_val func_ctxt.cur_vars
       } in
@@ -345,57 +404,64 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         end
       in
 
+      Printf.printf "LHS: [%s] [%s], RHS: [%s] [%s]\n"
+        lhs_name
+        (Llvm.value_name lhs_val)
+        rhs_name
+        (Llvm.value_name rhs_val)
+      ;
+
       let bin_op_val = begin match (lhs_t, rhs_t) with
       | ((U8 | U16 | U32 | U64), (U8 | U16 | U32 | U64)) ->
           begin match op with
-          | Add -> Llvm.build_add lhs_val rhs_val "uaddtmp" builder
-          | Sub -> Llvm.build_sub lhs_val rhs_val "usubtmp" builder
-          | Mul -> Llvm.build_mul lhs_val rhs_val "umultmp" builder
-          | Div -> Llvm.build_udiv lhs_val rhs_val "udivtmp" builder
-          | Mod -> Llvm.build_urem lhs_val rhs_val "uremtmp" builder
-          | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
-          | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
-          | Lt -> Llvm.build_icmp Llvm.Icmp.Ult lhs_val rhs_val "uicmptmp" builder
-          | Le -> Llvm.build_icmp Llvm.Icmp.Ule lhs_val rhs_val "uicmptmp" builder
-          | Gt -> Llvm.build_icmp Llvm.Icmp.Ugt lhs_val rhs_val "uicmptmp" builder
-          | Ge -> Llvm.build_icmp Llvm.Icmp.Uge lhs_val rhs_val "uicmptmp" builder
+          | Add -> Llvm.build_add lhs_val rhs_val lname builder
+          | Sub -> Llvm.build_sub lhs_val rhs_val lname builder
+          | Mul -> Llvm.build_mul lhs_val rhs_val lname builder
+          | Div -> Llvm.build_udiv lhs_val rhs_val lname builder
+          | Mod -> Llvm.build_urem lhs_val rhs_val lname builder
+          | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
+          | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
+          | Lt -> Llvm.build_icmp Llvm.Icmp.Ult lhs_val rhs_val lname builder
+          | Le -> Llvm.build_icmp Llvm.Icmp.Ule lhs_val rhs_val lname builder
+          | Gt -> Llvm.build_icmp Llvm.Icmp.Ugt lhs_val rhs_val lname builder
+          | Ge -> Llvm.build_icmp Llvm.Icmp.Uge lhs_val rhs_val lname builder
           end
 
       | ((I8 | I16 | I32 | I64), (I8 | I16 | I32 | I64)) ->
         begin match op with
-        | Add -> Llvm.build_add lhs_val rhs_val "iaddtmp" builder
-        | Sub -> Llvm.build_sub lhs_val rhs_val "isubtmp" builder
-        | Mul -> Llvm.build_mul lhs_val rhs_val "imultmp" builder
-        | Div -> Llvm.build_sdiv lhs_val rhs_val "idivtmp" builder
-        | Mod -> Llvm.build_srem lhs_val rhs_val "sremtmp" builder
-        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "iicmptmp" builder
-        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "iicmptmp" builder
-        | Lt -> Llvm.build_icmp Llvm.Icmp.Slt lhs_val rhs_val "iicmptmp" builder
-        | Le -> Llvm.build_icmp Llvm.Icmp.Sle lhs_val rhs_val "iicmptmp" builder
-        | Gt -> Llvm.build_icmp Llvm.Icmp.Sgt lhs_val rhs_val "iicmptmp" builder
-        | Ge -> Llvm.build_icmp Llvm.Icmp.Sge lhs_val rhs_val "iicmptmp" builder
+        | Add -> Llvm.build_add lhs_val rhs_val lname builder
+        | Sub -> Llvm.build_sub lhs_val rhs_val lname builder
+        | Mul -> Llvm.build_mul lhs_val rhs_val lname builder
+        | Div -> Llvm.build_sdiv lhs_val rhs_val lname builder
+        | Mod -> Llvm.build_srem lhs_val rhs_val lname builder
+        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
+        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
+        | Lt -> Llvm.build_icmp Llvm.Icmp.Slt lhs_val rhs_val lname builder
+        | Le -> Llvm.build_icmp Llvm.Icmp.Sle lhs_val rhs_val lname builder
+        | Gt -> Llvm.build_icmp Llvm.Icmp.Sgt lhs_val rhs_val lname builder
+        | Ge -> Llvm.build_icmp Llvm.Icmp.Sge lhs_val rhs_val lname builder
         end
 
       | ((F128 | F64 | F32), (F128 | F64 | F32)) ->
         begin match op with
-        | Add -> Llvm.build_fadd lhs_val rhs_val "faddtmp" builder
-        | Sub -> Llvm.build_fsub lhs_val rhs_val "fsubtmp" builder
-        | Mul -> Llvm.build_fmul lhs_val rhs_val "fmultmp" builder
-        | Div -> Llvm.build_fdiv lhs_val rhs_val "fdivtmp" builder
-        | Mod -> Llvm.build_frem lhs_val rhs_val "fremtmp" builder
-        | Eq -> Llvm.build_fcmp Llvm.Fcmp.Ueq lhs_val rhs_val "fcmptmp" builder
-        | Ne -> Llvm.build_fcmp Llvm.Fcmp.Une lhs_val rhs_val "fcmptmp" builder
-        | Lt -> Llvm.build_fcmp Llvm.Fcmp.Ult lhs_val rhs_val "fcmptmp" builder
-        | Le -> Llvm.build_fcmp Llvm.Fcmp.Ule lhs_val rhs_val "fcmptmp" builder
-        | Gt -> Llvm.build_fcmp Llvm.Fcmp.Ugt lhs_val rhs_val "fcmptmp" builder
-        | Ge -> Llvm.build_fcmp Llvm.Fcmp.Uge lhs_val rhs_val "fcmptmp" builder
+        | Add -> Llvm.build_fadd lhs_val rhs_val lname builder
+        | Sub -> Llvm.build_fsub lhs_val rhs_val lname builder
+        | Mul -> Llvm.build_fmul lhs_val rhs_val lname builder
+        | Div -> Llvm.build_fdiv lhs_val rhs_val lname builder
+        | Mod -> Llvm.build_frem lhs_val rhs_val lname builder
+        | Eq -> Llvm.build_fcmp Llvm.Fcmp.Ueq lhs_val rhs_val lname builder
+        | Ne -> Llvm.build_fcmp Llvm.Fcmp.Une lhs_val rhs_val lname builder
+        | Lt -> Llvm.build_fcmp Llvm.Fcmp.Ult lhs_val rhs_val lname builder
+        | Le -> Llvm.build_fcmp Llvm.Fcmp.Ule lhs_val rhs_val lname builder
+        | Gt -> Llvm.build_fcmp Llvm.Fcmp.Ugt lhs_val rhs_val lname builder
+        | Ge -> Llvm.build_fcmp Llvm.Fcmp.Uge lhs_val rhs_val lname builder
         end
 
 
       | (Bool, Bool) ->
         begin match op with
-        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val "bicmptmp" builder
-        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val "bicmptmp" builder
+        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
+        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
         | _ -> failwith "Non-equality binop not supported for bool"
         end
 
@@ -407,7 +473,9 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
             (fmt_type lhs_t)
             (fmt_type rhs_t)
         )
-      end in
+      end
+        |> enforce_mir_llvm_name_agreement lname
+      in
 
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname bin_op_val func_ctxt.cur_vars
