@@ -368,6 +368,10 @@ and parse_stmt ?(ind="") tokens : (token list * stmt) option =
       begin match tokens with
       | KWLet(_) :: rest -> parse_decl_stmt ~ind:ind_next rest
 
+      (* A return with no expression is a void return. *)
+      | KWReturn(_) :: ((Semicolon(_) :: _) as rest) ->
+          (rest, ReturnStmt(ValNil))
+
       | KWReturn(_) :: rest ->
           let (rest, exp) = parse_expr ~ind:ind_next rest in
           (rest, ReturnStmt(exp))
@@ -1076,6 +1080,7 @@ and parse_expr_atom ?(ind="") tokens : (token list * expr) =
   end in
 
   begin match tokens with
+  | LParen(_) :: RParen(_) :: rest -> (rest, ValNil)
   | Integer(_, num) :: rest -> (rest, ValInt(Undecided, num))
   | String(_, str) :: rest -> (rest, ValStr(str))
   | LowIdent(_, name) :: rest -> (rest, ValName(Undecided, name))

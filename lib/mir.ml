@@ -1502,14 +1502,25 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         (mir_ctxt, bb)
 
     | ReturnStmt(exp) ->
-        let (mir_ctxt, bb, ret_lval) = expr_to_mir mir_ctxt bb exp in
+        let t = expr_type exp in
 
-        let ret_instr = Ret(ret_lval) in
+        begin match t with
+        | Nil ->
+            let bb = {bb with instrs = bb.instrs @ [RetVoid]} in
+            let mir_ctxt = update_bb mir_ctxt bb in
 
-        let bb = {bb with instrs = bb.instrs @ [ret_instr]} in
-        let mir_ctxt = update_bb mir_ctxt bb in
+            (mir_ctxt, bb)
 
-        (mir_ctxt, bb)
+        | _ ->
+            let (mir_ctxt, bb, ret_lval) = expr_to_mir mir_ctxt bb exp in
+
+            let ret_instr = Ret(ret_lval) in
+
+            let bb = {bb with instrs = bb.instrs @ [ret_instr]} in
+            let mir_ctxt = update_bb mir_ctxt bb in
+
+            (mir_ctxt, bb)
+        end
 
     | AssignDeconStmt(_, _) -> failwith "AssignDeconStmt: Unimplemented"
   in
@@ -1598,13 +1609,35 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
   let (mir_ctxt, cur_bb) = func_args_to_mir mir_ctxt bb_entry in
 
   (* Core generation of MIR for the function body. *)
-  let ((mir_ctxt, _), _) =
+  let ((mir_ctxt, cur_bb), _) =
     List.fold_left_map (
       fun (mir_ctxt, cur_bb) stmt ->
         let (mir_ctxt, cur_bb) = stmt_to_mir mir_ctxt cur_bb stmt in
         ((mir_ctxt, cur_bb), ())
     ) (mir_ctxt, cur_bb) f_stmts
   in
+
+  (* Inject a trailing return stmt if it's missing and the function is void.
+  Else, if the trailing return statement is missing and the function is
+  non-void, fail. Really, this should have been caught earlier! *)
+  let mir_ctxt = begin
+    match (List.rev f_stmts) with
+    | ReturnStmt(_) :: _ ->
+        mir_ctxt
+
+    | []
+    | _ :: _ ->
+        if f_ret_t = Nil then
+          let (mir_ctxt, _) =
+            stmt_to_mir mir_ctxt cur_bb (ReturnStmt(ValNil))
+          in
+          mir_ctxt
+        else
+          failwith (
+            Printf.sprintf "No trailing return-stmt but non-nil function [%s]"
+              f_name
+          )
+  end in
 
   let mir_ctxt = clean_up_mir mir_ctxt in
 
