@@ -9,11 +9,6 @@ AST for the berk language.
 
 type ident_t = string
 
-and maybe_bounds_check =
-  | NoBoundsCheck
-  | DoBoundsCheck
-  | Undecided
-
 and expr =
   | ValNil
   | ValU64 of int
