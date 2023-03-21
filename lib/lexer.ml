@@ -20,6 +20,9 @@ type token =
 | KWu16 of position
 | KWu32 of position
 | KWu64 of position
+| KWBool of position
+| KWTrue of position
+| KWFalse of position
 | KWString of position
 | LParen of position
 | RParen of position
@@ -110,6 +113,9 @@ let fmt_token tok =
   | KWu16(p)       -> Printf.sprintf "u16    (kw)    : %s"   (fmt_pos p)
   | KWu32(p)       -> Printf.sprintf "u32    (kw)    : %s"   (fmt_pos p)
   | KWu64(p)       -> Printf.sprintf "u64    (kw)    : %s"   (fmt_pos p)
+  | KWBool(p)      -> Printf.sprintf "bool   (kw)    : %s"   (fmt_pos p)
+  | KWTrue(p)      -> Printf.sprintf "true   (kw)    : %s"   (fmt_pos p)
+  | KWFalse(p)     -> Printf.sprintf "false  (kw)    : %s"   (fmt_pos p)
   | KWString(p)    -> Printf.sprintf "u64    (kw)    : %s"   (fmt_pos p)
   | LParen(p)      -> Printf.sprintf "(   (syn)      : %s"   (fmt_pos p)
   | RParen(p)      -> Printf.sprintf ")   (syn)      : %s"   (fmt_pos p)
@@ -239,6 +245,15 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "u64" ->
         let tok = KWu64(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "bool" ->
+        let tok = KWBool(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "true" ->
+        let tok = KWTrue(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "false" ->
+        let tok = KWFalse(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "string" ->
         let tok = KWString(get_pos buf) in

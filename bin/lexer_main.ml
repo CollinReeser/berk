@@ -50,6 +50,14 @@ let () =
       printf("%s\n", dup_hello_2);
       printf("%s\n", dup_hello_3);
 
+      let val: bool = false;
+
+      if val {
+        printf("True? Bad! Expected false!\n");
+      } else {
+        printf("False! Good!\n");
+      }
+
       let my_str = "Hello, world! [%d] [%llu]\n";
       let var = 6 + 7 * 8 - ret_int();
       let var2: i32 = 6 + 7 * 8 - ret_int();

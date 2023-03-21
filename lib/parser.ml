@@ -193,7 +193,7 @@ and parse_func_params ?(ind="") tokens : (token list * f_param list) =
 
 
 and parse_type ?(ind="") tokens : (token list * berk_t) =
-  let _ = begin
+  let ind_next = begin
     if ind <> "" then
       begin
         Printf.printf "%sParsing: [%s] with [%s]\n"
@@ -212,6 +212,7 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   | KWu16(_) :: rest -> (rest, U16)
   | KWu32(_) :: rest -> (rest, U32)
   | KWu64(_) :: rest -> (rest, U64)
+  | KWBool(_) :: rest -> (rest, Bool)
   | KWString(_) :: rest -> (rest, String)
   | tok :: _ ->
       let fmted = fmt_token tok in
@@ -1081,6 +1082,8 @@ and parse_expr_atom ?(ind="") tokens : (token list * expr) =
 
   begin match tokens with
   | LParen(_) :: RParen(_) :: rest -> (rest, ValNil)
+  | KWTrue(_) :: rest -> (rest, ValBool(true))
+  | KWFalse(_) :: rest -> (rest, ValBool(false))
   | Integer(_, num) :: rest -> (rest, ValInt(Undecided, num))
   | String(_, str) :: rest -> (rest, ValStr(str))
   | LowIdent(_, name) :: rest -> (rest, ValName(Undecided, name))
