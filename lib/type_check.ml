@@ -1023,21 +1023,22 @@ and type_check_expr
             begin match arr_t with
             | Array(elem_typ, sz) ->
                 begin match idx_typechecked with
-                  | ValU64(i)
-                  | ValU32(i)
-                  | ValU16(i)
-                  | ValU8(i) ->
-                      if i < sz
-                        then
-                          IndexExpr(
-                            elem_typ, idx_typechecked, arr_typechecked
-                          )
-                        else failwith "Static out-of-bounds index into array"
-                  | _ ->
-                      IndexExpr(
-                        elem_typ, idx_typechecked, arr_typechecked
-                      )
+                | ValU64(i)
+                | ValU32(i)
+                | ValU16(i)
+                | ValU8(i) ->
+                    if i < sz
+                      then
+                        IndexExpr(
+                          elem_typ, idx_typechecked, arr_typechecked
+                        )
+                      else failwith "Static out-of-bounds index into array"
+                | _ ->
+                    IndexExpr(
+                      elem_typ, idx_typechecked, arr_typechecked
+                    )
                 end
+
             | _ -> failwith "Unexpected index target in index expr"
             end
           else failwith "Unexpected components of index operation"
@@ -1131,7 +1132,8 @@ and type_check_expr
         ) in
 
         MatchExpr(common_t, matched_expr_tc, pattern_expr_pairs_tc)
-  end in
+    end
+  in
 
   (* First, allow the typechecker to try to infer types as much as possible. *)
   let exp_typechecked = _type_check_expr exp in
