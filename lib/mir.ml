@@ -783,6 +783,14 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
               _expr_to_mir mir_ctxt bb cond_expr
             in
 
+            (* NOTE: We need to put the branch to then/else _here_, as opposed
+            to the end, as the then_bb and else_bb we get back from evaluating
+            those blocks might be some arbitrary other block (if there's further
+            control flow in the then or else branches). We need to branch to the
+            _start_ of whatever arbitrary control flow then/else might have. *)
+            let cond_br = CondBr(cond_lval, then_bb, else_bb) in
+            let bb = {bb with instrs = bb.instrs @ [cond_br]} in
+
             let (mir_ctxt, then_bb, then_instr) =
               _expr_to_mir mir_ctxt then_bb then_expr
             in
@@ -802,9 +810,6 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                   (else_bb.instrs @ (maybe_do_store else_instr)) @ [Br(end_bb)]
               }
             in
-
-            let cond_br = CondBr(cond_lval, then_bb, else_bb) in
-            let bb = {bb with instrs = bb.instrs @ [cond_br]} in
 
             (mir_ctxt, (bb, then_bb, else_bb, end_bb))
           in
