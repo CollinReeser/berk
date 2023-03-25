@@ -116,6 +116,8 @@ and is_concrete_expr ?(verbose=false) expr =
   | ValFunc(typ, _)
   | ValName(typ, _) -> _is_concrete_type typ
 
+  | ValRawArray(typ) -> _is_concrete_type typ
+
   | ValCastTrunc(typ, expr)
   | ValCastBitwise(typ, expr)
   | ValCastExtend(typ, expr)
@@ -758,6 +760,8 @@ and type_check_expr
             failwith
               (Printf.sprintf "No variable or function [%s] in scope" name)
         end
+
+    | ValRawArray(t) -> ValRawArray(t)
 
     | ValCastTrunc(target_t, exp) ->
         let exp_typechecked = _type_check_expr exp in

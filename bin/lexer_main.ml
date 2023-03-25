@@ -58,19 +58,14 @@ let () =
         printf("False! Good!\n");
       }
 
+      let def_int: u32;
+      let def_str: string;
+
+      printf("Default int: [%d], default str: [%s]\n", def_int, def_str);
+
       let mut bool_vars: [12]bool;
-      bool_vars[0] = true;
-      bool_vars[1] = false;
       bool_vars[2] = true;
-      bool_vars[3] = false;
-      bool_vars[4] = true;
-      bool_vars[5] = false;
       bool_vars[6] = true;
-      bool_vars[7] = false;
-      bool_vars[8] = true;
-      bool_vars[9] = false;
-      bool_vars[10] = true;
-      bool_vars[11] = false;
 
       while {let mut i: u32 = 0;} i < 12 {
         printf("Bool var: [%d] [%d]\n", i, bool_vars[i]);

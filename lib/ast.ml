@@ -35,6 +35,16 @@ and expr =
   | ValFunc of berk_t * ident_t
   | ValName of berk_t * ident_t
 
+  (* This is used during lower-level passes as part of allocation/initialization
+  of static arrays and is not generated directly from source. It differs from
+  the ByteArray type in that ByteArrays are sized in bytes, but ValRawArrays are
+  sized by the given inner type of the top-level array type. They are the way
+  for the compiler to represent unitialized generic array data.
+
+  The top-level type is the array type.
+  *)
+  | ValRawArray of berk_t
+
   | ValCastTrunc of berk_t * expr
   | ValCastBitwise of berk_t * expr
   | ValCastExtend of berk_t * expr
@@ -130,6 +140,7 @@ let expr_type exp =
   | ValVar(typ, _) -> typ
   | ValFunc(typ, _) -> typ
   | ValName(typ, _) -> typ
+  | ValRawArray(typ) -> typ
   | ValCastTrunc(typ, _) -> typ
   | ValCastBitwise(typ, _) -> typ
   | ValCastExtend(typ, _) -> typ
@@ -207,6 +218,10 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
 
   | ValName(_, name) ->
       Printf.sprintf "%s<unresolved><%s%s>" init_ind name typ_s
+
+  | ValRawArray(t) ->
+      Printf.sprintf "%s<uninitialized of %s>%s"
+        init_ind (fmt_type t) typ_s
 
   | ValCastTrunc (target_t, exp) ->
       Printf.sprintf "%scast_trunc<%s>(%s)%s"
@@ -531,7 +546,10 @@ let rec default_expr_for_t t =
       TupleExpr(t, default_ts_exprs)
 
   | Array(_, _) ->
-      failwith "Error: Do not attempt to generate default array."
+      failwith (
+        "Error: Do not attempt to generate default array. Array declarations " ^
+        "must be initialized."
+      )
   end
 ;;
 
@@ -1136,6 +1154,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
 
     | ValName(_, _) ->
         failwith "Cannot rewrite ValName(): Should have been resolved"
+
+    | ValRawArray(_) ->
+        failwith "Cannot rewrite ValRawArray(): Should not be present"
 
     | ValCastExtend(t, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in

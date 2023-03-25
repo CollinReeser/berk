@@ -451,6 +451,8 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
   | ValFunc(_, _) -> failwith "Unimplemented: ValFunc"
   | ValName(_, _) -> failwith "Unimplemented: ValName"
 
+  | ValRawArray(_) -> failwith "Unimplemented: ValRawArray"
+
   | ValCastTrunc(target_t, exp) ->
     begin
       let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in

@@ -199,6 +199,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       } in
 
       func_ctxt
+
   | Store({lname=name_ptrto; _}, {lname=name_value; _}) ->
       let ptrto = StrMap.find name_ptrto func_ctxt.cur_vars in
       let value = StrMap.find name_value func_ctxt.cur_vars in

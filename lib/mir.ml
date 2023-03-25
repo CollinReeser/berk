@@ -45,7 +45,7 @@ type index =
 type instr =
 (* The lval representation of the function argument at the given index. *)
 | GetArg of lval * int
-(* Create an alloca (stack-allocated space of some size) *)
+(* Create an alloca (stack-allocated space of some static size) *)
 | Alloca of lval * berk_t
 (* Store -> lhs is memory target, rhs is stored value *)
 | Store of lval * lval
@@ -55,7 +55,9 @@ type instr =
 | BinOp of lval * bin_op * lval * lval
 | UnOp of lval * un_op * lval
 (* Yields an lval of some ptr type, that when loaded yields a value of the type
-within the ptr. The RHS lval is the object to index into. *)
+within the ptr, and can store a value of the type pointed to by the ptr. The RHS
+lval is the object to index into, to either load from or store into. The LHS is
+always a pointer type. *)
 | PtrTo of lval * index list * lval
 (* Turn a list of separate values into a struct containing those values, whose
 members are in the same order as the given list. *)
@@ -445,19 +447,51 @@ let literal_to_instr mir_ctxt bb t ctor =
 let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
   let (mir_ctxt, bb, lval) =
     begin match t with
-    (* For generating default initialization of a static array, we can't do the
-    naive thing, because the naive thing will generate a line of MIR for each
-    index in the array. For large arrays, this can be millions/billions of
-    lines of MIR. *)
-    | Array(_, _) ->
+    (* For initialization of static arrays, we generate a loop with dynamic
+    indexing, rather than initializing via individual aggregate initialization,
+    as the latter will generate a line of MIR per index in the array (which
+    could be millions). *)
+    | Array(elem_t, sz) ->
+        (* Generate MIR for the mini-AST that initializes the array. Our
+        "output" of this mini-AST is the temporary variable holding the
+        array itself, that we can assign to the "real" array variable at the
+        end. *)
+        let (mir_ctxt, arr_varname) = get_varname mir_ctxt in
+        let (mir_ctxt, idx_varname) = get_varname mir_ctxt in
+        let arr_init_stmts = [
+          DeclStmt(arr_varname, {mut=true}, t, ValRawArray(t));
+          ExprStmt(
+            WhileExpr(
+              Nil, [DeclStmt(idx_varname, {mut=true}, U64, ValU64(0))],
+              BinOp(Bool, Lt, ValVar(U64, idx_varname), ValU64(sz)),
+              [
+                (* Initialize this index of the array. *)
+                AssignStmt(
+                  ALIndex(arr_varname, ValVar(U64, idx_varname)),
+                  (default_expr_for_t elem_t)
+                );
+                (* Increment the indexing variable. *)
+                AssignStmt(
+                  ALVar(idx_varname),
+                  BinOp(U64, Add, ValVar(U64, idx_varname), ValU64(1))
+                );
+              ]
+            )
+          );
+        ]
+        in
 
-        let (mir_ctxt, alloca_arr_varname) = get_varname mir_ctxt in
-        let alloca_arr_lval = {t=Ptr(t); kind=Tmp; lname=alloca_arr_varname} in
-        let alloca_arr_instr = Alloca(alloca_arr_lval, t) in
-        let bb = {bb with instrs = bb.instrs @ [alloca_arr_instr]} in
+        (* Generate MIR for the statements of our mini-AST. *)
+        let (mir_ctxt, bb) =
+          List.fold_left (
+            fun (mir_ctxt, cur_bb) stmt ->
+              let (mir_ctxt, cur_bb) = stmt_to_mir mir_ctxt cur_bb stmt in
+              (mir_ctxt, cur_bb)
+          ) (mir_ctxt, bb) arr_init_stmts
+        in
 
-        (mir_ctxt, bb, alloca_arr_lval)
-
+        (* Yield the lval to the initialized array. *)
+        expr_to_mir mir_ctxt bb (ValVar(t, arr_varname))
 
     (* For all other types, the straightforward generation is acceptable. *)
     | _ ->
@@ -515,7 +549,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | ValFunc(func_t, func_name) ->
           ValFunc(func_name) |> literal_to_instr mir_ctxt bb func_t
 
-      | ValVar(var_t, varname) ->
+      | ValVar(_, varname) ->
           (* For variable access in MIR, we assume the variable is nested inside
           an alloca that must be loaded from. *)
           let ptr_lval = try
@@ -525,43 +559,24 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           in
           let {t=ptr_t; _} = ptr_lval in
 
-          (* TODO: Defend this. Certain variables need multiple layers of alloca
-          today (specifically, at least statically-allocated stack arrays),
-          but it would be nice if we could make this whole logic cleaner. *)
-          let rec points_after_unwrap ptr_t =
-            begin
-              if is_indexable_type ptr_t then
-                let pointed_t = unwrap_ptr ptr_t in
-                begin
-                  if pointed_t = var_t then
-                    true
-                  else
-                    points_after_unwrap pointed_t
-                end
-
-              else
-                false
-            end
-          in
-
-          let _ = if not (points_after_unwrap ptr_t) then
-            failwith (
-              Printf.sprintf
-                "Unexpected mismatch in var types: [[ %s ]] [[ %s ]] for [%s]"
-                (fmt_type var_t)
-                (fmt_type ptr_t)
-                varname
-            )
-          else
-            ()
-          in
+          (* Loading always takes a pointer and yields the pointed-to type. *)
+          let pointed_t = unwrap_ptr ptr_t in
 
           let (mir_ctxt, load_varname) = get_varname mir_ctxt in
-          let load_lval = {t=var_t; kind=Tmp; lname=load_varname} in
+          let load_lval = {t=pointed_t; kind=Tmp; lname=load_varname} in
           let load_instr = Load(load_lval, ptr_lval) in
           let bb = {bb with instrs = bb.instrs @ [load_instr]} in
 
           (mir_ctxt, bb, load_lval)
+
+      | ValRawArray(t) ->
+          (* Generate a raw, uninitialized stack-allocated static array. *)
+          let (mir_ctxt, alloca_arr_varname) = get_varname mir_ctxt in
+          let alloca_arr_lval = {t=Ptr(t); kind=Tmp; lname=alloca_arr_varname} in
+          let alloca_arr_instr = Alloca(alloca_arr_lval, t) in
+          let bb = {bb with instrs = bb.instrs @ [alloca_arr_instr]} in
+
+          (mir_ctxt, bb, alloca_arr_lval)
 
       (* FIXME: These casts are are identical in structure; is there a way to
       cleanly collapse their implementations? *)
@@ -1113,26 +1128,30 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           value itself might be a constant, but it could also be an arbitrary
           expression. This can violate bounds-checking, unlike the other two
           types of assignments. *)
-          let (mir_ctxt, bb, idxable_lval) =
+          let (mir_ctxt, bb, ({t=idxable_t; _} as idxable_lval)) =
             expr_to_mir mir_ctxt bb idxable_expr
           in
           let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_expr in
 
           let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
-          let ptr_to_elem_lval = {t=t; kind=Tmp; lname=ptrto_varname} in
+          let ptr_to_elem_lval = {t=Ptr(t); kind=Tmp; lname=ptrto_varname} in
           let ptrto_instr =
             PtrTo(
               ptr_to_elem_lval, [
+                (* Start at "index 0" of this "one-elem array of arrays". *)
                 Static(0);
-                (* Second index is the arr-index of the pointed-to array. *)
+                (* Second index is into the arr-index of the pointed-to array. *)
                 Dynamic(idx_lval)
               ],
               idxable_lval
             )
           in
 
+          let {t=ptr_to_elem_lval_t; _} = ptr_to_elem_lval in
+          let pointed_t = unwrap_ptr ptr_to_elem_lval_t in
+
           let (mir_ctxt, idx_load_varname) = get_varname mir_ctxt in
-          let idx_load_lval = {t=t; kind=Tmp; lname=idx_load_varname} in
+          let idx_load_lval = {t=pointed_t; kind=Tmp; lname=idx_load_varname} in
           let idx_load_instr = Load(idx_load_lval, ptr_to_elem_lval) in
 
           let bb = {
@@ -1507,13 +1526,19 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         (mir_ctxt, bb)
 
     | DeclDefStmt(idents_quals_ts) ->
+        (* For each of the N varname/type declarations, generate default values
+        for each based on their types, assign those values into new allocas,
+        and remember those allocas by the names of the declared variables. *)
         let (mir_ctxt, bb) =
           List.fold_left (
             fun (mir_ctxt, bb) (lhs_name, _, t) ->
+              (* Generate default value. *)
               let (mir_ctxt, bb, ({t=lval_t; _} as lval)) =
                 type_to_default_lval mir_ctxt bb t
               in
 
+              (* Store default value into new alloca, remembering the variable
+              name as that alloca. *)
               let (mir_ctxt, bb) =
                 assign_rhs_to_decl mir_ctxt bb lhs_name lval lval_t
               in
@@ -1550,9 +1575,11 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
 
-        let {t=loaded_t; _} as agg_alloca_lval =
+        let {t=loadable_t; _} as agg_alloca_lval =
           StrMap.find indexable_name mir_ctxt.lvars
         in
+
+        let loaded_t = unwrap_ptr loadable_t in
 
         let (mir_ctxt, load_varname) = get_varname mir_ctxt in
         let loaded_agg_lval = {t=loaded_t; kind=Tmp; lname=load_varname} in
@@ -1587,17 +1614,19 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
           StrMap.find idxable_name mir_ctxt.lvars
         in
 
+        let pointed_t = unwrap_ptr var_t in
+
         (* The indexable value is itself inside an alloca, so the first thing we
         need to do is load the indexable out of its alloca. *)
         let (mir_ctxt, load_varname) = get_varname mir_ctxt in
-        let loaded_idxable_lval = {t=var_t; kind=Tmp; lname=load_varname} in
+        let loaded_idxable_lval = {t=pointed_t; kind=Tmp; lname=load_varname} in
         let load_instr = Load(loaded_idxable_lval, idxable_alloca_lval) in
 
-        let idxable_t = unwrap_ptr var_t in
-        let elem_t = unwrap_ptr idxable_t in
+        let unwrapped_t = unwrap_ptr pointed_t in
+        let elem_t = unwrap_ptr unwrapped_t in
 
         let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
-        let ptr_to_elem_lval = {t=elem_t; kind=Tmp; lname=ptrto_varname} in
+        let ptr_to_elem_lval = {t=Ptr(elem_t); kind=Tmp; lname=ptrto_varname} in
         let ptrto_instr =
           PtrTo(
             ptr_to_elem_lval, [
