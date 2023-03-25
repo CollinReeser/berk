@@ -113,6 +113,12 @@ and stmt =
   (* A `let` stmt that only declares variables, taking the default value for
   each. No expression is associated with this stmt. *)
   | DeclDefStmt of (ident_t * var_qual * berk_t) list
+  (* A "deconstructing" stmt that takes a deconstructable expression (like a
+  tuple) and deconstructs it into the newly-named variable components.
+  eg, `let (a, b, c) = (1, 2, 3);` *)
+  (* TODO: This should be normalized a bit with DeclDefStmt and instead have
+  the type be per-variable, rather than define a post-deconstruction tuple type.
+  *)
   | DeclDeconStmt of (ident_t * var_qual) list * berk_t * expr
   | AssignStmt of assign_lval * expr
   | AssignDeconStmt of assign_lval list * expr
@@ -1034,15 +1040,24 @@ let rec get_static_f_params f_params =
       (x::rest, is_vararg)
   end
 
+(* Rewrites variable names in the function so that all are unique, ie, none
+appear to shadow each other. *)
 let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
   (* Yields a uniquified variable name, and the updated mapping containing a
   binding from the original varname to its new uniquified name. *)
   let get_unique_varname varname unique_varnames =
     let _get_unique_varname varname uniquified =
+      (* If the given variable name is already known, then yield a new name
+      that is the old name but uniquified.
+
+      FIXME: This doesn't quite work, if the "uniquified" name is also already
+      in the known set. *)
       if StrMap.mem varname unique_varnames then
         let uniquified = (StrMap.find varname unique_varnames) ^ "a" in
         let unique_varnames = StrMap.add varname uniquified unique_varnames in
         (uniquified, unique_varnames)
+      (* If this variable name is not yet known, simply add it to the known
+      set and return it. *)
       else
         let unique_varnames = StrMap.add varname uniquified unique_varnames in
         (uniquified, unique_varnames)

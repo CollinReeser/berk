@@ -203,7 +203,7 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
     else ind
   end in
 
-  let (rest, t) = begin match tokens with
+  begin match tokens with
   | KWi8(_)  :: rest -> (rest, I8)
   | KWi16(_) :: rest -> (rest, I16)
   | KWi32(_) :: rest -> (rest, I32)
@@ -228,9 +228,6 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
       )
   | [] -> failwith "Unexpected EOF while parsing type."
   end
-  in
-
-  (rest, t)
 
 
 and parse_func ?(ind="") tokens : (token list * func_def_t) =

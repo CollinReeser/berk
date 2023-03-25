@@ -383,8 +383,6 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
       (* Allocate stack space for the value *)
       let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
 
-      Printf.printf "  lval_to_alloca NON-ARRAY expected_t: [%s]\n" (fmt_type expected_t);
-
       let alloca_lval =
         {t=Ptr(expected_t); kind=Tmp; lname=variant_alloca_varname}
       in
@@ -418,13 +416,14 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
 
   | _ ->
       (* Allocate stack space for the value *)
-      let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
+      let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
+
       let alloca_lval =
-        {t=Ptr(expected_t); kind=Tmp; lname=variant_alloca_varname}
+        {t=Ptr(expected_t); kind=Tmp; lname=alloca_varname}
       in
       let alloca_instr = Alloca(alloca_lval, expected_t) in
 
-      (* Store the variant aggregate into the alloca. *)
+      (* Store the value into the alloca. *)
       let store_instr = Store(alloca_lval, lval) in
 
       (mir_ctxt, bb, alloca_lval, [alloca_instr; store_instr])
@@ -1128,13 +1127,16 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           value itself might be a constant, but it could also be an arbitrary
           expression. This can violate bounds-checking, unlike the other two
           types of assignments. *)
-          let (mir_ctxt, bb, ({t=idxable_t; _} as idxable_lval)) =
+          let (mir_ctxt, bb, idxable_lval) =
             expr_to_mir mir_ctxt bb idxable_expr
           in
           let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_expr in
 
+          let pointed_t = t in
+          let pointer_t = Ptr(t) in
+
           let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
-          let ptr_to_elem_lval = {t=Ptr(t); kind=Tmp; lname=ptrto_varname} in
+          let ptr_to_elem_lval = {t=pointer_t; kind=Tmp; lname=ptrto_varname} in
           let ptrto_instr =
             PtrTo(
               ptr_to_elem_lval, [
@@ -1146,9 +1148,6 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
               idxable_lval
             )
           in
-
-          let {t=ptr_to_elem_lval_t; _} = ptr_to_elem_lval in
-          let pointed_t = unwrap_ptr ptr_to_elem_lval_t in
 
           let (mir_ctxt, idx_load_varname) = get_varname mir_ctxt in
           let idx_load_lval = {t=pointed_t; kind=Tmp; lname=idx_load_varname} in
