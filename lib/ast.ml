@@ -100,6 +100,9 @@ and assign_lval =
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
+  (* A `let` stmt that only declares variables, taking the default value for
+  each. No expression is associated with this stmt. *)
+  | DeclDefStmt of (ident_t * var_qual * berk_t) list
   | DeclDeconStmt of (ident_t * var_qual) list * berk_t * expr
   | AssignStmt of assign_lval * expr
   | AssignDeconStmt of assign_lval list * expr
@@ -404,6 +407,22 @@ and fmt_join_idents_quals delim idents_quals : string =
         delim
         (fmt_join_idents_quals delim xs)
 
+and fmt_join_idents_quals_types
+  delim (idents_quals_types : (ident_t * var_qual * berk_t) list) : string =
+  match idents_quals_types with
+  | [] -> ""
+
+  | [(ident, qual, t)] ->
+      Printf.sprintf "%s%s: %s" (fmt_var_qual qual) ident (fmt_type t)
+
+  | (ident, qual, t)::xs ->
+      Printf.sprintf "%s%s: %s%s%s"
+        (fmt_var_qual qual)
+        ident
+        (fmt_type t)
+        delim
+        (fmt_join_idents_quals_types delim xs)
+
 and fmt_assign_lval ?(print_typ = false) lval =
   begin match lval with
   | ALVar(ident) -> ident
@@ -428,6 +447,11 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         ident
         typ_s
         (fmt_expr ~print_typ:print_typ ind ex)
+
+  | DeclDefStmt (idents_quals_ts) ->
+      Printf.sprintf "%slet %s;\n"
+        ind
+        (fmt_join_idents_quals_types ", " idents_quals_ts)
 
   | DeclDeconStmt (idents_quals, btype, ex) ->
       let typ_s = match btype with
@@ -466,6 +490,51 @@ and fmt_stmt ?(print_typ = false) ind stmt =
 let pprint_expr ppf exp =
   Format.fprintf ppf "%s" (fmt_expr ~print_typ:true "" exp)
 ;;
+
+
+(* Get a "default value" expr for the given type. *)
+let rec default_expr_for_t t =
+  begin match t with
+  | Undecided
+  | Unbound(_)
+  | VarArgSentinel
+  | Ptr(_)
+  | Variant(_, _)
+  | ByteArray(_)
+  | Function(_, _) ->
+      failwith (
+        Printf.sprintf
+          "Nonsense attempt to generate default expr value for type [%s]"
+          (fmt_type t)
+      )
+
+  | Nil  -> ValNil
+
+  | Bool -> ValBool(false)
+
+  | U64  -> ValU64 (0)
+  | U32  -> ValU32 (0)
+  | U16  -> ValU16 (0)
+  | U8   -> ValU8  (0)
+  | I64  -> ValI64 (0)
+  | I32  -> ValI32 (0)
+  | I16  -> ValI16 (0)
+  | I8   -> ValI8  (0)
+  | F32  -> ValF32 (0.0)
+  | F64  -> ValF64 (0.0)
+  | F128 -> ValF128("0.0")
+
+  | String -> ValStr("")
+
+  | Tuple(tuple_ts) ->
+      let default_ts_exprs = List.map default_expr_for_t tuple_ts in
+      TupleExpr(t, default_ts_exprs)
+
+  | Array(_, _) ->
+      failwith "Error: Do not attempt to generate default array."
+  end
+;;
+
 
 (* Force-apply a top-level type to the given expression, recursively. *)
 let rec inject_type_into_expr ?(ind="") injected_t exp =
@@ -982,6 +1051,26 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           get_unique_varname varname unique_varnames
         in
         (DeclStmt(uniq_varname, varqual, t, exp_rewritten), unique_varnames)
+
+    | DeclDefStmt(idents_quals_ts) ->
+        let (uniq_idents_quals_ts_rev, unique_varnames) =
+          List.fold_left (
+            fun
+              (new_varname_varquals_rev, unique_varnames)
+              (varname, varqual, t)
+            ->
+              let (uniq_varname, unique_varnames) =
+                get_unique_varname varname unique_varnames
+              in
+              (
+                (uniq_varname, varqual, t)::new_varname_varquals_rev,
+                unique_varnames
+              )
+          ) ([], unique_varnames) idents_quals_ts
+        in
+        let uniq_idents_quals_ts = List.rev uniq_idents_quals_ts_rev in
+
+        (DeclDefStmt(uniq_idents_quals_ts), unique_varnames)
 
     | DeclDeconStmt(varname_varquals, t, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in

@@ -203,7 +203,7 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
     else ind
   end in
 
-  begin match tokens with
+  let (rest, t) = begin match tokens with
   | KWi8(_)  :: rest -> (rest, I8)
   | KWi16(_) :: rest -> (rest, I16)
   | KWi32(_) :: rest -> (rest, I32)
@@ -214,6 +214,12 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   | KWu64(_) :: rest -> (rest, U64)
   | KWBool(_) :: rest -> (rest, Bool)
   | KWString(_) :: rest -> (rest, String)
+
+  (* Static array. *)
+  | LBracket(_) :: Integer(_, i) :: RBracket(_) :: rest ->
+      let (rest, arr_t) = parse_type ~ind:ind_next rest in
+      (rest, Array(arr_t, i))
+
   | tok :: _ ->
       let fmted = fmt_token tok in
       failwith (
@@ -222,6 +228,9 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
       )
   | [] -> failwith "Unexpected EOF while parsing type."
   end
+  in
+
+  (rest, t)
 
 
 and parse_func ?(ind="") tokens : (token list * func_def_t) =
@@ -458,16 +467,22 @@ and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
           let (rest, exp) = parse_expr ~ind:ind_next rest in
           (rest, DeclStmt(name, qual, t, exp))
 
+      (* Lookahead to the semicolon, if there is one. If so, this is a
+      "default declaration": `let var: bool; *)
+      | (Semicolon(_) :: _) as rest ->
+          (rest, DeclDefStmt([(name, qual, t)]))
+
       | tok :: _ ->
           let fmted = fmt_token tok in
           failwith (
             Printf.sprintf
-              "Unexpected token [%s] (decl_stmt), expected `=`" fmted
+              "Unexpected token [%s] (decl_stmt), expected `=` or `;`" fmted
           )
       | [] -> failwith "Unexpected EOF while parsing let declaration."
       end
 
   (* TODO: Extend to recognize DeclDeconStmt *)
+  (* TODO: Extend to recognize DeclDefStmt with multiple fields. *)
 
   | tok :: _ ->
       let fmted = fmt_token tok in
@@ -775,6 +790,12 @@ and parse_value ?(ind="") tokens : (token list * expr) =
     begin
       try
         let (rest, exp_chain) =
+          parse_array_index ~ind:ind_next rest exp_so_far
+        in
+        _parse_value rest exp_chain
+      with Backtrack ->
+      try
+        let (rest, exp_chain) =
           parse_tuple_index ~ind:ind_next rest exp_so_far
         in
         _parse_value rest exp_chain
@@ -878,6 +899,32 @@ and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
   | Dot(_) :: LParen(_) :: rest ->
       let (rest, args) = parse_func_call_args ~ind:ind_next rest in
       (rest, ExprInvoke(Undecided, exp, args))
+
+  | _ -> raise Backtrack
+  end
+
+
+and parse_array_index ?(ind="") tokens exp : (token list * expr) =
+  let ind_next = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  begin match tokens with
+  | LBracket(_) :: rest ->
+      let (rest, idx_expr) = parse_expr ~ind:ind_next rest in
+
+      begin match rest with
+      | RBracket(_) :: rest ->
+          (rest, IndexExpr(Undecided, idx_expr, exp))
+
+      | _ -> raise Backtrack
+      end
 
   | _ -> raise Backtrack
   end

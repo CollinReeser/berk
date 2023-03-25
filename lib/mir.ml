@@ -175,14 +175,12 @@ let fmt_instr instr =
         (fmt_lval rhs_lval)
         (fmt_type target_t)
 
-  | PtrTo({t=Ptr(t); _} as lval, idxs, aggregate_lval) ->
+  | PtrTo({t; _} as lval, idxs, aggregate_lval) ->
       sprintf "  %s = ptrto %s via %s following indices (%s)\n"
         (fmt_lval lval)
         (fmt_type t)
         (fmt_lval aggregate_lval)
         (fmt_join_indices idxs)
-
-  | PtrTo(_, _, _) -> failwith "Cannot fmt ptrto with non-ptr lval"
 
   | ConstructAggregate(lval, elems) ->
       sprintf "  %s = aggregate of (%s)\n"
@@ -379,6 +377,22 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
   let {t=actual_t; _} = lval in
 
   let (mir_ctxt, bb, alloca_lval, instructions) = begin match expected_t with
+  | Array(_, _) ->
+      (* Allocate stack space for the value *)
+      let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
+
+      Printf.printf "  lval_to_alloca NON-ARRAY expected_t: [%s]\n" (fmt_type expected_t);
+
+      let alloca_lval =
+        {t=Ptr(expected_t); kind=Tmp; lname=variant_alloca_varname}
+      in
+      let alloca_instr = Alloca(alloca_lval, expected_t) in
+
+      (* Store the value into the alloca. *)
+      let store_instr = Store(alloca_lval, lval) in
+
+      (mir_ctxt, bb, lval, [alloca_instr; store_instr])
+
   | Variant(_, _) as variant_t ->
       (* Allocate stack space for the variant *)
       let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
@@ -418,14 +432,44 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
 
   (mir_ctxt, bb, alloca_lval)
 
+
 let literal_to_instr mir_ctxt bb t ctor =
   let (mir_ctxt, varname) = get_varname mir_ctxt in
   let lval = {t=t; kind=Tmp; lname=varname} in
   let instr = Assign(lval, Constant(ctor)) in
   let bb = {bb with instrs=bb.instrs @ [instr]} in
   (mir_ctxt, bb, lval)
+;;
 
-let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
+
+let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
+  let (mir_ctxt, bb, lval) =
+    begin match t with
+    (* For generating default initialization of a static array, we can't do the
+    naive thing, because the naive thing will generate a line of MIR for each
+    index in the array. For large arrays, this can be millions/billions of
+    lines of MIR. *)
+    | Array(_, _) ->
+
+        let (mir_ctxt, alloca_arr_varname) = get_varname mir_ctxt in
+        let alloca_arr_lval = {t=Ptr(t); kind=Tmp; lname=alloca_arr_varname} in
+        let alloca_arr_instr = Alloca(alloca_arr_lval, t) in
+        let bb = {bb with instrs = bb.instrs @ [alloca_arr_instr]} in
+
+        (mir_ctxt, bb, alloca_arr_lval)
+
+
+    (* For all other types, the straightforward generation is acceptable. *)
+    | _ ->
+        expr_to_mir mir_ctxt bb (default_expr_for_t t)
+
+    end
+  in
+
+  (mir_ctxt, bb, lval)
+
+
+and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
   let rec _expr_to_mir
     (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * lval)
   =
@@ -480,14 +524,32 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             failwith (Printf.sprintf "No known varname [%s]" varname)
           in
           let {t=ptr_t; _} = ptr_lval in
-          let pointed_t = unwrap_ptr ptr_t in
 
-          let _ = if var_t <> pointed_t then
+          (* TODO: Defend this. Certain variables need multiple layers of alloca
+          today (specifically, at least statically-allocated stack arrays),
+          but it would be nice if we could make this whole logic cleaner. *)
+          let rec points_after_unwrap ptr_t =
+            begin
+              if is_indexable_type ptr_t then
+                let pointed_t = unwrap_ptr ptr_t in
+                begin
+                  if pointed_t = var_t then
+                    true
+                  else
+                    points_after_unwrap pointed_t
+                end
+
+              else
+                false
+            end
+          in
+
+          let _ = if not (points_after_unwrap ptr_t) then
             failwith (
               Printf.sprintf
                 "Unexpected mismatch in var types: [[ %s ]] [[ %s ]] for [%s]"
                 (fmt_type var_t)
-                (fmt_type pointed_t)
+                (fmt_type ptr_t)
                 varname
             )
           else
@@ -1046,8 +1108,39 @@ let rec expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | WhileExpr(_, _, _, _) ->
           failwith "Unimplemented: while-expr yielding non-nil"
 
-      | IndexExpr(_, _, _) ->
-          failwith "Unimplemented"
+      | IndexExpr(t, idx_expr, idxable_expr) ->
+          (* This is an assignment into some dynamic index of an array. The index
+          value itself might be a constant, but it could also be an arbitrary
+          expression. This can violate bounds-checking, unlike the other two
+          types of assignments. *)
+          let (mir_ctxt, bb, idxable_lval) =
+            expr_to_mir mir_ctxt bb idxable_expr
+          in
+          let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_expr in
+
+          let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
+          let ptr_to_elem_lval = {t=t; kind=Tmp; lname=ptrto_varname} in
+          let ptrto_instr =
+            PtrTo(
+              ptr_to_elem_lval, [
+                Static(0);
+                (* Second index is the arr-index of the pointed-to array. *)
+                Dynamic(idx_lval)
+              ],
+              idxable_lval
+            )
+          in
+
+          let (mir_ctxt, idx_load_varname) = get_varname mir_ctxt in
+          let idx_load_lval = {t=t; kind=Tmp; lname=idx_load_varname} in
+          let idx_load_instr = Load(idx_load_lval, ptr_to_elem_lval) in
+
+          let bb = {
+            bb with instrs = bb.instrs @ [ptrto_instr; idx_load_instr]
+          } in
+          let mir_ctxt = update_bb mir_ctxt bb in
+
+          (mir_ctxt, bb, idx_load_lval)
     end in
 
     (mir_ctxt, bb, instr)
@@ -1393,16 +1486,43 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | DeclStmt(lhs_name, _, t, exp) ->
-        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
+    | DeclStmt(lhs_name, _, _, exp) ->
+        let (mir_ctxt, bb, ({t=lval_t; _} as rhs_lval)) =
+          expr_to_mir mir_ctxt bb exp
+        in
 
         (* This call does all the work of doing an alloca, storing the RHS
-        into the alloca, and associating the named LHS var with the alloca. *)
+        into the alloca, and associating the named LHS var with the alloca.
+        Note the use of lval_t vs t; if the generation of the expression needed
+        to bury the value in some layer of indirection, we want the named
+        variable to be an alloca for that _indirection_, rather than the value
+        itself. The expectation is then that consumers will know how to handle
+        this. *)
         let (mir_ctxt, bb) =
-          assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval t
+          assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval lval_t
         in
 
         let mir_ctxt = update_bb mir_ctxt bb in
+
+        (mir_ctxt, bb)
+
+    | DeclDefStmt(idents_quals_ts) ->
+        let (mir_ctxt, bb) =
+          List.fold_left (
+            fun (mir_ctxt, bb) (lhs_name, _, t) ->
+              let (mir_ctxt, bb, ({t=lval_t; _} as lval)) =
+                type_to_default_lval mir_ctxt bb t
+              in
+
+              let (mir_ctxt, bb) =
+                assign_rhs_to_decl mir_ctxt bb lhs_name lval lval_t
+              in
+
+              let mir_ctxt = update_bb mir_ctxt bb in
+
+              (mir_ctxt, bb)
+          ) (mir_ctxt, bb) idents_quals_ts
+        in
 
         (mir_ctxt, bb)
 
@@ -1453,8 +1573,52 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | AssignStmt(ALIndex(_, _), _) ->
-        failwith "Unimplemented: MIR for AssignStmt(ALIndex())"
+    | AssignStmt(ALIndex(idxable_name, idx_exp), rhs_exp) ->
+        (* This is an assignment into some dynamic index of an array. The index
+        value itself might be a constant, but it could also be an arbitrary
+        expression. This can violate bounds-checking, unlike the other two
+        types of assignments. *)
+        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb rhs_exp in
+        let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_exp in
+
+        (* Acquire the alloca to the named indexable. This is a pointer we'll
+        need to load before we can calculate the index itself. *)
+        let {t=var_t; _} as idxable_alloca_lval =
+          StrMap.find idxable_name mir_ctxt.lvars
+        in
+
+        (* The indexable value is itself inside an alloca, so the first thing we
+        need to do is load the indexable out of its alloca. *)
+        let (mir_ctxt, load_varname) = get_varname mir_ctxt in
+        let loaded_idxable_lval = {t=var_t; kind=Tmp; lname=load_varname} in
+        let load_instr = Load(loaded_idxable_lval, idxable_alloca_lval) in
+
+        let idxable_t = unwrap_ptr var_t in
+        let elem_t = unwrap_ptr idxable_t in
+
+        let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
+        let ptr_to_elem_lval = {t=elem_t; kind=Tmp; lname=ptrto_varname} in
+        let ptrto_instr =
+          PtrTo(
+            ptr_to_elem_lval, [
+              (* Start at "index 0" of this "one-elem array of arrays". *)
+              Static(0);
+              (* Second index is the arr-index of the array itself. *)
+              Dynamic(idx_lval)
+            ],
+            loaded_idxable_lval
+          )
+        in
+
+        (* Finally, store the element into the calculated index. *)
+        let store_instr = Store(ptr_to_elem_lval, rhs_lval) in
+
+        let bb = {
+          bb with instrs = bb.instrs @ [load_instr; ptrto_instr; store_instr]
+        } in
+        let mir_ctxt = update_bb mir_ctxt bb in
+
+        (mir_ctxt, bb)
 
     | DeclDeconStmt(ident_quals, t, exp) ->
         let (mir_ctxt, bb, aggregate_lval) = expr_to_mir mir_ctxt bb exp in

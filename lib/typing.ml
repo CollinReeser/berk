@@ -363,6 +363,10 @@ let type_bitwise_to from_t to_t =
 
 let is_index_type idx_t =
   match idx_t with
+  | I64
+  | I32
+  | I16
+  | I8
   | U64
   | U32
   | U16
@@ -376,6 +380,7 @@ let is_index_type idx_t =
 
 let is_indexable_type arr_t =
   match arr_t with
+  | Ptr(_) -> true
   | Array(_, _) -> true
   | _ ->
       let not_arr_s = fmt_type arr_t in
@@ -406,7 +411,11 @@ let unwrap_aggregate_indexable indexable_t i =
 let unwrap_ptr ptr_t =
   match ptr_t with
   | Ptr(t) -> t
-  | _ -> failwith "Cannot unwrap non-ptr type"
+  | Array(t, _) -> t
+  | _ ->
+      failwith (
+        Printf.sprintf "Cannot unwrap non-ptr type [%s]" (fmt_type ptr_t)
+      )
 ;;
 
 

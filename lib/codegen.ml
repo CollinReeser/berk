@@ -311,6 +311,8 @@ and codegen_stmt llvm_ctxt builder func_ctxt stmt : func_gen_context =
 
       func_ctxt_up
 
+  | DeclDefStmt(_) -> failwith "Unimplemented: DeconDefStmt codegen"
+
   | DeclDeconStmt (idents_quals, typ, expr) ->
       let agg_expr = codegen_expr llvm_ctxt builder func_ctxt expr in
       let types = match typ with

@@ -76,6 +76,12 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
   | DeclStmt(_, _, typ, expr)
   | DeclDeconStmt(_, typ, expr) ->
       (_is_concrete_expr expr) && (_is_concrete_type typ)
+
+  | DeclDefStmt(idents_quals_ts) ->
+      List.fold_left (&&) true (
+        List.map (fun (_, _, t) -> _is_concrete_type t) idents_quals_ts
+      )
+
   end in
 
   let _ = if verbose then
@@ -408,6 +414,17 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
       (tc_ctxt_up, DeclStmt(ident, qual, resolved_t, exp_typechecked))
 
+  | DeclDefStmt((idents_quals_ts)) ->
+      let tc_ctxt =
+        List.fold_left (
+          fun tc_ctxt (ident, qual, t) ->
+            let vars_up = StrMap.add ident (t, qual) tc_ctxt.vars in
+            {tc_ctxt with vars = vars_up}
+        ) tc_ctxt idents_quals_ts
+      in
+
+      (tc_ctxt, stmt)
+
   | DeclDeconStmt(idents_quals, decl_t, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt decl_t exp in
       let exp_t = expr_type exp_typechecked in
@@ -459,7 +476,8 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
             let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
             let inner_t = unwrap_indexable var_t in
 
-            let exp_typechecked = type_check_expr tc_ctxt inner_t exp in
+            (* Typecheck the indexing expression. *)
+            let exp_typechecked = type_check_expr tc_ctxt Undecided exp in
 
             (ALIndex(ident, exp_typechecked), inner_t, var_qual)
         end
@@ -1023,16 +1041,20 @@ and type_check_expr
             begin match arr_t with
             | Array(elem_typ, sz) ->
                 begin match idx_typechecked with
+                | ValI64(i)
+                | ValI32(i)
+                | ValI16(i)
+                | ValI8(i)
                 | ValU64(i)
                 | ValU32(i)
                 | ValU16(i)
                 | ValU8(i) ->
-                    if i < sz
-                      then
-                        IndexExpr(
-                          elem_typ, idx_typechecked, arr_typechecked
-                        )
-                      else failwith "Static out-of-bounds index into array"
+                    if i < sz then
+                      IndexExpr(
+                        elem_typ, idx_typechecked, arr_typechecked
+                      )
+                    else
+                      failwith "Static out-of-bounds index into array"
                 | _ ->
                     IndexExpr(
                       elem_typ, idx_typechecked, arr_typechecked
@@ -1041,7 +1063,13 @@ and type_check_expr
 
             | _ -> failwith "Unexpected index target in index expr"
             end
-          else failwith "Unexpected components of index operation"
+          else
+            failwith (
+              Printf.sprintf
+                "Unexpected components of index operation: [%s] [%s]"
+                (fmt_expr ~print_typ:true "" arr_typechecked)
+                (fmt_expr ~print_typ:true "" idx_typechecked)
+            )
 
     | StaticIndexExpr(_, idx, agg) ->
         let agg_typechecked = _type_check_expr agg in
