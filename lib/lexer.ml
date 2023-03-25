@@ -187,14 +187,20 @@ let tokenize buf =
 
   (* Encode this regex:
     //.*\n *)
-  let str_reg =
+  let comment_reg =
     [%sedlex.regexp?
-      '"', str_simple_inner, str_escape_inner, '"'
+      "//", Star(Compl("\n")), "\n"
     ]
   in
 
   let rec _tokenize buf tokens =
     begin match%sedlex buf with
+    (* Comments *)
+
+    | comment_reg ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        Printf.printf "Comment token: [%s]\n%!" lexeme ;
+        _tokenize buf tokens
 
     (* Keywords *)
 

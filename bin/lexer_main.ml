@@ -41,12 +41,13 @@ let () =
       printf("1\n");
     }
 
+    // Implement the Sieve of Eratosthenes, with the trivial evens optimization.
     fn primes() {
       let mut how_many = 0;
 
       printf("Prime: 2\n");
 
-      while {
+      while { // Side-comment test: while-expr init-var-decl block.
         let len = 32;
         let mut sieve: [32]bool;
         let mut i = 3;
