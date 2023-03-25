@@ -41,6 +41,36 @@ let () =
       printf("1\n");
     }
 
+    fn primes() {
+      let mut how_many = 0;
+
+      printf("Prime: 2\n");
+
+      while {
+        let len = 32;
+        let mut sieve: [32]bool;
+        let mut i = 3;
+      } i < len {
+        if sieve[i] != true {
+          printf("Prime: %d\n", i);
+
+          how_many = how_many + 1;
+
+          while {let mut cross_off = i;} cross_off < len {
+            sieve[cross_off] = true;
+
+            cross_off = cross_off + i;
+          }
+        }
+
+        i = i + 2;
+      }
+
+      printf("There were %d primes!\n", how_many);
+
+      return;
+    }
+
     fn main(): i8 {
       let dup_hello_1 = "Hello, world!";
       let dup_hello_2 = "Hello, world!";
@@ -103,6 +133,8 @@ let () =
       }
 
       collatz(3);
+
+      primes();
 
       return 0;
     }
