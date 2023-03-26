@@ -518,7 +518,34 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         in
 
         (* Yield the lval to the initialized array. *)
-        expr_to_mir mir_ctxt bb (ValVar(t, arr_varname))
+        let (mir_ctxt, bb, ({t=array_lval_t; _} as array_lval)) =
+          expr_to_mir mir_ctxt bb (ValVar(t, arr_varname))
+        in
+
+        (* If the type of the yielded lval is different than the input array
+        type, this implies the input array type was a multi-dimensional array,
+        but we flattened it into a single-dimensional array above. In that case,
+        we need to bitcast our array pointer back into the original expected
+        type. *)
+
+        let ptr_to_unflattened_t = Ptr(t) in
+
+        begin if ptr_to_unflattened_t = array_lval_t then
+          (mir_ctxt, bb, array_lval)
+        else
+          let (mir_ctxt, bitcast_varname) = get_varname mir_ctxt in
+          let bitcast_lval = {
+            t=ptr_to_unflattened_t; kind=Tmp; lname=bitcast_varname
+          } in
+          let bitcast_instr = UnOp(
+            bitcast_lval, Bitwise, array_lval
+          ) in
+
+          let bb = {bb with instrs = bb.instrs @ [bitcast_instr]} in
+          let mir_ctxt = update_bb mir_ctxt bb in
+
+          (mir_ctxt, bb, bitcast_lval)
+        end
 
     (* For all other types, the straightforward generation is acceptable. *)
     | _ ->
@@ -1190,34 +1217,12 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           (* If the returned value is the base static array element type (ie,
           we've indexed all the way to the "bottom" of a possibly N-dimensional
           array), then we actually load that value from the pointer. Otherwise,
-          we simply return the calculated pointer itself (after any casting
-          necessary to "fix" the type), that later indexing might further index
-          into. *)
+          we simply return the calculated pointer itself, that later indexing
+          might further index into. *)
           let (mir_ctxt, bb, ret_lval) =
             begin match pointed_t with
             | Array(_, _) ->
-                (* NOTE/TODO/FIXME: This bitwise, in our MIR, _looks like_ a
-                no-op, because the input type and the output type are identical.
-                But this _is_ doing something: the LLVM codegen thinks the
-                input type is a _bare_ base-element pointer (rather than some
-                pointer to a known-size array) because of what getelementptr
-                yields after the PtrTo instruction above. So, this bitwise cast
-                turns that bare pointer into a pointer to the sized array,
-                "normalizing" the inputs/outputs of a chain of indexes into an
-                N-dimensional array. To "fix" this, we need to teach PtrTo MIR
-                to yield bare pointers instead, so that our apparent MIR
-                behavior matches the behavior on the LLVM codegen side. *)
-                let (mir_ctxt, bitcast_varname) = get_varname mir_ctxt in
-                let bitcast_lval = {
-                  t=pointer_t; kind=Tmp; lname=bitcast_varname
-                } in
-                let bitcast_instr = UnOp(
-                  bitcast_lval, Bitwise, ptr_to_elem_lval
-                ) in
-
-                let bb = {bb with instrs = bb.instrs @ [bitcast_instr]} in
-
-                (mir_ctxt, bb, bitcast_lval)
+                (mir_ctxt, bb, ptr_to_elem_lval)
 
             | _ ->
                 let (mir_ctxt, idx_load_varname) = get_varname mir_ctxt in

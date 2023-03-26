@@ -133,22 +133,31 @@ let () =
         iter = iter + 1;
       }
 
-      let mut multi_vars: [10][20]bool;
-      let mut singl_vars = multi_vars[2];
-      let mut si_vars_tc: [20]bool = multi_vars[2];
-      let mut value = singl_vars[4];
+      let mut ultra_multi_vars: [10][20][30][40]bool;
+      let mut layer_one = ultra_multi_vars[9];
+      let mut layer_two = layer_one[19];
+      let mut layer_thr = layer_two[29];
+      let mut ultra_val = layer_thr[39];
 
       printf(
-        "Before change, multi-dimensional: [%d] [%d] [%d]\n",
-        value, singl_vars[4], multi_vars[2][4]
+        "Before change, multi-dimensional: [%d] [%d] [%d] [%d] [%d]\n",
+        ultra_val,
+        layer_thr[39],
+        layer_two[29][39],
+        layer_one[19][29][39],
+        ultra_multi_vars[9][19][29][39]
       );
 
-      singl_vars[4] = true;
-      value = singl_vars[4];
+      layer_thr[39] = true;
+      ultra_val = layer_thr[39];
 
       printf(
-        "After  change, multi-dimensional: [%d] [%d] [%d]\n",
-        value, singl_vars[4], multi_vars[2][4]
+        "After  change, multi-dimensional: [%d] [%d] [%d] [%d] [%d]\n",
+        ultra_val,
+        layer_thr[39],
+        layer_two[29][39],
+        layer_one[19][29][39],
+        ultra_multi_vars[9][19][29][39]
       );
 
       collatz(5);
