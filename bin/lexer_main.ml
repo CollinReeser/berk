@@ -43,7 +43,7 @@ let () =
 
     // Implement the Sieve of Eratosthenes, with the trivial evens optimization.
     fn primes() {
-      let mut how_many = 0;
+      let mut how_many = 1;
 
       printf("Prime: 2\n");
 
