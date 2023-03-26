@@ -48,8 +48,8 @@ let () =
       printf("Prime: 2\n");
 
       while { // Side-comment test: while-expr init-var-decl block.
-        let len = 32;
-        let mut sieve: [32]bool;
+        let len = 16;
+        let mut sieve: [16]bool;
         let mut i = 3;
       } i < len {
         if sieve[i] != true {
@@ -133,7 +133,25 @@ let () =
         iter = iter + 1;
       }
 
-      collatz(3);
+      let mut multi_vars: [10][20]bool;
+      let mut singl_vars = multi_vars[2];
+      let mut si_vars_tc: [20]bool = multi_vars[2];
+      let mut value = singl_vars[4];
+
+      printf(
+        "Before change, multi-dimensional: [%d] [%d] [%d]\n",
+        value, singl_vars[4], multi_vars[2][4]
+      );
+
+      singl_vars[4] = true;
+      value = singl_vars[4];
+
+      printf(
+        "After  change, multi-dimensional: [%d] [%d] [%d]\n",
+        value, singl_vars[4], multi_vars[2][4]
+      );
+
+      collatz(5);
 
       primes();
 

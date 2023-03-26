@@ -450,7 +450,30 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
     indexing, rather than initializing via individual aggregate initialization,
     as the latter will generate a line of MIR per index in the array (which
     could be millions). *)
-    | Array(elem_t, sz) ->
+    | Array(_, _) ->
+        (* This may be a multidimensional array. Calculate the total "flattened"
+        size of the array, and determine what the "base" array element type is.
+        If this is a one-dimensional array, this should degrade to simply
+        yielding the element type and array size of the top-level array type. *)
+        let arr_elem_and_total_sz cur_t =
+          let rec _arr_elem_and_total_sz cur_t sz_so_far =
+            begin match cur_t with
+            | Array(Array(_) as next_t, cur_sz) ->
+                _arr_elem_and_total_sz next_t (sz_so_far * cur_sz)
+
+            | Array(elem_t, cur_sz) ->
+                (elem_t, sz_so_far * cur_sz)
+
+            | _ -> failwith "Unexpected non-array type when determining arr sz"
+            end
+          in
+
+          _arr_elem_and_total_sz cur_t 1
+        in
+
+        let (base_elem_t, total_arr_sz) = arr_elem_and_total_sz t in
+        let flattened_arr_t = Array(base_elem_t, total_arr_sz) in
+
         (* Generate MIR for the mini-AST that initializes the array. Our
         "output" of this mini-AST is the temporary variable holding the
         array itself, that we can assign to the "real" array variable at the
@@ -458,16 +481,21 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         let (mir_ctxt, arr_varname) = get_varname mir_ctxt in
         let (mir_ctxt, idx_varname) = get_varname mir_ctxt in
         let arr_init_stmts = [
-          DeclStmt(arr_varname, {mut=true}, t, ValRawArray(t));
+          (* Pretend this is indeed a one-dimensional "flattened" array of
+          whatever the input array type was. *)
+          DeclStmt(
+            arr_varname, {mut=true},
+            flattened_arr_t, ValRawArray(flattened_arr_t)
+          );
           ExprStmt(
             WhileExpr(
               Nil, [DeclStmt(idx_varname, {mut=true}, U64, ValU64(0))],
-              BinOp(Bool, Lt, ValVar(U64, idx_varname), ValU64(sz)),
+              BinOp(Bool, Lt, ValVar(U64, idx_varname), ValU64(total_arr_sz)),
               [
                 (* Initialize this index of the array. *)
                 AssignStmt(
                   ALIndex(arr_varname, ValVar(U64, idx_varname)),
-                  (default_expr_for_t elem_t)
+                  (default_expr_for_t base_elem_t)
                 );
                 (* Increment the indexing variable. *)
                 AssignStmt(
@@ -1154,17 +1182,61 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             )
           in
 
-          let (mir_ctxt, idx_load_varname) = get_varname mir_ctxt in
-          let idx_load_lval = {t=pointed_t; kind=Tmp; lname=idx_load_varname} in
-          let idx_load_instr = Load(idx_load_lval, ptr_to_elem_lval) in
-
           let bb = {
-            bb with instrs = bb.instrs @ [ptrto_instr; idx_load_instr]
+            bb with instrs = bb.instrs @ [ptrto_instr]
           } in
           let mir_ctxt = update_bb mir_ctxt bb in
 
-          (mir_ctxt, bb, idx_load_lval)
-    end in
+          (* If the returned value is the base static array element type (ie,
+          we've indexed all the way to the "bottom" of a possibly N-dimensional
+          array), then we actually load that value from the pointer. Otherwise,
+          we simply return the calculated pointer itself (after any casting
+          necessary to "fix" the type), that later indexing might further index
+          into. *)
+          let (mir_ctxt, bb, ret_lval) =
+            begin match pointed_t with
+            | Array(_, _) ->
+                (* NOTE/TODO/FIXME: This bitwise, in our MIR, _looks like_ a
+                no-op, because the input type and the output type are identical.
+                But this _is_ doing something: the LLVM codegen thinks the
+                input type is a _bare_ base-element pointer (rather than some
+                pointer to a known-size array) because of what getelementptr
+                yields after the PtrTo instruction above. So, this bitwise cast
+                turns that bare pointer into a pointer to the sized array,
+                "normalizing" the inputs/outputs of a chain of indexes into an
+                N-dimensional array. To "fix" this, we need to teach PtrTo MIR
+                to yield bare pointers instead, so that our apparent MIR
+                behavior matches the behavior on the LLVM codegen side. *)
+                let (mir_ctxt, bitcast_varname) = get_varname mir_ctxt in
+                let bitcast_lval = {
+                  t=pointer_t; kind=Tmp; lname=bitcast_varname
+                } in
+                let bitcast_instr = UnOp(
+                  bitcast_lval, Bitwise, ptr_to_elem_lval
+                ) in
+
+                let bb = {bb with instrs = bb.instrs @ [bitcast_instr]} in
+
+                (mir_ctxt, bb, bitcast_lval)
+
+            | _ ->
+                let (mir_ctxt, idx_load_varname) = get_varname mir_ctxt in
+                let idx_load_lval = {
+                  t=pointed_t; kind=Tmp; lname=idx_load_varname
+                } in
+                let idx_load_instr = Load(idx_load_lval, ptr_to_elem_lval) in
+
+                let bb = {bb with instrs = bb.instrs @ [idx_load_instr]} in
+
+                (mir_ctxt, bb, idx_load_lval)
+            end
+          in
+
+          let mir_ctxt = update_bb mir_ctxt bb in
+
+          (mir_ctxt, bb, ret_lval)
+      end
+    in
 
     (mir_ctxt, bb, instr)
   in

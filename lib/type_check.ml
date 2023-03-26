@@ -1036,7 +1036,7 @@ and type_check_expr
         ArrayExpr(arr_t, exprs_typechecked)
 
     | IndexExpr(_, idx, arr) ->
-        let idx_typechecked = _type_check_expr idx in
+        let idx_typechecked = type_check_expr tc_ctxt Undecided idx in
         let arr_typechecked = _type_check_expr arr in
         let idx_t = expr_type idx_typechecked in
         let arr_t = expr_type arr_typechecked in
@@ -1045,14 +1045,8 @@ and type_check_expr
             begin match arr_t with
             | Array(elem_typ, sz) ->
                 begin match idx_typechecked with
-                | ValI64(i)
-                | ValI32(i)
-                | ValI16(i)
-                | ValI8(i)
-                | ValU64(i)
-                | ValU32(i)
-                | ValU16(i)
-                | ValU8(i) ->
+                | ValI64(i) | ValI32(i) | ValI16(i) | ValI8(i)
+                | ValU64(i) | ValU32(i) | ValU16(i) | ValU8(i) ->
                     if i < sz then
                       IndexExpr(
                         elem_typ, idx_typechecked, arr_typechecked
