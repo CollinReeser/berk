@@ -553,8 +553,10 @@ let rec default_expr_for_t t =
 
   | Array(_, _) ->
       failwith (
-        "Error: Do not attempt to generate default array. Array declarations " ^
-        "must be initialized."
+        Printf.sprintf (
+          "Error: Do not attempt to generate default array. " ^^
+          "Array declarations must be initialized: [%s]"
+        ) (fmt_type t)
       )
   end
 ;;
