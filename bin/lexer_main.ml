@@ -178,6 +178,36 @@ let () =
 
       primes();
 
+      let mut map: [25][79]bool;
+
+      while {let mut map_i = 0;} map_i < 25 {
+        while {let mut map_j = 0;} map_j < 79 {
+          if map_i % 2 != 0 {
+            if map_j % 2 != 0 {
+              map[map_i][map_j] = true;
+            }
+          }
+          map_j = map_j + 1;
+        }
+        map_i = map_i + 1;
+      }
+
+      while {let mut map_ii = 0;} map_ii < 25 {
+        while {let mut map_jj = 0;} map_jj < 79 {
+          if map[map_ii][map_jj] == true {
+            printf("X");
+          }
+          else {
+            printf(".");
+          }
+
+          map_jj = map_jj + 1;
+        }
+        printf("\n");
+
+        map_ii = map_ii + 1;
+      }
+
       return 0;
     }
   |} in
