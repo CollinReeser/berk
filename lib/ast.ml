@@ -106,7 +106,10 @@ and pattern =
 and assign_lval =
   | ALVar of ident_t
   | ALStaticIndex of ident_t * int
-  | ALIndex of ident_t * expr
+  (* The name of the variable to index into, and the list of index expressions,
+  one for each level of the N-dimensional array to index into, from left to
+  right in the original source (ie, outer to inner). *)
+  | ALIndex of ident_t * expr list
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -448,11 +451,21 @@ and fmt_assign_lval ?(print_typ = false) lval =
   begin match lval with
   | ALVar(ident) -> ident
 
-  | ALIndex(ident, exp) ->
-      Printf.sprintf "%s[%s]" ident (fmt_expr ~print_typ:print_typ "" exp)
-
   | ALStaticIndex(ident, i) ->
       Printf.sprintf "%s[%d]" ident i
+
+  | ALIndex(ident, exps) ->
+      Printf.sprintf "%s%s"
+        ident
+        (
+          fmt_join_strs "" (
+            List.map (
+              fun exp ->
+                let fmted = fmt_expr ~print_typ:print_typ "" exp in
+                Printf.sprintf "[%s]" fmted
+            ) exps
+          )
+        )
   end
 
 and fmt_stmt ?(print_typ = false) ind stmt =

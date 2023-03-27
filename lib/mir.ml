@@ -494,7 +494,7 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
               [
                 (* Initialize this index of the array. *)
                 AssignStmt(
-                  ALIndex(arr_varname, ValVar(U64, idx_varname)),
+                  ALIndex(arr_varname, [ValVar(U64, idx_varname)]),
                   (default_expr_for_t base_elem_t)
                 );
                 (* Increment the indexing variable. *)
@@ -1681,13 +1681,19 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | AssignStmt(ALIndex(idxable_name, idx_exp), rhs_exp) ->
+    | AssignStmt(ALIndex(idxable_name, idx_exps), rhs_exp) ->
         (* This is an assignment into some dynamic index of an array. The index
         value itself might be a constant, but it could also be an arbitrary
         expression. This can violate bounds-checking, unlike the other two
         types of assignments. *)
         let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb rhs_exp in
-        let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_exp in
+        let ((mir_ctxt, bb), idx_lvals) =
+          List.fold_left_map (
+            fun (mir_ctxt, bb) idx_exp ->
+              let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_exp in
+              ((mir_ctxt, bb), idx_lval)
+          ) (mir_ctxt, bb) idx_exps
+        in
 
         (* Acquire the alloca to the named indexable. This is a pointer we'll
         need to load before we can calculate the index itself. *)
@@ -1710,12 +1716,13 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         let ptr_to_elem_lval = {t=Ptr(elem_t); kind=Tmp; lname=ptrto_varname} in
         let ptrto_instr =
           PtrTo(
-            ptr_to_elem_lval, [
+            ptr_to_elem_lval, (
               (* Start at "index 0" of this "one-elem array of arrays". *)
-              Static(0);
-              (* Second index is the arr-index of the array itself. *)
-              Dynamic(idx_lval)
-            ],
+              [Static(0)]
+              (* Remaining indexes index into the (potentially
+              multi-dimensional) array itself. *)
+              @ (List.map (fun lval -> Dynamic(lval)) idx_lvals)
+            ),
             loaded_idxable_lval
           )
         in

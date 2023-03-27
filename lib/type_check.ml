@@ -474,14 +474,36 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
             (lval, inner_t, var_qual)
 
-        | ALIndex(ident, exp) ->
+        | ALIndex(ident, idx_exps) ->
             let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
-            let inner_t = unwrap_indexable var_t in
 
             (* Typecheck the indexing expression. *)
-            let exp_typechecked = type_check_expr tc_ctxt Undecided exp in
+            let idx_exps_typechecked =
+              List.map (type_check_expr tc_ctxt Undecided) idx_exps
+            in
 
-            (ALIndex(ident, exp_typechecked), inner_t, var_qual)
+            (* Get the type that will be produced after indexing into the given
+            variable N times. *)
+            let rec get_base_elem_t cur_t layers_remaining =
+              begin if layers_remaining = 0 then
+                cur_t
+              else if is_indexable_type cur_t then
+                get_base_elem_t (unwrap_indexable cur_t) (layers_remaining - 1)
+              else
+                failwith (
+                  Printf.sprintf
+                    (
+                      "Indexable type exhausted before end of indexing: " ^^
+                      "[%s] -> [%s] with [%d] remaining."
+                    )
+                    (fmt_type var_t) (fmt_type cur_t) (layers_remaining)
+                )
+              end
+            in
+
+            let base_elem_t = get_base_elem_t var_t (List.length idx_exps) in
+
+            (ALIndex(ident, idx_exps_typechecked), base_elem_t, var_qual)
         end
       in
 

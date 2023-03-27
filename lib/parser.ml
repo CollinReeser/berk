@@ -518,10 +518,24 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
   | LowIdent(_, name) :: LBracket(_) :: rest ->
       let (rest, indexing_exp) = parse_expr ~ind:ind_next rest in
 
+      let rec additional_indexes rest indexing_exps_rev =
+        begin match rest with
+        | RBracket(_) :: LBracket(_) :: rest ->
+            let (rest, indexing_exp) = parse_expr ~ind:ind_next rest in
+            additional_indexes rest (indexing_exp :: indexing_exps_rev)
+
+        | _ -> (rest, indexing_exps_rev)
+        end
+      in
+
+      (* Get all indexing expressions, in order from left to right. *)
+      let (rest, indexing_exps_rev) = additional_indexes rest [] in
+      let indexing_exps = indexing_exp :: (List.rev indexing_exps_rev) in
+
       begin match rest with
       | RBracket(_) :: Equal(_) :: rest ->
           let (rest, exp) = parse_expr ~ind:ind_next rest in
-          (rest, AssignStmt(ALIndex(name, indexing_exp), exp))
+          (rest, AssignStmt(ALIndex(name, indexing_exps), exp))
 
       | _ -> failwith "Could not complete parse of indexing assignment."
       end

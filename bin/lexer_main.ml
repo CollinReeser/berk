@@ -160,6 +160,20 @@ let () =
         ultra_multi_vars[9][19][29][39]
       );
 
+      layer_thr[39] = true;
+      layer_two[29][39] = true;
+      layer_one[19][29][39] = true;
+      ultra_multi_vars[9][19][29][39] = true;
+      ultra_multi_vars[0][1][2][3] = true;
+
+      printf(
+        "Values at various indices: [%d] [%d] [%d] [%d]\n",
+        ultra_multi_vars[0][1][2][2],
+        ultra_multi_vars[0][1][2][3],
+        ultra_multi_vars[0][1][2][4],
+        ultra_multi_vars[0][1][1][3]
+      );
+
       collatz(5);
 
       primes();
