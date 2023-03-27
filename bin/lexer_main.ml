@@ -208,6 +208,12 @@ let () =
         map_ii = map_ii + 1;
       }
 
+      let mut tuple_array: [10](u32, string);
+
+      tuple_array[3] = (32, "x64x");
+
+      printf("Tuple array? [%d] [%s]\n", tuple_array[3].0, tuple_array[3].1);
+
       return 0;
     }
   |} in

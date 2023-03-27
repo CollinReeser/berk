@@ -220,6 +220,53 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
       let (rest, arr_t) = parse_type ~ind:ind_next rest in
       (rest, Array(arr_t, i))
 
+  | LParen(_) :: rest ->
+      let (rest, init_t) = parse_type ~ind:ind_next rest in
+
+      (* There must be at least one comma, if this is a tuple type. There may be
+      more types in this tuple, all comma-delimited. As a special case, it's
+      valid to spell a 1-tuple via `(<type>,)`. *)
+      begin match rest with
+      (* Is this a 1-tuple? *)
+      | Comma(_) :: RParen(_) :: rest ->
+          (rest, Tuple([init_t]))
+
+      (* This is at least a 2-tuple. *)
+      | Comma(_) :: rest ->
+          let (rest, pair_t) = parse_type ~ind:ind_next rest in
+
+          (* At this point, we want to match 0 or more `, <type>` sequences,
+          followed by a final closing paren. *)
+          let rec _parse_remaining_tuple_t rest ts_so_far =
+            begin match rest with
+            | Comma(_) :: rest ->
+                let (rest, next_t) = parse_type ~ind:ind_next rest in
+                _parse_remaining_tuple_t rest (ts_so_far @ [next_t])
+
+            | RParen(_) :: rest ->
+                (rest, ts_so_far)
+
+            | tok :: _ ->
+                let fmted = fmt_token tok in
+                failwith (
+                  Printf.sprintf
+                    "Unexpected token [%s] parsing tuple type, expected `)`."
+                    fmted
+                )
+            | [] -> failwith "Unexpected EOF while parsing tuple type."
+            end
+          in
+
+          let (rest, remaining_tuple_ts) = _parse_remaining_tuple_t rest [] in
+
+          (
+            rest,
+            Tuple([init_t; pair_t] @ remaining_tuple_ts)
+          )
+
+      | _ -> failwith "Failed to complete parse of tuple type."
+      end
+
   | tok :: _ ->
       let fmted = fmt_token tok in
       failwith (
