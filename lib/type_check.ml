@@ -69,7 +69,7 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
   let res = begin match stmt with
   | ExprStmt(expr)
   | ReturnStmt(expr)
-  | AssignStmt(_, expr)
+  | AssignStmt(_, _, expr)
   | AssignDeconStmt(_, expr) ->
       _is_concrete_expr expr
 
@@ -461,73 +461,75 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
       (tc_ctxt_up, DeclDeconStmt(idents_quals, resolved_t, exp_typechecked))
 
-  | AssignStmt(lval, exp) ->
-      let (lval_typechecked, lval_t, {mut}) =
-        begin match lval with
-        | ALVar(ident) ->
-            let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
-            (lval, var_t, var_qual)
+  | AssignStmt(ident, lval_idxs, exp) ->
+      (* Typecheck the chain of indexing against the named LHS variable, if
+      there is any, and yield the type of the resultant target for the
+      assignment (as well as the typechecked index expressions). *)
+      let rec apply_index cur_t lval_idxs_remaining lval_idxs_typechecked_rev =
+        begin match lval_idxs_remaining with
+        | [] -> (cur_t, lval_idxs_typechecked_rev)
 
-        | ALStaticIndex(ident, i) ->
-            let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
-            let inner_t = unwrap_aggregate_indexable var_t i in
+        | ALStaticIndex(i) :: rest ->
+            let inner_t = unwrap_aggregate_indexable cur_t i in
+            let lval_idx_tc = ALStaticIndex(i) in
 
-            (lval, inner_t, var_qual)
+            apply_index inner_t rest (lval_idx_tc :: lval_idxs_typechecked_rev)
 
-        | ALIndex(ident, idx_exps) ->
-            let (var_t, var_qual) = StrMap.find ident tc_ctxt.vars in
-
-            (* Typecheck the indexing expression. *)
-            let idx_exps_typechecked =
-              List.map (type_check_expr tc_ctxt Undecided) idx_exps
+        | ALIndex(idx_exp) :: rest ->
+            (* Typecheck the indexing expression itself. *)
+            let idx_exp_tc =
+              type_check_expr tc_ctxt Undecided idx_exp
             in
 
-            (* Get the type that will be produced after indexing into the given
-            variable N times. *)
-            let rec get_base_elem_t cur_t layers_remaining =
-              begin if layers_remaining = 0 then
-                cur_t
-              else if is_indexable_type cur_t then
-                get_base_elem_t (unwrap_indexable cur_t) (layers_remaining - 1)
+            let inner_t =
+              if is_indexable_type cur_t then
+                unwrap_indexable cur_t
               else
                 failwith (
-                  Printf.sprintf
-                    (
-                      "Indexable type exhausted before end of indexing: " ^^
-                      "[%s] -> [%s] with [%d] remaining."
-                    )
-                    (fmt_type var_t) (fmt_type cur_t) (layers_remaining)
+                  Printf.sprintf "Type cannot be indexed: [%s]" (fmt_type cur_t)
                 )
-              end
             in
 
-            let base_elem_t = get_base_elem_t var_t (List.length idx_exps) in
+            let lval_idx_tc = ALIndex(idx_exp_tc) in
 
-            (ALIndex(ident, idx_exps_typechecked), base_elem_t, var_qual)
+            apply_index inner_t rest (lval_idx_tc :: lval_idxs_typechecked_rev)
         end
       in
+
+      let (var_t, {mut}) = StrMap.find ident tc_ctxt.vars in
+
+      let (lval_t, lval_idxs_typechecked_rev) =
+        apply_index var_t lval_idxs []
+      in
+      let lval_idxs_typechecked = List.rev lval_idxs_typechecked_rev in
 
       let exp_typechecked = type_check_expr tc_ctxt lval_t exp in
       let exp_t = expr_type exp_typechecked in
 
       let _ =
-        if mut
-          then ()
-          else failwith "Cannot assign to immutable var"
+        if mut then
+          ()
+        else
+          failwith (
+            Printf.sprintf "Cannot assign to immutable var [%s]" ident
+          )
       in
 
-      if type_convertible_to exp_t lval_t
-        then (tc_ctxt, AssignStmt(lval_typechecked, exp_typechecked))
-        else failwith "Expr for assignment does not typecheck"
+      if type_convertible_to exp_t lval_t then
+        (tc_ctxt, AssignStmt(ident, lval_idxs_typechecked, exp_typechecked))
+      else
+        failwith (
+          Printf.sprintf "Expr for assignment to [%s] does not typecheck" ident
+        )
 
-  | AssignDeconStmt(lvals, exp) ->
+  | AssignDeconStmt(idents_lval_idxs, exp) ->
       (* TODO: Add support for deconstructed assignment to indexed variables. *)
       let idents =
         List.map (
-          fun lval -> match lval with
-          | ALVar(ident) -> ident
-          | _ -> failwith "Unimplemented: AssignDeconStmt for non-ALVar(_)"
-        ) lvals
+          fun (ident, lval_idx) -> match lval_idx with
+          | [] -> ident
+          | _ -> failwith "Unimplemented: AssignDeconStmt with indexing"
+        ) idents_lval_idxs
       in
 
       let assign_types = List.map (
@@ -578,11 +580,9 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
               else failwith "Mismatch in number of idents vs array expr in assi"
           in
 
-          (* TODO: This is a hack to make it more clear we only support ALVar's
-          in AssignDeconStmt for now. *)
-          let idents = List.map (fun ident -> ALVar(ident)) idents in
-
-          (tc_ctxt, AssignDeconStmt(idents, exp_typechecked))
+          (* FIXME: We are not actually typechecking the lval_idxs because we
+          don't support them yet in this deconstruction context. *)
+          (tc_ctxt, AssignDeconStmt(idents_lval_idxs, exp_typechecked))
 
         | Tuple(types) ->
           let _ =
@@ -591,11 +591,9 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
               else failwith "Mismatch in number of idents vs tuple expr in assi"
           in
 
-          (* TODO: This is a hack to make it more clear we only support ALVar's
-          in AssignDeconStmt for now. *)
-          let idents = List.map (fun ident -> ALVar(ident)) idents in
-
-          (tc_ctxt, AssignDeconStmt(idents, exp_typechecked))
+          (* FIXME: We are not actually typechecking the lval_idxs because we
+          don't support them yet in this deconstruction context. *)
+          (tc_ctxt, AssignDeconStmt(idents_lval_idxs, exp_typechecked))
 
         | _ -> failwith "Cannot deconstruct non-aggregate type into ids"
       end

@@ -178,7 +178,7 @@ let fmt_instr instr =
         (fmt_type target_t)
 
   | PtrTo({t; _} as lval, idxs, aggregate_lval) ->
-      sprintf "  %s = ptrto %s via %s following indices (%s)\n"
+      sprintf "  %s = getptr %s via %s following indices (%s)\n"
         (fmt_lval lval)
         (fmt_type t)
         (fmt_lval aggregate_lval)
@@ -381,17 +381,17 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
   let (mir_ctxt, bb, alloca_lval, instructions) = begin match expected_t with
   | Array(_, _) ->
       (* Allocate stack space for the value *)
-      let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
+      let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
 
       let alloca_lval =
-        {t=Ptr(expected_t); kind=Tmp; lname=variant_alloca_varname}
+        {t=Ptr(expected_t); kind=Tmp; lname=alloca_varname}
       in
       let alloca_instr = Alloca(alloca_lval, expected_t) in
 
       (* Store the value into the alloca. *)
       let store_instr = Store(alloca_lval, lval) in
 
-      (mir_ctxt, bb, lval, [alloca_instr; store_instr])
+      (mir_ctxt, bb, alloca_lval, [alloca_instr; store_instr])
 
   | Variant(_, _) as variant_t ->
       (* Allocate stack space for the variant *)
@@ -440,6 +440,59 @@ let literal_to_instr mir_ctxt bb t ctor =
   let instr = Assign(lval, Constant(ctor)) in
   let bb = {bb with instrs=bb.instrs @ [instr]} in
   (mir_ctxt, bb, lval)
+;;
+
+
+(* Get a "default value" expr for the given type. *)
+let rec default_expr_for_t mir_ctxt t : (mir_ctxt * expr) =
+  begin match t with
+  | Undecided
+  | Unbound(_)
+  | VarArgSentinel
+  | Ptr(_)
+  | Variant(_, _)
+  | ByteArray(_)
+  | Function(_, _) ->
+      failwith (
+        Printf.sprintf
+          "Nonsense attempt to generate default expr value for type [%s]"
+          (fmt_type t)
+      )
+
+  | Nil  -> (mir_ctxt, ValNil)
+
+  | Bool -> (mir_ctxt, ValBool(false))
+
+  | U64  -> (mir_ctxt, ValU64 (0))
+  | U32  -> (mir_ctxt, ValU32 (0))
+  | U16  -> (mir_ctxt, ValU16 (0))
+  | U8   -> (mir_ctxt, ValU8  (0))
+  | I64  -> (mir_ctxt, ValI64 (0))
+  | I32  -> (mir_ctxt, ValI32 (0))
+  | I16  -> (mir_ctxt, ValI16 (0))
+  | I8   -> (mir_ctxt, ValI8  (0))
+  | F32  -> (mir_ctxt, ValF32 (0.0))
+  | F64  -> (mir_ctxt, ValF64 (0.0))
+  | F128 -> (mir_ctxt, ValF128("0.0"))
+
+  | String -> (mir_ctxt, ValStr(""))
+
+  | Tuple(tuple_ts) ->
+      let (mir_ctxt, default_ts_exprs) =
+        List.fold_left_map (
+          fun mir_ctxt tuple_t -> default_expr_for_t mir_ctxt tuple_t
+        ) mir_ctxt tuple_ts
+      in
+      (mir_ctxt, TupleExpr(t, default_ts_exprs))
+
+  | Array(_, _) ->
+      failwith (
+        Printf.sprintf (
+          "Error: Do not attempt to generate default array. " ^^
+          "Array declarations must be initialized: [%s]"
+        ) (fmt_type t)
+      )
+  end
 ;;
 
 
@@ -494,12 +547,15 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
               [
                 (* Initialize this index of the array. *)
                 AssignStmt(
-                  ALIndex(arr_varname, [ValVar(U64, idx_varname)]),
-                  (default_expr_for_t base_elem_t)
+                  arr_varname, [ALIndex(ValVar(U64, idx_varname))],
+                  (
+                    Stdlib.snd
+                      (default_expr_for_t mir_ctxt base_elem_t)
+                  )
                 );
                 (* Increment the indexing variable. *)
                 AssignStmt(
-                  ALVar(idx_varname),
+                  idx_varname, [],
                   BinOp(U64, Add, ValVar(U64, idx_varname), ValU64(1))
                 );
               ]
@@ -548,8 +604,16 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         end
 
     (* For all other types, the straightforward generation is acceptable. *)
+
+    (* TODO: Need to teach this to deconstruct aggregate types, as eg a
+    top-level tuple type could internally contain a static array which in turn
+    needs the special initialization logic above. *)
+
     | _ ->
-        expr_to_mir mir_ctxt bb (default_expr_for_t t)
+        expr_to_mir mir_ctxt bb (
+          Stdlib.snd
+            (default_expr_for_t mir_ctxt t)
+        )
 
     end
   in
@@ -753,19 +817,42 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           in
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
-          let lval = {t=t; kind=Tmp; lname=varname} in
-          let tuple_instr = ConstructAggregate(lval, tuple_values) in
+          let tuple_lval = {t=t; kind=Tmp; lname=varname} in
+          let tuple_instr = ConstructAggregate(tuple_lval, tuple_values) in
 
-          let bb = {bb with instrs=bb.instrs @ [tuple_instr]} in
+          (* Allocate stack space for the tuple. Note that if this tuple gets
+          assigned to a named variable, the variable will itself represent an
+          alloca, so the variable will be a pointer to _this pointer_ to the
+          tuple, ie, double indirection. *)
+          let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
 
-          (mir_ctxt, bb, lval)
+          let alloca_lval =
+            {t=Ptr(t); kind=Tmp; lname=alloca_varname}
+          in
+          let alloca_instr = Alloca(alloca_lval, t) in
+
+          (* Store the value into the alloca. *)
+          let store_instr = Store(alloca_lval, tuple_lval) in
+
+          let bb = {
+            bb with instrs=bb.instrs @ [tuple_instr; alloca_instr; store_instr]
+          } in
+
+          (mir_ctxt, bb, alloca_lval)
 
       (* TODO: This is structually identical to TupleExprs. Are statically
       sized arrays really so interesting that they need to be different? The
       question really is whether a statically sized array must also be
       statically fully initialized, or if it can be partially/fully
       _un_initialized after first declaration.
-       *)
+
+      Further argument: An array implies an N-sized collection of something
+      uniform. A tuple implies a known-size collection of distinct things. The
+      elements of a tuple don't need to be distinct via _type_, they just need
+      to be distinct in purpose from each other. A tuple of three strings, eg a
+      first/middle/last name, would not make as much sense represented as a
+      3-element array.
+      *)
       | ArrayExpr(t, exprs) ->
           let ((mir_ctxt, bb), arr_values) =
             List.fold_left_map (
@@ -925,17 +1012,28 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           (mir_ctxt, end_bb, if_res_lval)
 
       | StaticIndexExpr(t, idx, exp) ->
-          let (mir_ctxt, bb, agg_lval) = _expr_to_mir mir_ctxt bb exp in
+          let (mir_ctxt, bb, ({t=tup_ptr_t; _} as tup_ptr_lval)) =
+            _expr_to_mir mir_ctxt bb exp
+          in
 
-          let (mir_ctxt, from_agg_varname) = get_varname mir_ctxt in
-          let from_agg_lval = {t=t; kind=Tmp; lname=from_agg_varname} in
-          let from_agg_instr = FromAggregate(from_agg_lval, idx, agg_lval) in
+          (* For now, tuples are guaranteed to be behind a layer of indirection.
+          *)
+
+          let tuple_t = unwrap_ptr tup_ptr_t in
+
+          let (mir_ctxt, load_varname) = get_varname mir_ctxt in
+          let tup_lval = {t=tuple_t; kind=Tmp; lname=load_varname} in
+          let load_instr = Load(tup_lval, tup_ptr_lval) in
+
+          let (mir_ctxt, tup_elem_varname) = get_varname mir_ctxt in
+          let tup_elem_lval = {t=t; kind=Tmp; lname=tup_elem_varname} in
+          let from_tup_instr = FromAggregate(tup_elem_lval, idx, tup_lval) in
 
           let bb = {
-            bb with instrs = bb.instrs @ [from_agg_instr]
+            bb with instrs = bb.instrs @ [load_instr; from_tup_instr]
           } in
 
-          (mir_ctxt, bb, from_agg_lval)
+          (mir_ctxt, bb, tup_elem_lval)
 
       | VariantCtorExpr(variant_t, ctor_name, ctor_arg) ->
           let v_ctors = begin match variant_t with
@@ -1632,7 +1730,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | AssignStmt(ALVar(lhs_name), exp) ->
+    | AssignStmt(lhs_name, [], exp) ->
         (* This is an assignment to a pre-existing lvalue var, so we just need
         to find the lval for this var, and then we can directly store the RHS
         into that existing lval. *)
@@ -1647,95 +1745,124 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | AssignStmt(ALStaticIndex(indexable_name, i), exp) ->
-        (* This is an assignment to a constant index within a statically-known
-        aggregate (tuple, struct). We need to acquire the lvalue itself (some
-        alloca), load the "raw" aggregate within that alloca, then store the RHS
-        into the given index within the aggregate, then store the aggregate back
-        into the alloca. *)
+    | AssignStmt(lhs_name, lval_idxs, exp) ->
+        (* Generate MIR for iteratively indexing into the contents of the named
+        variable, eventually yielding an lval that can be stored into with the
+        RHS expression result. *)
+        let rec gen_indexing_mir mir_ctxt bb cur_lhs_lval lval_idxs_remaining =
+          let {t=idxable_t; _} = cur_lhs_lval in
 
+          begin match lval_idxs_remaining with
+          | [] -> (mir_ctxt, bb, cur_lhs_lval)
+
+
+          | ALIndex(idx_exp) :: rest ->
+              let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_exp in
+
+              let elem_t = unwrap_ptr idxable_t in
+
+              let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
+              let ptr_to_next_elem_lval =
+                {t=Ptr(elem_t); kind=Tmp; lname=ptrto_varname}
+              in
+              let ptrto_instr =
+                PtrTo(
+                  ptr_to_next_elem_lval, (
+                    (* Index into "index 0" of the aggregate ptr, then index
+                    into the dynamically-calculated index of that aggregate. *)
+                    [Static(0); Dynamic(idx_lval)]
+                  ),
+                  cur_lhs_lval
+                )
+              in
+
+              let bb = {bb with instrs = bb.instrs @ [ptrto_instr]} in
+              let mir_ctxt = update_bb mir_ctxt bb in
+
+              gen_indexing_mir mir_ctxt bb ptr_to_next_elem_lval rest
+
+          | ALStaticIndex(i) :: rest ->
+              (* FIXME: Really, this should be "ALTupleIndex", and this
+              unwrapping function should be named accordingly. *)
+              let aggregate_t = unwrap_ptr idxable_t in
+              let elem_t = unwrap_aggregate_indexable aggregate_t i in
+
+              let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
+              let ptr_to_next_elem_lval =
+                {t=Ptr(elem_t); kind=Tmp; lname=ptrto_varname}
+              in
+              let ptrto_instr =
+                PtrTo(
+                  ptr_to_next_elem_lval, (
+                    (* Index into the ptr to the tuple, yielding the tuple, then
+                    yield a pointer to the specific target element of the tuple.
+                    *)
+                    [Static(0); Static(i)]
+                  ),
+                  cur_lhs_lval
+                )
+              in
+
+              let bb = {bb with instrs = bb.instrs @ [ptrto_instr]} in
+              let mir_ctxt = update_bb mir_ctxt bb in
+
+              gen_indexing_mir mir_ctxt bb ptr_to_next_elem_lval rest
+          end
+        in
+
+        (* Acquire the alloca to the named variable. If we're not doing any
+        indexing, then this is the ptr that we'll directly store the result
+        of the expression into. If we _are_ doing indexing, then we'll first
+        need to load this ptr, which is (or should be) really a ptr to an
+        indexable ptr. *)
+        let {t=var_alloca_t; _} as var_alloca_lval =
+          StrMap.find lhs_name mir_ctxt.lvars
+        in
+
+        (* Get the ptr to the actual target of the assignment. If the target
+        is the variable itself, then we just yield back the lval we already
+        have in-hand. But, if we're indexing into that variable, we generate
+        the MIR to do that indexing, and yield back the resultant ptr to the
+        (arbitrarily nested) inner element. *)
+        let (mir_ctxt, bb, to_store_lval) =
+          begin match lval_idxs with
+          | [] ->
+              (mir_ctxt, bb, var_alloca_lval)
+
+          | _ ->
+              (* We need to "unwrap" the ptr to the alloca, to get the ptr to
+              the indexable lval ptr itself. *)
+
+              let idxable_t = unwrap_ptr var_alloca_t in
+
+              let (mir_ctxt, load_varname) = get_varname mir_ctxt in
+              let idxable_lval = {t=idxable_t; kind=Tmp; lname=load_varname} in
+              let load_instr = Load(idxable_lval, var_alloca_lval) in
+
+              let bb = {bb with instrs = bb.instrs @ [load_instr]} in
+              let mir_ctxt = update_bb mir_ctxt bb in
+
+              (* Generate a series of zero-or-more indexing operations, starting
+              with the named LHS lvalue. *)
+              let (mir_ctxt, bb, to_store_lval) =
+                gen_indexing_mir mir_ctxt bb idxable_lval lval_idxs
+              in
+
+              (mir_ctxt, bb, to_store_lval)
+          end
+        in
+
+        (* Generate the MIR for the expression itself. *)
         let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
 
-        let {t=loadable_t; _} as agg_alloca_lval =
-          StrMap.find indexable_name mir_ctxt.lvars
-        in
-
-        let loaded_t = unwrap_ptr loadable_t in
-
-        let (mir_ctxt, load_varname) = get_varname mir_ctxt in
-        let loaded_agg_lval = {t=loaded_t; kind=Tmp; lname=load_varname} in
-        let load_instr = Load(loaded_agg_lval, agg_alloca_lval) in
-
-        let (mir_ctxt, new_agg_varname) = get_varname mir_ctxt in
-        let new_agg_lval = {t=loaded_t; kind=Tmp; lname=new_agg_varname} in
-        let into_instr =
-          IntoAggregate(new_agg_lval, i, loaded_agg_lval, rhs_lval)
-        in
-
-        let store_instr = Store(agg_alloca_lval, new_agg_lval) in
-
-        let bb = {
-          bb with instrs = bb.instrs @ [load_instr; into_instr; store_instr]
-        } in
-        let mir_ctxt = update_bb mir_ctxt bb in
-
-        (mir_ctxt, bb)
-
-    | AssignStmt(ALIndex(idxable_name, idx_exps), rhs_exp) ->
-        (* This is an assignment into some dynamic index of an array. The index
-        value itself might be a constant, but it could also be an arbitrary
-        expression. This can violate bounds-checking, unlike the other two
-        types of assignments. *)
-        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb rhs_exp in
-        let ((mir_ctxt, bb), idx_lvals) =
-          List.fold_left_map (
-            fun (mir_ctxt, bb) idx_exp ->
-              let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_exp in
-              ((mir_ctxt, bb), idx_lval)
-          ) (mir_ctxt, bb) idx_exps
-        in
-
-        (* Acquire the alloca to the named indexable. This is a pointer we'll
-        need to load before we can calculate the index itself. *)
-        let {t=var_t; _} as idxable_alloca_lval =
-          StrMap.find idxable_name mir_ctxt.lvars
-        in
-
-        let pointed_t = unwrap_ptr var_t in
-
-        (* The indexable value is itself inside an alloca, so the first thing we
-        need to do is load the indexable out of its alloca. *)
-        let (mir_ctxt, load_varname) = get_varname mir_ctxt in
-        let loaded_idxable_lval = {t=pointed_t; kind=Tmp; lname=load_varname} in
-        let load_instr = Load(loaded_idxable_lval, idxable_alloca_lval) in
-
-        let unwrapped_t = unwrap_ptr pointed_t in
-        let elem_t = unwrap_ptr unwrapped_t in
-
-        let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
-        let ptr_to_elem_lval = {t=Ptr(elem_t); kind=Tmp; lname=ptrto_varname} in
-        let ptrto_instr =
-          PtrTo(
-            ptr_to_elem_lval, (
-              (* Start at "index 0" of this "one-elem array of arrays". *)
-              [Static(0)]
-              (* Remaining indexes index into the (potentially
-              multi-dimensional) array itself. *)
-              @ (List.map (fun lval -> Dynamic(lval)) idx_lvals)
-            ),
-            loaded_idxable_lval
-          )
-        in
-
         (* Finally, store the element into the calculated index. *)
-        let store_instr = Store(ptr_to_elem_lval, rhs_lval) in
+        let store_instr = Store(to_store_lval, rhs_lval) in
 
-        let bb = {
-          bb with instrs = bb.instrs @ [load_instr; ptrto_instr; store_instr]
-        } in
+        let bb = {bb with instrs = bb.instrs @ [store_instr]} in
         let mir_ctxt = update_bb mir_ctxt bb in
 
         (mir_ctxt, bb)
+
 
     | DeclDeconStmt(ident_quals, t, exp) ->
         let (mir_ctxt, bb, aggregate_lval) = expr_to_mir mir_ctxt bb exp in

@@ -549,42 +549,106 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
     else ind
   end in
 
+  (* Parse `[<indexing-expr>]` *)
+  let _parse_assign_array_index
+    ?(ind="") tokens : (token list * assign_idx_lval)
+  =
+    let _ = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match tokens with
+    | LBracket(_) :: rest ->
+        let (rest, indexing_exp) = parse_expr ~ind:ind_next rest in
+
+        begin match rest with
+        | RBracket(_) :: rest ->
+            (rest, ALIndex(indexing_exp))
+
+        | _ -> failwith "Could not complete parse of indexing assignment."
+        end
+
+    | _ -> raise Backtrack
+    end
+  in
+
+  (* Parse `.<literal-integer>` *)
+  let _parse_assign_tuple_index
+    ?(ind="") tokens : (token list * assign_idx_lval)
+  =
+    let _ = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match tokens with
+    | Dot(_) :: Integer(_, i) :: rest ->
+        (rest, ALStaticIndex(i))
+
+    | _ -> raise Backtrack
+    end
+  in
+
+  (* Assignment to some LHS value may be after an arbitrarily complex indexing
+  into it (array indexing, tuple member indexing, recordfield indexing). *)
+  let rec _parse_assign_index ?(ind="") rest idxs_so_far_rev =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token rest) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin
+      try
+        let (rest, idx) = _parse_assign_array_index ~ind:ind_next rest in
+        _parse_assign_index rest (idx :: idxs_so_far_rev)
+      with Backtrack ->
+      try
+        let (rest, idx) = _parse_assign_tuple_index ~ind:ind_next rest in
+        _parse_assign_index rest (idx :: idxs_so_far_rev)
+      with Backtrack ->
+        (rest, idxs_so_far_rev)
+    end
+  in
+
+  (* Attempt to parse an assignment stmt. *)
   begin match tokens with
   (* var = ... *)
   | LowIdent(_, name) :: Equal(_) :: rest ->
       let (rest, exp) = parse_expr ~ind:ind_next rest in
-      (rest, AssignStmt(ALVar(name), exp))
+      (rest, AssignStmt(name, [], exp))
 
-  (* tuple_var.1 = ... *)
-  | LowIdent(_, name) :: Dot(_) :: Integer(_, i) :: Equal(_) :: rest
-    ->
-      let (rest, exp) = parse_expr ~ind:ind_next rest in
-      (rest, AssignStmt(ALStaticIndex(name, i), exp))
+  (* complex_datastructure[i + 2][6].2.3[4] = ... *)
+  | LowIdent(_, name) :: rest ->
+      let (rest, idxs_rev) = _parse_assign_index ~ind:ind_next rest [] in
+      let idxs = List.rev idxs_rev in
 
-  (* array_var[i + 2] = ... *)
-  | LowIdent(_, name) :: LBracket(_) :: rest ->
-      let (rest, indexing_exp) = parse_expr ~ind:ind_next rest in
-
-      let rec additional_indexes rest indexing_exps_rev =
-        begin match rest with
-        | RBracket(_) :: LBracket(_) :: rest ->
-            let (rest, indexing_exp) = parse_expr ~ind:ind_next rest in
-            additional_indexes rest (indexing_exp :: indexing_exps_rev)
-
-        | _ -> (rest, indexing_exps_rev)
-        end
-      in
-
-      (* Get all indexing expressions, in order from left to right. *)
-      let (rest, indexing_exps_rev) = additional_indexes rest [] in
-      let indexing_exps = indexing_exp :: (List.rev indexing_exps_rev) in
-
+      (* Once we've exhausted parsing some arbitrarily-deep series of indexing
+      operations, we expect to see the assignment token if this is actually
+      an assignment (and not, say, an expression-stmt that included indexing).
+      *)
       begin match rest with
-      | RBracket(_) :: Equal(_) :: rest ->
+      | Equal(_) :: rest ->
           let (rest, exp) = parse_expr ~ind:ind_next rest in
-          (rest, AssignStmt(ALIndex(name, indexing_exps), exp))
 
-      | _ -> failwith "Could not complete parse of indexing assignment."
+          (rest, AssignStmt(name, idxs, exp))
+
+      | _ -> raise Backtrack
       end
 
   (* TODO: Extend to recognize AssignDeconStmt *)

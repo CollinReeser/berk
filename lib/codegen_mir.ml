@@ -305,16 +305,16 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
   | PtrTo({lname; _}, indices, {lname=agg_name; _}) ->
       let index_to_llvm idx = begin match idx with
         | Static(i) ->
-            ValU64(i) |> codegen_constant llvm_ctxt func_ctxt builder
+            ValU32(i) |> codegen_constant llvm_ctxt func_ctxt builder
         | Dynamic({lname; _}) ->
             StrMap.find lname func_ctxt.cur_vars
       end in
 
-      let indices = Array.of_list (List.map index_to_llvm indices) in
+      let llvm_indices = Array.of_list (List.map index_to_llvm indices) in
       let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
 
       let llvm_gep =
-        Llvm.build_gep agg_value indices lname builder |>
+        Llvm.build_gep agg_value llvm_indices lname builder |>
         enforce_mir_llvm_name_agreement lname
       in
 

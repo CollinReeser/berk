@@ -384,7 +384,7 @@ let is_indexable_type arr_t =
   | Array(_, _) -> true
   | _ ->
       let not_arr_s = fmt_type arr_t in
-      Printf.printf "Type [%s] is not indexable indexable\n" not_arr_s;
+      Printf.printf "Type [%s] is not indexable\n" not_arr_s;
       false
 ;;
 
@@ -392,7 +392,11 @@ let is_indexable_type arr_t =
 let unwrap_indexable indexable_t =
   match indexable_t with
   | Array(t, _) -> t
-  | _ -> failwith "Cannot unwrap non-indexable type"
+  | _ ->
+      failwith (
+        Printf.sprintf "Cannot unwrap non-indexable type: [%s]"
+          (fmt_type indexable_t)
+      )
 ;;
 
 
@@ -404,7 +408,11 @@ let unwrap_aggregate_indexable indexable_t i =
       else
         failwith (Printf.sprintf "Invalid index into tuple of arity [%d]" i)
 
-  | _ -> failwith "Cannot unwrap non-indexable type"
+  | _ ->
+      failwith (
+        Printf.sprintf "Cannot unwrap non-indexable aggregate type: [%s]"
+          (fmt_type indexable_t)
+      )
 ;;
 
 

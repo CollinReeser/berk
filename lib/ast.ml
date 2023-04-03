@@ -103,13 +103,13 @@ and pattern =
   (* ie: <pattern> as x -> ... *)
   | PatternAs of berk_t * pattern * ident_t
 
-and assign_lval =
-  | ALVar of ident_t
-  | ALStaticIndex of ident_t * int
-  (* The name of the variable to index into, and the list of index expressions,
-  one for each level of the N-dimensional array to index into, from left to
-  right in the original source (ie, outer to inner). *)
-  | ALIndex of ident_t * expr list
+and assign_idx_lval =
+  (* An index into a tuple. *)
+  | ALStaticIndex of int
+  (* TODO: Add ALRecordIndex for indexing to access a record field:
+  | ALRecordIndex of string *)
+  (* An index into a static or dynamic array. *)
+  | ALIndex of expr
 
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
@@ -123,8 +123,11 @@ and stmt =
   the type be per-variable, rather than define a post-deconstruction tuple type.
   *)
   | DeclDeconStmt of (ident_t * var_qual) list * berk_t * expr
-  | AssignStmt of assign_lval * expr
-  | AssignDeconStmt of assign_lval list * expr
+  (* Assignment to a LHS lvalue. Could be assignment directly to a named
+  variable, where the idx list is empty, or could be arbitrarily-deep indexing
+  to the _real_ target of assignment, starting at that named variable. *)
+  | AssignStmt of ident_t * assign_idx_lval list * expr
+  | AssignDeconStmt of (ident_t * assign_idx_lval list) list * expr
   | ExprStmt of expr
   | ReturnStmt of expr
 ;;
@@ -447,25 +450,24 @@ and fmt_join_idents_quals_types
         delim
         (fmt_join_idents_quals_types delim xs)
 
-and fmt_assign_lval ?(print_typ = false) lval =
-  begin match lval with
-  | ALVar(ident) -> ident
+and fmt_assign_lval_idxs ?(print_typ = false) lval_idxs =
+  let rec _fmt_assign_lval_idxs lval_idxs_rem fmt_so_far =
+    begin match lval_idxs_rem with
+    | [] -> fmt_so_far
+    | idx :: rest ->
+        let fmt = fmt_assign_lval_idx ~print_typ:print_typ idx in
+        _fmt_assign_lval_idxs rest (fmt_so_far ^ fmt)
+    end
+  in
+  _fmt_assign_lval_idxs lval_idxs ""
 
-  | ALStaticIndex(ident, i) ->
-      Printf.sprintf "%s[%d]" ident i
+and fmt_assign_lval_idx ?(print_typ = false) lval_idx =
+  begin match lval_idx with
+  | ALStaticIndex(i) ->
+      Printf.sprintf ".%d" i
 
-  | ALIndex(ident, exps) ->
-      Printf.sprintf "%s%s"
-        ident
-        (
-          fmt_join_strs "" (
-            List.map (
-              fun exp ->
-                let fmted = fmt_expr ~print_typ:print_typ "" exp in
-                Printf.sprintf "[%s]" fmted
-            ) exps
-          )
-        )
+  | ALIndex(exp) ->
+      Printf.sprintf "[%s]" (fmt_expr ~print_typ:print_typ "" exp)
   end
 
 and fmt_stmt ?(print_typ = false) ind stmt =
@@ -498,17 +500,24 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         typ_s
         (fmt_expr ~print_typ:print_typ ind ex)
 
-  | AssignStmt (lval, ex) ->
-      Printf.sprintf "%s%s = %s;\n"
+  | AssignStmt (ident, lval_idxs, ex) ->
+      Printf.sprintf "%s%s%s = %s;\n"
         ind
-        (fmt_assign_lval lval)
+        ident
+        (fmt_assign_lval_idxs ~print_typ:print_typ lval_idxs)
         (fmt_expr ~print_typ:print_typ ind ex)
 
-  | AssignDeconStmt (lvals, ex) ->
+  | AssignDeconStmt (ident_lval_idxs, ex) ->
+      let lhs_exprs =
+        List.map (
+          fun (ident, lval_idxs) ->
+            Printf.sprintf "%s%s" ident (fmt_assign_lval_idxs lval_idxs)
+        ) ident_lval_idxs
+      in
       Printf.sprintf "%s(%s) = %s;\n"
         ind
-        (fmt_join_strs ", " (List.map fmt_assign_lval lvals))
-        (fmt_expr ~print_typ:print_typ ind ex);
+        (fmt_join_strs ", " lhs_exprs)
+        (fmt_expr ~print_typ:print_typ ind ex)
 
   | ExprStmt (ex) ->
       Printf.sprintf "%s%s;\n"
@@ -1140,9 +1149,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           unique_varnames
         )
 
-    | AssignStmt(varname, exp) ->
+    | AssignStmt(varname, lval_idxs, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in
-        (AssignStmt(varname, exp_rewritten), unique_varnames)
+        (AssignStmt(varname, lval_idxs, exp_rewritten), unique_varnames)
 
     | AssignDeconStmt(varnames, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in

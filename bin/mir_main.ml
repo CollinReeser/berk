@@ -70,7 +70,7 @@ let main = begin
                   )
                 );
                 AssignStmt(
-                  ALVar("iter"),
+                  "iter", [],
                   BinOp(
                     Undecided,
                     Add, ValVar(Undecided, "iter"), ValInt(Undecided, 1)
@@ -102,7 +102,7 @@ let main = begin
                   )
                 );
                 AssignStmt(
-                  ALVar("iter2"),
+                  "iter2", [],
                   BinOp(
                     Undecided,
                     Add, ValVar(Undecided, "iter2"), ValInt(Undecided, 1)
@@ -187,8 +187,8 @@ let main = begin
             "mut_tuple", {mut=true}, Undecided,
             TupleExpr(Undecided, [ValU64(12345); ValStr("?"); ValU16(321);])
           );
-          AssignStmt(ALStaticIndex("mut_tuple", 0), ValU64(23456));
-          AssignStmt(ALStaticIndex("mut_tuple", 2), ValU16(432));
+          AssignStmt("mut_tuple", [ALStaticIndex(0)], ValU64(23456));
+          AssignStmt("mut_tuple", [ALStaticIndex(2)], ValU16(432));
           DeclDeconStmt(
             [("m", {mut=false}); ("n", {mut=false}); ("o", {mut=false})],
             Undecided,
