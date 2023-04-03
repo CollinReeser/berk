@@ -427,6 +427,13 @@ let unwrap_ptr ptr_t =
 ;;
 
 
+let is_unwrappable ptr_t =
+  match ptr_t with
+  | Ptr(_) -> true
+  | _ -> false
+;;
+
+
 (* Make concrete the given type, to the extent possible, via the mappings in the
 given string-type-variable-to-type mapping. *)
 let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =

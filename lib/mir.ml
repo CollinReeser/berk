@@ -820,25 +820,11 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let tuple_lval = {t=t; kind=Tmp; lname=varname} in
           let tuple_instr = ConstructAggregate(tuple_lval, tuple_values) in
 
-          (* Allocate stack space for the tuple. Note that if this tuple gets
-          assigned to a named variable, the variable will itself represent an
-          alloca, so the variable will be a pointer to _this pointer_ to the
-          tuple, ie, double indirection. *)
-          let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
-
-          let alloca_lval =
-            {t=Ptr(t); kind=Tmp; lname=alloca_varname}
-          in
-          let alloca_instr = Alloca(alloca_lval, t) in
-
-          (* Store the value into the alloca. *)
-          let store_instr = Store(alloca_lval, tuple_lval) in
-
           let bb = {
-            bb with instrs=bb.instrs @ [tuple_instr; alloca_instr; store_instr]
+            bb with instrs=bb.instrs @ [tuple_instr]
           } in
 
-          (mir_ctxt, bb, alloca_lval)
+          (mir_ctxt, bb, tuple_lval)
 
       (* TODO: This is structually identical to TupleExprs. Are statically
       sized arrays really so interesting that they need to be different? The
@@ -1016,21 +1002,13 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             _expr_to_mir mir_ctxt bb exp
           in
 
-          (* For now, tuples are guaranteed to be behind a layer of indirection.
-          *)
-
-          let tuple_t = unwrap_ptr tup_ptr_t in
-
-          let (mir_ctxt, load_varname) = get_varname mir_ctxt in
-          let tup_lval = {t=tuple_t; kind=Tmp; lname=load_varname} in
-          let load_instr = Load(tup_lval, tup_ptr_lval) in
 
           let (mir_ctxt, tup_elem_varname) = get_varname mir_ctxt in
           let tup_elem_lval = {t=t; kind=Tmp; lname=tup_elem_varname} in
           let from_tup_instr = FromAggregate(tup_elem_lval, idx, tup_lval) in
 
           let bb = {
-            bb with instrs = bb.instrs @ [load_instr; from_tup_instr]
+            bb with instrs = bb.instrs @ [from_tup_instr]
           } in
 
           (mir_ctxt, bb, tup_elem_lval)
@@ -1280,21 +1258,25 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       | WhileExpr(_, _, _, _) ->
           failwith "Unimplemented: while-expr yielding non-nil"
 
-      | IndexExpr(t, idx_expr, idxable_expr) ->
-          (* This is an assignment into some dynamic index of an array. The index
-          value itself might be a constant, but it could also be an arbitrary
-          expression. This can violate bounds-checking, unlike the other two
-          types of assignments. *)
-          let (mir_ctxt, bb, idxable_lval) =
+      | IndexExpr(_, idx_expr, idxable_expr) ->
+          (* This is an assignment into some dynamic index of an array. The
+          index value itself might be a constant, but it could also be an
+          arbitrary expression. This can violate bounds-checking, unlike the
+          other two types of assignments. *)
+          let (mir_ctxt, bb, ({t=pointer_t; _} as idxable_lval)) =
             expr_to_mir mir_ctxt bb idxable_expr
           in
           let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_expr in
 
-          let pointed_t = t in
-          let pointer_t = Ptr(t) in
+          (* The indexable value is itself a pointer (else we can't index at
+          all). Then, we'll either yield the element itself, or a pointer to the
+          element if it is an aggregate itself.  *)
+          let deref_t = unwrap_ptr pointer_t in
+          let elem_t = unwrap_indexable deref_t in
+          let pointer_to_elem_t = Ptr(elem_t) in
 
           let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
-          let ptr_to_elem_lval = {t=pointer_t; kind=Tmp; lname=ptrto_varname} in
+          let ptr_to_elem_lval = {t=pointer_to_elem_t; kind=Tmp; lname=ptrto_varname} in
           let ptrto_instr =
             PtrTo(
               ptr_to_elem_lval, [
@@ -1312,20 +1294,20 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           } in
           let mir_ctxt = update_bb mir_ctxt bb in
 
-          (* If the returned value is the base static array element type (ie,
-          we've indexed all the way to the "bottom" of a possibly N-dimensional
-          array), then we actually load that value from the pointer. Otherwise,
-          we simply return the calculated pointer itself, that later indexing
-          might further index into. *)
+          (* If the returned value is a primitive type (ie, we've indexed all
+          the way to the "bottom" of some arbitrarily complex aggregate type),
+          then we actually load that value from the pointer. Otherwise, we
+          simply return the calculated pointer itself, that later indexing might
+          further index into. *)
           let (mir_ctxt, bb, ret_lval) =
-            begin match pointed_t with
+            begin match elem_t with
             | Array(_, _) ->
                 (mir_ctxt, bb, ptr_to_elem_lval)
 
             | _ ->
                 let (mir_ctxt, idx_load_varname) = get_varname mir_ctxt in
                 let idx_load_lval = {
-                  t=pointed_t; kind=Tmp; lname=idx_load_varname
+                  t=elem_t; kind=Tmp; lname=idx_load_varname
                 } in
                 let idx_load_instr = Load(idx_load_lval, ptr_to_elem_lval) in
 
@@ -1759,11 +1741,13 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
           | ALIndex(idx_exp) :: rest ->
               let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_exp in
 
-              let elem_t = unwrap_ptr idxable_t in
+              let deref_t = unwrap_ptr idxable_t in
+              let elem_t = unwrap_indexable deref_t in
+              let pointer_to_elem_t = Ptr(elem_t) in
 
               let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
               let ptr_to_next_elem_lval =
-                {t=Ptr(elem_t); kind=Tmp; lname=ptrto_varname}
+                {t=pointer_to_elem_t; kind=Tmp; lname=ptrto_varname}
               in
               let ptrto_instr =
                 PtrTo(
@@ -1784,12 +1768,13 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
           | ALStaticIndex(i) :: rest ->
               (* FIXME: Really, this should be "ALTupleIndex", and this
               unwrapping function should be named accordingly. *)
-              let aggregate_t = unwrap_ptr idxable_t in
-              let elem_t = unwrap_aggregate_indexable aggregate_t i in
+              let deref_t = unwrap_ptr idxable_t in
+              let elem_t = unwrap_aggregate_indexable deref_t i in
+              let pointer_to_elem_t = Ptr(elem_t) in
 
               let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
               let ptr_to_next_elem_lval =
-                {t=Ptr(elem_t); kind=Tmp; lname=ptrto_varname}
+                {t=pointer_to_elem_t; kind=Tmp; lname=ptrto_varname}
               in
               let ptrto_instr =
                 PtrTo(
@@ -1830,25 +1815,50 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
               (mir_ctxt, bb, var_alloca_lval)
 
           | _ ->
-              (* We need to "unwrap" the ptr to the alloca, to get the ptr to
-              the indexable lval ptr itself. *)
+              (* If the variable is a static array, then the variable alloca
+              itself contains a pointer to the beginning of that array. ie, the
+              variable containing a static array is a ptr to a ptr to the
+              beginning of that array; two layers of indirection. Else, the
+              variable is a single layer of indirection to the element, even
+              if the element is a (non-array) aggregate. *)
+              match var_alloca_t with
+              | Ptr(Ptr(Array(_))) ->
+                  (* We need to "unwrap" the ptr to the named variable alloca,
+                  to get the indexable ptr-to-array lval itself. *)
 
-              let idxable_t = unwrap_ptr var_alloca_t in
+                  let idxable_t = unwrap_ptr var_alloca_t in
 
-              let (mir_ctxt, load_varname) = get_varname mir_ctxt in
-              let idxable_lval = {t=idxable_t; kind=Tmp; lname=load_varname} in
-              let load_instr = Load(idxable_lval, var_alloca_lval) in
+                  let (mir_ctxt, load_varname) = get_varname mir_ctxt in
+                  let idxable_lval = {t=idxable_t; kind=Tmp; lname=load_varname} in
+                  let load_instr = Load(idxable_lval, var_alloca_lval) in
 
-              let bb = {bb with instrs = bb.instrs @ [load_instr]} in
-              let mir_ctxt = update_bb mir_ctxt bb in
+                  let bb = {bb with instrs = bb.instrs @ [load_instr]} in
+                  let mir_ctxt = update_bb mir_ctxt bb in
 
-              (* Generate a series of zero-or-more indexing operations, starting
-              with the named LHS lvalue. *)
-              let (mir_ctxt, bb, to_store_lval) =
-                gen_indexing_mir mir_ctxt bb idxable_lval lval_idxs
-              in
+                  (* Generate a series of zero-or-more indexing operations, starting
+                  with the named LHS lvalue. *)
+                  let (mir_ctxt, bb, to_store_lval) =
+                    gen_indexing_mir mir_ctxt bb idxable_lval lval_idxs
+                  in
 
-              (mir_ctxt, bb, to_store_lval)
+                  (mir_ctxt, bb, to_store_lval)
+
+              | Ptr(_) ->
+                  (* We do not unwrap the pointer prior to indexing, because
+                  this pointer points directly to the (aggregate of) elements
+                  we need to index. ie, this could be a ptr to a tuple. *)
+
+                  let (mir_ctxt, bb, to_store_lval) =
+                    gen_indexing_mir mir_ctxt bb var_alloca_lval lval_idxs
+                  in
+
+                  (mir_ctxt, bb, to_store_lval)
+
+              | _ ->
+                  failwith (
+                    Printf.sprintf "Cannot index into unexpected type: [%s]"
+                      (fmt_type var_alloca_t)
+                  )
           end
         in
 
