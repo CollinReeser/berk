@@ -208,11 +208,33 @@ let () =
         map_ii = map_ii + 1;
       }
 
-      let mut tuple_array: [10](u32, string);
+      let mut arr_of_tup: [7](i32, bool);
+      printf("val: [%d], bool: [%d]\n", arr_of_tup[0].0, arr_of_tup[0].1);
+      arr_of_tup[0].0 = 37;
+      arr_of_tup[0].1 = true;
+      printf("val: [%d], bool: [%d]\n", arr_of_tup[0].0, arr_of_tup[0].1);
+      arr_of_tup[0] = (41, false);
+      printf("val: [%d], bool: [%d]\n", arr_of_tup[0].0, arr_of_tup[0].1);
 
-      tuple_array[3] = (32, "x64x");
+      let mut arr_2d: [14][21](i32, bool, string);
+      printf(
+        "2d.left: [%d], 2d.middle: [%d], 2d.right: [%s]\n",
+        arr_2d[1][2].0, arr_2d[1][2].1, arr_2d[1][2].2
+      );
+      arr_2d[1][2].0 = 6;
+      arr_2d[1][2].1 = true;
+      arr_2d[1][2].2 = "Fantastic!";
+      printf(
+        "2d.left: [%d], 2d.middle: [%d], 2d.right: [%s]\n",
+        arr_2d[1][2].0, arr_2d[1][2].1, arr_2d[1][2].2
+      );
+      arr_2d[1][2] = (12, false, "Awful!");
+      printf(
+        "2d.left: [%d], 2d.middle: [%d], 2d.right: [%s]\n",
+        arr_2d[1][2].0, arr_2d[1][2].1, arr_2d[1][2].2
+      );
 
-      printf("Tuple array? [%d] [%s]\n", tuple_array[3].0, tuple_array[3].1);
+      //let weird_array: (u32, [10]bool, [20][30](u32, [40]bool));
 
       return 0;
     }
