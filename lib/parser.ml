@@ -26,6 +26,10 @@ let rec parse_tokens ?(trace=false) tokens : module_decl list =
         let (rest, mod_decl) = parse_extern ~ind:" " rest in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
+    | KWVariant(_) :: rest ->
+        let (rest, mod_decl) = parse_variant ~ind:" " rest in
+        _parse_tokens rest (mod_decl :: mod_decls_so_far)
+
     | KWFn(_) :: rest ->
         let (rest, func_def) = parse_func ~ind:" " rest in
         let mod_decl = FuncDef(func_def) in
@@ -35,7 +39,8 @@ let rec parse_tokens ?(trace=false) tokens : module_decl list =
         let fmted = fmt_token tok in
         failwith (
           Printf.sprintf
-            "Unexpected token [%s], expected among `extern`|`fn`" fmted
+            "Unexpected token [%s], expected among `fn`|`variant`|`extern`"
+            fmted
         )
     end
   in
@@ -63,9 +68,117 @@ and parse_extern ?(ind="") tokens : (token list * module_decl) =
       let fmted = fmt_token tok in
       failwith (
         Printf.sprintf
-          "Unexpected token [%s], expected `fn`." fmted
+          "Unexpected token [%s] parsing extern, expected `fn`." fmted
       )
   | [] -> failwith "Unexpected EOF while parsing `extern` declaration."
+  end
+
+
+and parse_variant ?(ind="") tokens : (token list * module_decl) =
+  let _ = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  let _parse_variant_typ_vars tokens =
+    let rec __parse_variant_type_vars tokens t_vars_so_far_rev =
+      begin match tokens with
+      | Backtick(_) :: LowIdent(_, typ_var_name) :: Comma(_) :: rest ->
+          __parse_variant_type_vars rest (typ_var_name :: t_vars_so_far_rev)
+
+      | Backtick(_) :: LowIdent(_, typ_var_name) :: rest ->
+          (rest, (typ_var_name :: t_vars_so_far_rev))
+
+      | _ ->
+          (tokens, t_vars_so_far_rev)
+      end
+    in
+
+    let (rest, t_vars_rev) = __parse_variant_type_vars tokens [] in
+    let t_vars = List.rev t_vars_rev in
+    (rest, List.rev t_vars)
+  in
+
+  let _parse_variant_constructors tokens =
+    let rec __parse_variant_constructors tokens v_ctors_so_far_rev =
+      begin match tokens with
+      | Bar(_) :: CapIdent(_, v_ctor_name) :: LParen(_) :: rest ->
+          v_ctor_name |> ignore;
+          rest |> ignore;
+          failwith "Variant constructor with members not implemented."
+
+      | Bar(_) :: CapIdent(_, v_ctor_name) :: rest ->
+          let v_ctors_so_far_rev' = (v_ctor_name, Nil) :: v_ctors_so_far_rev in
+          __parse_variant_constructors rest v_ctors_so_far_rev'
+
+      | _ ->
+          (tokens, v_ctors_so_far_rev)
+      end
+    in
+
+    let (rest, v_ctors_rev) = __parse_variant_constructors tokens [] in
+    let v_ctors = List.rev v_ctors_rev in
+    (rest, v_ctors)
+  in
+
+  let _parse_variant_end tokens v_name v_ctors v_typ_vars =
+    begin match tokens with
+    | RBrace(_) :: rest ->
+        (
+          rest,
+          VariantDecl({v_name=v_name; v_ctors=v_ctors; v_typ_vars=v_typ_vars})
+        )
+
+    | tok :: _ ->
+        let fmted = fmt_token tok in
+        failwith (
+          Printf.sprintf
+            "Unexpected token [%s] parsing variant decl, expected `}`." fmted
+        )
+
+    | [] -> failwith "Unexpected EOF while parsing `variant` declaration."
+    end
+  in
+
+  begin match tokens with
+  | CapIdent(_, v_name) :: Lesser(_) :: rest ->
+      let (rest, v_typ_vars) = _parse_variant_typ_vars rest in
+
+      let rest =
+        begin match rest with
+        | Greater(_) :: LBrace(_) :: rest -> rest
+
+        | tok :: _ ->
+          let fmted = fmt_token tok in
+          failwith (
+            Printf.sprintf
+              "Unexpected token [%s] parsing variant decl, expected `>`." fmted
+          )
+
+        | [] -> failwith "Unexpected EOF while parsing `variant` declaration."
+        end
+      in
+
+      let (rest, v_ctors) = _parse_variant_constructors rest in
+      _parse_variant_end rest v_name v_ctors v_typ_vars
+
+  | CapIdent(_, v_name) :: LBrace(_) :: rest ->
+      let (rest, v_ctors) = _parse_variant_constructors rest in
+      _parse_variant_end rest v_name v_ctors []
+
+
+  | tok :: _ ->
+      let fmted = fmt_token tok in
+      failwith (
+        Printf.sprintf
+          "Unexpected token [%s] parsing variant, expected identifier." fmted
+      )
+  | [] -> failwith "Unexpected EOF while parsing `variant` declaration."
   end
 
 

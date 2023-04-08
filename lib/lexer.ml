@@ -5,6 +5,7 @@ type position = {
 
 type token =
 | KWExtern of position
+| KWVariant of position
 | KWFn of position
 | KWMut of position
 | KWLet of position
@@ -30,6 +31,7 @@ type token =
 | RBrace of position
 | LBracket of position
 | RBracket of position
+| Backtick of position
 | Dot of position
 | Comma of position
 | ColonEqual of position
@@ -44,6 +46,7 @@ type token =
 | Semicolon of position
 | TriEllipses of position
 | BiEllipses of position
+| Bar of position
 | Plus of position
 | Minus of position
 | Star of position
@@ -98,6 +101,7 @@ let fmt_pos (pos : position) =
 let fmt_token tok =
   match tok with
   | KWExtern(p)    -> Printf.sprintf "extern (kw)    : %s"   (fmt_pos p)
+  | KWVariant(p)   -> Printf.sprintf "variant(kw)    : %s"   (fmt_pos p)
   | KWFn(p)        -> Printf.sprintf "fn     (kw)    : %s"   (fmt_pos p)
   | KWMut(p)       -> Printf.sprintf "mut    (kw)    : %s"   (fmt_pos p)
   | KWLet(p)       -> Printf.sprintf "let    (kw)    : %s"   (fmt_pos p)
@@ -123,6 +127,7 @@ let fmt_token tok =
   | RBrace(p)      -> Printf.sprintf "}   (syn)      : %s"   (fmt_pos p)
   | LBracket(p)    -> Printf.sprintf "[   (syn)      : %s"   (fmt_pos p)
   | RBracket(p)    -> Printf.sprintf "]   (syn)      : %s"   (fmt_pos p)
+  | Backtick(p)    -> Printf.sprintf "`   (syn)      : %s"   (fmt_pos p)
   | Dot(p)         -> Printf.sprintf ".   (syn)      : %s"   (fmt_pos p)
   | Comma(p)       -> Printf.sprintf ",   (syn)      : %s"   (fmt_pos p)
   | ColonEqual(p)  -> Printf.sprintf ":=  (syn)      : %s"   (fmt_pos p)
@@ -137,6 +142,7 @@ let fmt_token tok =
   | Semicolon(p)   -> Printf.sprintf ";   (syn)      : %s"   (fmt_pos p)
   | TriEllipses(p) -> Printf.sprintf "... (syn)      : %s"   (fmt_pos p)
   | BiEllipses(p)  -> Printf.sprintf "..  (syn)      : %s"   (fmt_pos p)
+  | Bar(p)         -> Printf.sprintf "|   (syn)      : %s"   (fmt_pos p)
   | Plus(p)        -> Printf.sprintf "+   (syn)      : %s"   (fmt_pos p)
   | Minus(p)       -> Printf.sprintf "-   (syn)      : %s"   (fmt_pos p)
   | Star(p)        -> Printf.sprintf "*   (syn)      : %s"   (fmt_pos p)
@@ -206,6 +212,9 @@ let tokenize buf =
 
     | "extern" ->
         let tok = KWExtern(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "variant" ->
+        let tok = KWVariant(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "fn" ->
         let tok = KWFn(get_pos buf) in
@@ -285,6 +294,9 @@ let tokenize buf =
     | "]" ->
         let tok = RBracket(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "`" ->
+        let tok = Backtick(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "." ->
         let tok = Dot(get_pos buf) in
         _tokenize buf (tok :: tokens)
@@ -326,6 +338,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | ".." ->
         let tok = BiEllipses(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "|" ->
+        let tok = Bar(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "+" ->
         let tok = Plus(get_pos buf) in

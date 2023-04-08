@@ -11,6 +11,17 @@ let () =
   let source_text = {|
     extern fn printf(fmt: string, ...): i32
 
+    variant Empty {}
+
+    variant Unary {
+    | One
+    }
+
+    variant Binary {
+    | True
+    | False
+    }
+
     fn fib_t(n: u64, s_last: u64, last: u64): u64 {
       if n == 1 {
         return last;
