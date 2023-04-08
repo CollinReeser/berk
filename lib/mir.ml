@@ -997,14 +997,15 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, if_res_lval)
 
-      | StaticIndexExpr(t, idx, exp) ->
-          let (mir_ctxt, bb, ({t=tup_ptr_t; _} as tup_ptr_lval)) =
+      | StaticIndexExpr(_, idx, exp) ->
+          let (mir_ctxt, bb, ({t=tup_t; _} as tup_lval)) =
             _expr_to_mir mir_ctxt bb exp
           in
 
+          let elem_t = unwrap_aggregate_indexable tup_t idx in
 
           let (mir_ctxt, tup_elem_varname) = get_varname mir_ctxt in
-          let tup_elem_lval = {t=t; kind=Tmp; lname=tup_elem_varname} in
+          let tup_elem_lval = {t=elem_t; kind=Tmp; lname=tup_elem_varname} in
           let from_tup_instr = FromAggregate(tup_elem_lval, idx, tup_lval) in
 
           let bb = {
