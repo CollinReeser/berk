@@ -218,7 +218,9 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
   | ValBool(value) -> Printf.sprintf "%s%B%s" init_ind value typ_s
 
   | ValStr(str) ->
-      Printf.sprintf "%s\"%s\"%s" init_ind (String.escaped str) typ_s
+      (* The string we have here is the raw parsed string, so `\n` is still
+      "\n". *)
+      Printf.sprintf "%s\"%s\"%s" init_ind str typ_s
 
   | ValInt(_, value) ->
       Printf.sprintf "%s%d%s" init_ind value typ_s

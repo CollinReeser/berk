@@ -120,7 +120,7 @@ let fmt_token tok =
   | KWBool(p)      -> Printf.sprintf "bool   (kw)    : %s"   (fmt_pos p)
   | KWTrue(p)      -> Printf.sprintf "true   (kw)    : %s"   (fmt_pos p)
   | KWFalse(p)     -> Printf.sprintf "false  (kw)    : %s"   (fmt_pos p)
-  | KWString(p)    -> Printf.sprintf "u64    (kw)    : %s"   (fmt_pos p)
+  | KWString(p)    -> Printf.sprintf "string (kw)    : %s"   (fmt_pos p)
   | LParen(p)      -> Printf.sprintf "(   (syn)      : %s"   (fmt_pos p)
   | RParen(p)      -> Printf.sprintf ")   (syn)      : %s"   (fmt_pos p)
   | LBrace(p)      -> Printf.sprintf "{   (syn)      : %s"   (fmt_pos p)
@@ -377,8 +377,7 @@ let tokenize buf =
     | str_reg ->
         let lexeme = Sedlexing.Latin1.lexeme buf in
         let inside_quotes = String.sub lexeme 1 ((String.length lexeme) - 2) in
-        let unescaped = Scanf.unescaped inside_quotes in
-        let tok = String(get_pos buf, unescaped) in
+        let tok = String(get_pos buf, inside_quotes) in
         _tokenize buf (tok :: tokens)
 
     | Plus xml_blank ->

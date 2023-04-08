@@ -81,7 +81,8 @@ let codegen_constant
   | ValBool(true)  -> Llvm.const_int bool_t 1
 
   | ValStr(str) ->
-      let llvm_str = Llvm.const_stringz llvm_ctxt str in
+      let unescaped_str = Scanf.unescaped str in
+      let llvm_str = Llvm.const_stringz llvm_ctxt unescaped_str in
       let global_str =
         Llvm.define_global
           "str" llvm_str func_ctxt.mod_ctxt.llvm_mod
