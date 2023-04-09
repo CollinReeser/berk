@@ -108,12 +108,37 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
     let rec __parse_variant_constructors tokens v_ctors_so_far_rev =
       begin match tokens with
       | Bar(_) :: CapIdent(_, v_ctor_name) :: LParen(_) :: rest ->
-          v_ctor_name |> ignore;
-          rest |> ignore;
-          failwith "Variant constructor with members not implemented."
+          let (rest, first_t) = parse_type rest in
+
+          let rec _parse_variant_ctor_types tokens collected_ts_rev =
+            begin match tokens with
+            | Comma(_) :: rest ->
+                let (rest, next_t) = parse_type rest in
+                _parse_variant_ctor_types rest (next_t :: collected_ts_rev)
+
+            | _ ->
+                (tokens, collected_ts_rev)
+            end
+          in
+
+          let (rest, collected_ts_rev) = _parse_variant_ctor_types rest [] in
+          let collected_ts = List.rev collected_ts_rev in
+
+          let all_ts = first_t :: collected_ts in
+
+          begin match rest with
+          | RParen(_) :: rest ->
+              let v_ctor = (v_ctor_name, Tuple(all_ts)) in
+              let v_ctors_so_far_rev' = v_ctor :: v_ctors_so_far_rev in
+              __parse_variant_constructors rest v_ctors_so_far_rev'
+
+          | _ ->
+              failwith "Could not find matching `)` in variant ctor decl"
+          end
 
       | Bar(_) :: CapIdent(_, v_ctor_name) :: rest ->
-          let v_ctors_so_far_rev' = (v_ctor_name, Nil) :: v_ctors_so_far_rev in
+          let v_ctor = (v_ctor_name, Nil) in
+          let v_ctors_so_far_rev' = v_ctor :: v_ctors_so_far_rev in
           __parse_variant_constructors rest v_ctors_so_far_rev'
 
       | _ ->
@@ -1003,6 +1028,8 @@ and parse_value ?(ind="") tokens : (token list * expr) =
     with Backtrack ->
     try parse_func_call ~ind:ind_next tokens
     with Backtrack ->
+    try parse_variant_ctor ~ind:ind_next tokens
+    with Backtrack ->
     (* try *)
     parse_expr_atom ~ind:ind_next tokens
     (* with Backtrack *)
@@ -1348,6 +1375,55 @@ and parse_while_expr ?(ind="") tokens : (token list * expr) =
 
   | _ ->
       raise Backtrack
+  end
+
+
+and parse_variant_ctor ?(ind="") tokens : (token list * expr) =
+  let _ = begin
+    if ind <> "" then
+      begin
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind __FUNCTION__ (fmt_next_token tokens) ;
+        (ind ^ " ")
+      end
+    else ind
+  end in
+
+  begin match tokens with
+  | CapIdent(_, name) :: LParen(_) :: rest ->
+      let (rest, first_elem) = parse_expr rest in
+
+      let rec _parse_variant_ctor_elems tokens collected_elems_rev =
+        begin match tokens with
+        | Comma(_) :: rest ->
+            let (rest, next_elem) = parse_expr rest in
+            _parse_variant_ctor_elems rest (next_elem :: collected_elems_rev)
+
+        | _ ->
+            (tokens, collected_elems_rev)
+        end
+      in
+
+      let (rest, collected_elems_rev) = _parse_variant_ctor_elems rest [] in
+      let collected_elems = List.rev collected_elems_rev in
+
+      let all_elems = first_elem :: collected_elems in
+
+      begin match rest with
+      | RParen(_) :: rest ->
+          (
+            rest,
+            VariantCtorExpr(Undecided, name, TupleExpr(Undecided, all_elems))
+          )
+
+      | _ ->
+          failwith "Could not find matching `)` in variant ctor expr"
+      end
+
+  | CapIdent(_, name) :: rest ->
+      (rest, VariantCtorExpr(Undecided, name, ValNil))
+
+  | _ -> raise Backtrack
   end
 
 
