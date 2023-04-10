@@ -17,8 +17,18 @@ let () =
     | One
     }
 
+    variant BinaryNoFields {
+    | Left
+    | Right
+    }
+
+    variant BinarySameFields {
+    | North(i8)
+    | South(i8)
+    }
+
     variant Binary {
-    | True(i32)
+    | True(bool)
     | False
     }
 
@@ -246,6 +256,28 @@ let () =
       );
 
       //let weird_array: (u32, [10]bool, [20][30](u32, [40]bool));
+
+      let variant_val = True(true);
+
+      let variant_match = match variant_val {
+      | True(x) -> (x, false, x)
+      | False -> (false, true, false)
+      };
+
+      printf(
+        "variant_match: [%d] [%d] [%d]\n",
+        variant_match.0, variant_match.1, variant_match.2
+      );
+
+      match variant_val {
+      | _ -> {
+          printf("Non-expr match statement!\n");
+        }
+      }
+
+      let variant_unary = One;
+      let variant_binary_no_fields = Left;
+      let variant_binary_no_fields_tuple = (Left, Right);
 
       return 0;
     }

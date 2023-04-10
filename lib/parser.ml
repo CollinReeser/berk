@@ -886,6 +886,8 @@ and parse_value ?(ind="") tokens : (token list * expr) =
     with Backtrack ->
     try parse_while_expr ~ind:ind_next tokens
     with Backtrack ->
+    try parse_match_expr ~ind:ind_next tokens
+    with Backtrack ->
     try parse_expr_block ~ind:ind_next tokens
     with Backtrack ->
     try parse_func_call ~ind:ind_next tokens
@@ -1165,6 +1167,155 @@ and parse_while_expr ?(ind="") tokens : (token list * expr) =
 
   | _ ->
       raise Backtrack
+  end
+
+
+and parse_match_expr ?(ind="") tokens : (token list * expr) =
+  let _ = print_trace ind __FUNCTION__ tokens in
+
+  (* Parse eg:
+    as <ident>
+  *)
+  let rec _parse_pattern tokens =
+    let _parse_pattern_as tokens pattern =
+      begin match tokens with
+      | KWAs(_) :: LowIdent(_, as_name) :: rest ->
+          (rest, PatternAs(Undecided, pattern, as_name))
+
+      | KWAs(_) :: _ ->
+          failwith "`as` match pattern requires bind name"
+
+      | _ ->
+          (tokens, pattern)
+      end
+    in
+
+    (* Parse eg:
+      , <pattern>, <pattern>, <pattern>)
+    *)
+    let rec _parse_comma_pattern_multi tokens more_patterns_rev =
+      begin match tokens with
+      | Comma(_) :: rest ->
+          let (rest, next_pattern) = _parse_pattern rest in
+          let more_patterns_rev' = next_pattern :: more_patterns_rev in
+          _parse_comma_pattern_multi rest more_patterns_rev'
+
+      | RParen(_) :: rest ->
+          (rest, more_patterns_rev)
+
+      | _ ->
+          failwith "Failed to parse comma-delimited patterns in match expr"
+      end
+    in
+
+    begin match tokens with
+    (* Variable bind pattern. *)
+    | LowIdent(_, bind_name) :: rest ->
+        (rest, VarBind(Undecided, bind_name))
+
+    (* Wildcard pattern. *)
+    | Underscore(_) :: rest ->
+        let pattern = Wild(Undecided) in
+        _parse_pattern_as rest pattern
+
+    | KWTrue(_) :: rest ->
+        let pattern = PBool(true) in
+        _parse_pattern_as rest pattern
+
+    | KWFalse(_) :: rest ->
+        let pattern = PBool(false) in
+        _parse_pattern_as rest pattern
+
+    (* Tuple pattern. *)
+    | LParen(_) :: rest ->
+        let (rest, first_pattern) = _parse_pattern rest in
+
+        let (rest, more_patterns_rev) = _parse_comma_pattern_multi rest [] in
+        let more_patterns = List.rev more_patterns_rev in
+        let tuple_sub_patterns = first_pattern :: more_patterns in
+        let pattern = PTuple(Undecided, tuple_sub_patterns) in
+        _parse_pattern_as rest pattern
+
+    (* Variant deconstruction pattern with fields. *)
+    | CapIdent(_, v_name) :: LParen(_) :: rest ->
+        let (rest, first_pattern) = _parse_pattern rest in
+
+        let (rest, more_patterns_rev) = _parse_comma_pattern_multi rest [] in
+        let more_patterns = List.rev more_patterns_rev in
+        let ctor_sub_patterns = first_pattern :: more_patterns in
+        let ctor_tuple_pattern_wrapper = PTuple(Undecided, ctor_sub_patterns) in
+        let pattern = Ctor(Undecided, v_name, ctor_tuple_pattern_wrapper) in
+        _parse_pattern_as rest pattern
+
+    (* Variant deconstruction with no fields. *)
+    | CapIdent(_, v_name) :: rest ->
+        let pattern = Ctor(Undecided, v_name, PNil) in
+        _parse_pattern_as rest pattern
+
+    | _ ->
+        failwith "Failed to parse match expr pattern."
+    end
+  in
+
+  (* Parse eg:
+    | (Some(x, false, _), false) -> 5
+    | (x, true as y) -> 6
+    | (_, _) -> 5
+  *)
+  let _parse_pattern_expr_pairs tokens =
+    let rec __parse_pattern_expr_pairs tokens pattern_expr_pairs_rev =
+      begin match tokens with
+      | Bar(_) :: rest ->
+          let (rest, pattern) = _parse_pattern rest in
+
+          begin match rest with
+          | Arrow(_) :: rest ->
+              let (rest, pattern_matched_expr) = parse_expr rest in
+              let pattern_expr_pairs_rev' =
+                (pattern, pattern_matched_expr) :: pattern_expr_pairs_rev
+              in
+              __parse_pattern_expr_pairs rest pattern_expr_pairs_rev'
+
+          | _ ->
+              failwith "Could not find `->` after pattern in match expr"
+          end
+
+      | _ ->
+          (tokens, pattern_expr_pairs_rev)
+      end
+    in
+
+    let (rest, pattern_expr_pairs_rev) = __parse_pattern_expr_pairs tokens [] in
+    let pattern_expr_pairs = List.rev pattern_expr_pairs_rev in
+    (rest, pattern_expr_pairs)
+  in
+
+  (* Parse eg:
+    match my_option {
+    <pattern_list>
+    }
+  *)
+  begin match tokens with
+  | KWMatch(_) :: rest ->
+      let (rest, match_expr) = parse_expr rest in
+
+      begin match rest with
+      | LBrace(_) :: rest ->
+          let (rest, pattern_expr_pairs) = _parse_pattern_expr_pairs rest in
+
+          begin match rest with
+          | RBrace(_) :: rest ->
+              (rest, MatchExpr(Undecided, match_expr, pattern_expr_pairs))
+
+          | _ ->
+              failwith "Could not find matching `}` in match expr"
+          end
+
+      | _ ->
+          failwith "Could not find opening `{` in match expr"
+      end
+
+  | _ -> raise Backtrack
   end
 
 

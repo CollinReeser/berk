@@ -13,6 +13,8 @@ type token =
 | KWIf of position
 | KWElse of position
 | KWWhile of position
+| KWMatch of position
+| KWAs of position
 | KWi8 of position
 | KWi16 of position
 | KWi32 of position
@@ -31,6 +33,7 @@ type token =
 | RBrace of position
 | LBracket of position
 | RBracket of position
+| Arrow of position
 | Backtick of position
 | Dot of position
 | Comma of position
@@ -52,6 +55,7 @@ type token =
 | Star of position
 | Slash of position
 | Percent of position
+| Underscore of position
 | LowIdent of position * string
 | CapIdent of position * string
 | Integer of position * int
@@ -109,6 +113,8 @@ let fmt_token tok =
   | KWIf(p)        -> Printf.sprintf "if     (kw)    : %s"   (fmt_pos p)
   | KWElse(p)      -> Printf.sprintf "else   (kw)    : %s"   (fmt_pos p)
   | KWWhile(p)     -> Printf.sprintf "while  (kw)    : %s"   (fmt_pos p)
+  | KWMatch(p)     -> Printf.sprintf "match  (kw)    : %s"   (fmt_pos p)
+  | KWAs(p)        -> Printf.sprintf "as  (kw)    : %s"   (fmt_pos p)
   | KWi8(p)        -> Printf.sprintf "i8     (kw)    : %s"   (fmt_pos p)
   | KWi16(p)       -> Printf.sprintf "i16    (kw)    : %s"   (fmt_pos p)
   | KWi32(p)       -> Printf.sprintf "i32    (kw)    : %s"   (fmt_pos p)
@@ -127,6 +133,7 @@ let fmt_token tok =
   | RBrace(p)      -> Printf.sprintf "}   (syn)      : %s"   (fmt_pos p)
   | LBracket(p)    -> Printf.sprintf "[   (syn)      : %s"   (fmt_pos p)
   | RBracket(p)    -> Printf.sprintf "]   (syn)      : %s"   (fmt_pos p)
+  | Arrow(p)       -> Printf.sprintf "->  (syn)      : %s"   (fmt_pos p)
   | Backtick(p)    -> Printf.sprintf "`   (syn)      : %s"   (fmt_pos p)
   | Dot(p)         -> Printf.sprintf ".   (syn)      : %s"   (fmt_pos p)
   | Comma(p)       -> Printf.sprintf ",   (syn)      : %s"   (fmt_pos p)
@@ -148,6 +155,7 @@ let fmt_token tok =
   | Star(p)        -> Printf.sprintf "*   (syn)      : %s"   (fmt_pos p)
   | Slash(p)       -> Printf.sprintf "/   (syn)      : %s"   (fmt_pos p)
   | Percent(p)     -> Printf.sprintf "%%  (syn)      : %s"   (fmt_pos p)
+  | Underscore(p)  -> Printf.sprintf "_  (syn)      : %s"   (fmt_pos p)
   | LowIdent(p, s) -> Printf.sprintf "%s (low-ident) : %s" s (fmt_pos p)
   | CapIdent(p, s) -> Printf.sprintf "%s (cap-ident) : %s" s (fmt_pos p)
   | Integer(p, i)  -> Printf.sprintf "%d (integer)   : %s" i (fmt_pos p)
@@ -237,6 +245,12 @@ let tokenize buf =
     | "while" ->
         let tok = KWWhile(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "match" ->
+        let tok = KWMatch(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "as" ->
+        let tok = KWAs(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "i8" ->
         let tok = KWi8(get_pos buf) in
         _tokenize buf (tok :: tokens)
@@ -293,6 +307,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "]" ->
         let tok = RBracket(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "->" ->
+        let tok = Arrow(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "`" ->
         let tok = Backtick(get_pos buf) in
@@ -357,13 +374,16 @@ let tokenize buf =
     | "%" ->
         let tok = Percent(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "_" ->
+        let tok = Underscore(get_pos buf) in
+        _tokenize buf (tok :: tokens)
 
     | 'A' .. 'Z', Star(id_continue) ->
         let lexeme = Sedlexing.Latin1.lexeme buf in
         let tok = CapIdent(get_pos buf, lexeme) in
         _tokenize buf (tok :: tokens)
 
-    | ('_' | 'a' .. 'z'), Star(id_continue) ->
+    | ('a' .. 'z'), Star(id_continue) ->
         let lexeme = Sedlexing.Latin1.lexeme buf in
         let tok = LowIdent(get_pos buf, lexeme) in
         _tokenize buf (tok :: tokens)
