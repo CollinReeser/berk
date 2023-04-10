@@ -393,27 +393,6 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
 
       (mir_ctxt, bb, alloca_lval, [alloca_instr; store_instr])
 
-  | Variant(_, _) as variant_t ->
-      (* Allocate stack space for the variant *)
-      let (mir_ctxt, variant_alloca_varname) = get_varname mir_ctxt in
-      let alloca_lval =
-        {t=Ptr(variant_t); kind=Tmp; lname=variant_alloca_varname}
-      in
-      let alloca_instr = Alloca(alloca_lval, variant_t) in
-
-      (* Bitcast the alloca into a form that agrees with the constructed
-      aggregate. *)
-      let (mir_ctxt, bitcast_ptr_varname) = get_varname mir_ctxt in
-      let bitcast_ptr_lval =
-        {t=Ptr(actual_t); kind=Tmp; lname=bitcast_ptr_varname}
-      in
-      let bitcast_instr = UnOp(bitcast_ptr_lval, Bitwise, alloca_lval) in
-
-      (* Store the variant aggregate into the alloca. *)
-      let store_instr = Store(bitcast_ptr_lval, lval) in
-
-      (mir_ctxt, bb, alloca_lval, [alloca_instr; bitcast_instr; store_instr])
-
   | _ ->
       (* Allocate stack space for the value *)
       let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
@@ -1029,7 +1008,9 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (* This constructor may have associated data. Assign it now. *)
           let ctor_t = expr_type ctor_arg in
-          let (mir_ctxt, bb, ctor_lval, construct_instr) = begin
+          let (
+            mir_ctxt, bb, ({t=variant_ctor_t; _} as ctor_lval), construct_instr
+          ) = begin
             match ctor_t with
             | Nil ->
                 let variant_ctor_t = Tuple([U8]) in
@@ -1060,9 +1041,49 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                 (mir_ctxt, bb, ctor_lval, construct_instr)
           end in
 
-          let bb = {bb with instrs = bb.instrs @ [construct_instr]} in
+          (* The actual type of the variant aggregate itself needs to erase the
+          type of the specific constructor we happen to know we're currently
+          looking at. Erase the contructor member type now and replace with a
+          generic byte array. This dance will be optimized away by the code
+          generator. *)
 
-          (mir_ctxt, bb, ctor_lval)
+          let (mir_ctxt, tmp_alloca_varname) = get_varname mir_ctxt in
+          let tmp_alloca_lval =
+            {t=Ptr(variant_ctor_t); kind=Tmp; lname = tmp_alloca_varname}
+          in
+          let tmp_alloca_instr = Alloca(tmp_alloca_lval, variant_ctor_t) in
+
+          (* Store the known-constructor ctor aggregate into an alloca, that
+          we can bitcast to the "generic" variant type and then load. *)
+          let tmp_store_instr = Store(tmp_alloca_lval, ctor_lval) in
+
+          let (mir_ctxt, tmp_alloca_bitcast_varname) = get_varname mir_ctxt in
+          let tmp_alloca_bitcast_lval =
+            {t=Ptr(variant_t); kind=Tmp; lname = tmp_alloca_bitcast_varname}
+          in
+          let tmp_alloca_bitcast_instr =
+            UnOp(tmp_alloca_bitcast_lval, Bitwise, tmp_alloca_lval)
+          in
+
+          let (mir_ctxt, tmp_load_variant_varname) = get_varname mir_ctxt in
+          let tmp_load_variant_lval =
+            {t=variant_t; kind=Tmp; lname = tmp_load_variant_varname}
+          in
+          let tmp_load_variant_instr =
+            Load(tmp_load_variant_lval, tmp_alloca_bitcast_lval)
+          in
+
+          let bb = {
+            bb with instrs = bb.instrs @ [
+              construct_instr;
+              tmp_alloca_instr;
+              tmp_store_instr;
+              tmp_alloca_bitcast_instr;
+              tmp_load_variant_instr;
+            ]
+          } in
+
+          (mir_ctxt, bb, tmp_load_variant_lval)
 
       | MatchExpr(t, matched_exp, patts_to_exps) ->
           let (mir_ctxt, bb, matched_lval) =
