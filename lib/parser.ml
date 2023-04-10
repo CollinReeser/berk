@@ -332,6 +332,9 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   | KWu16(_) :: rest -> (rest, U16)
   | KWu32(_) :: rest -> (rest, U32)
   | KWu64(_) :: rest -> (rest, U64)
+  | KWf32(_) :: rest -> (rest, F32)
+  | KWf64(_) :: rest -> (rest, F64)
+  | KWf128(_) :: rest -> (rest, F128)
   | KWBool(_) :: rest -> (rest, Bool)
   | KWString(_) :: rest -> (rest, String)
 
@@ -1367,6 +1370,7 @@ and parse_expr_atom ?(ind="") tokens : (token list * expr) =
   | LParen(_) :: RParen(_) :: rest -> (rest, ValNil)
   | KWTrue(_) :: rest -> (rest, ValBool(true))
   | KWFalse(_) :: rest -> (rest, ValBool(false))
+  | Float(_, num) :: rest -> (rest, ValF64(num))
   | Integer(_, num) :: rest -> (rest, ValInt(Undecided, num))
   | String(_, str) :: rest -> (rest, ValStr(str))
   | LowIdent(_, name) :: rest -> (rest, ValName(Undecided, name))

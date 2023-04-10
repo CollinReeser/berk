@@ -23,6 +23,9 @@ type token =
 | KWu16 of position
 | KWu32 of position
 | KWu64 of position
+| KWf32 of position
+| KWf64 of position
+| KWf128 of position
 | KWBool of position
 | KWTrue of position
 | KWFalse of position
@@ -58,6 +61,7 @@ type token =
 | Underscore of position
 | LowIdent of position * string
 | CapIdent of position * string
+| Float of position * float
 | Integer of position * int
 | String of position * string
 
@@ -123,6 +127,9 @@ let fmt_token tok =
   | KWu16(p)       -> Printf.sprintf "u16    (kw)    : %s"   (fmt_pos p)
   | KWu32(p)       -> Printf.sprintf "u32    (kw)    : %s"   (fmt_pos p)
   | KWu64(p)       -> Printf.sprintf "u64    (kw)    : %s"   (fmt_pos p)
+  | KWf32(p)       -> Printf.sprintf "f32    (kw)    : %s"   (fmt_pos p)
+  | KWf64(p)       -> Printf.sprintf "f64    (kw)    : %s"   (fmt_pos p)
+  | KWf128(p)      -> Printf.sprintf "f128   (kw)    : %s"   (fmt_pos p)
   | KWBool(p)      -> Printf.sprintf "bool   (kw)    : %s"   (fmt_pos p)
   | KWTrue(p)      -> Printf.sprintf "true   (kw)    : %s"   (fmt_pos p)
   | KWFalse(p)     -> Printf.sprintf "false  (kw)    : %s"   (fmt_pos p)
@@ -155,9 +162,10 @@ let fmt_token tok =
   | Star(p)        -> Printf.sprintf "*   (syn)      : %s"   (fmt_pos p)
   | Slash(p)       -> Printf.sprintf "/   (syn)      : %s"   (fmt_pos p)
   | Percent(p)     -> Printf.sprintf "%%  (syn)      : %s"   (fmt_pos p)
-  | Underscore(p)  -> Printf.sprintf "_  (syn)      : %s"   (fmt_pos p)
+  | Underscore(p)  -> Printf.sprintf "_  (syn)       : %s"   (fmt_pos p)
   | LowIdent(p, s) -> Printf.sprintf "%s (low-ident) : %s" s (fmt_pos p)
   | CapIdent(p, s) -> Printf.sprintf "%s (cap-ident) : %s" s (fmt_pos p)
+  | Float(p, f)    -> Printf.sprintf "%f (float)     : %s" f (fmt_pos p)
   | Integer(p, i)  -> Printf.sprintf "%d (integer)   : %s" i (fmt_pos p)
   | String(p, s)   -> Printf.sprintf "%s (string)    : %s" s (fmt_pos p)
 ;;
@@ -178,21 +186,31 @@ let print_tokens tokens =
 
 let tokenize buf =
   let digit = [%sedlex.regexp? '0' .. '9'] in
-  let number = [%sedlex.regexp? Plus digit] in
+  let num_wo_under = [%sedlex.regexp? Plus(digit)] in
+  let num_w_under =
+    [%sedlex.regexp? num_wo_under, Star(digit | '_'), num_wo_under]
+  in
+  let number = [%sedlex.regexp? Opt('-'), (num_w_under | num_wo_under)] in
 
-  let str_simple_inner =
-    [%sedlex.regexp?
-      Star(Compl('"' | '\\'))
-    ] in
-
-  let str_escape_inner =
-    [%sedlex.regexp?
-      Star('\\', any, Star(str_simple_inner))
-    ] in
+  (* Encode approximately this format:
+    [-] dd.ddd (e|E) [+|-] dd
+    Per: https://v2.ocaml.org/api/Stdlib.html
+  *)
+  let opt_exponent =
+    [%sedlex.regexp? Opt(('e' | 'E'), Opt('+' | '-'), number)]
+  in
+  let float_reg =
+    [%sedlex.regexp? Opt('-'), number, '.', number, opt_exponent]
+  in
 
   (* Encode this regex:
       "[^"\\]*(?:\\.[^"\\]*)*"
   *)
+  let str_simple_inner =
+    [%sedlex.regexp? Star(Compl('"' | '\\'))] in
+  let str_escape_inner =
+    [%sedlex.regexp? Star('\\', any, Star(str_simple_inner))]
+  in
   let str_reg =
     [%sedlex.regexp?
       '"', str_simple_inner, str_escape_inner, '"'
@@ -275,6 +293,15 @@ let tokenize buf =
     | "u64" ->
         let tok = KWu64(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "f32" ->
+        let tok = KWf32(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "f64" ->
+        let tok = KWf64(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "f128" ->
+        let tok = KWf128(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "bool" ->
         let tok = KWBool(get_pos buf) in
         _tokenize buf (tok :: tokens)
@@ -288,7 +315,37 @@ let tokenize buf =
         let tok = KWString(get_pos buf) in
         _tokenize buf (tok :: tokens)
 
-    (* Syntax *)
+    (* Free-form syntax *)
+
+    | 'A' .. 'Z', Star(id_continue) ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let tok = CapIdent(get_pos buf, lexeme) in
+        _tokenize buf (tok :: tokens)
+
+    | ('a' .. 'z'), Star(id_continue) ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let tok = LowIdent(get_pos buf, lexeme) in
+        _tokenize buf (tok :: tokens)
+
+    | float_reg ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let f = float_of_string lexeme in
+        let tok = Float(get_pos buf, f) in
+        _tokenize buf (tok :: tokens)
+
+    | number ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let i = int_of_string lexeme in
+        let tok = Integer(get_pos buf, i) in
+        _tokenize buf (tok :: tokens)
+
+    | str_reg ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let inside_quotes = String.sub lexeme 1 ((String.length lexeme) - 2) in
+        let tok = String(get_pos buf, inside_quotes) in
+        _tokenize buf (tok :: tokens)
+
+    (* Basic syntax *)
 
     | "(" ->
         let tok = LParen(get_pos buf) in
@@ -378,31 +435,11 @@ let tokenize buf =
         let tok = Underscore(get_pos buf) in
         _tokenize buf (tok :: tokens)
 
-    | 'A' .. 'Z', Star(id_continue) ->
-        let lexeme = Sedlexing.Latin1.lexeme buf in
-        let tok = CapIdent(get_pos buf, lexeme) in
-        _tokenize buf (tok :: tokens)
-
-    | ('a' .. 'z'), Star(id_continue) ->
-        let lexeme = Sedlexing.Latin1.lexeme buf in
-        let tok = LowIdent(get_pos buf, lexeme) in
-        _tokenize buf (tok :: tokens)
-
-    | number ->
-        let lexeme = Sedlexing.Latin1.lexeme buf in
-        let i = int_of_string lexeme in
-        let tok = Integer(get_pos buf, i) in
-        _tokenize buf (tok :: tokens)
-
-    | str_reg ->
-        let lexeme = Sedlexing.Latin1.lexeme buf in
-        let inside_quotes = String.sub lexeme 1 ((String.length lexeme) - 2) in
-        let tok = String(get_pos buf, inside_quotes) in
-        _tokenize buf (tok :: tokens)
-
+    (* Consume whitespace. *)
     | Plus xml_blank ->
         _tokenize buf tokens
 
+    (* End of character stream, tokenizing is done. *)
     | eof ->
         tokens
 

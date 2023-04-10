@@ -287,6 +287,14 @@ let () =
 
       printf("expr_block_val == 3? [%d]\n", expr_block_val);
 
+      let f_val1: f64 = 123.456;
+      let f_val2: f64 = 456.789;
+      let f_val3 = f_val1 + f_val2;
+      printf(
+        "f_val1 [%f], f_val2 [%f], f_val3 [%f]\n",
+        f_val1, f_val2, f_val3
+      );
+
       return 0;
     }
   |} in
