@@ -279,6 +279,14 @@ let () =
       let variant_binary_no_fields = Left;
       let variant_binary_no_fields_tuple = (Left, Right);
 
+      let expr_block_val = {
+        let expr_block_val_one = 1;
+        let expr_block_val_two = 2;
+        expr_block_val_one + expr_block_val_two
+      };
+
+      printf("expr_block_val == 3? [%d]\n", expr_block_val);
+
       return 0;
     }
   |} in
