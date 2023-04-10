@@ -7,31 +7,36 @@ open Typing
 exception Backtrack
 
 
-let rec parse_tokens ?(trace=false) tokens : module_decl list =
-  let _ = begin
-    if trace then
+let print_trace ?(start_trace=false) ind func_name tokens : string =
+  begin
+    if ind <> "" || start_trace then
       begin
-        Printf.printf "Parsing: [%s] with [%s]\n"
-          __FUNCTION__ (fmt_next_token tokens) ;
-        ()
+        Printf.printf "%sParsing: [%s] with [%s]\n"
+          ind func_name (fmt_next_token tokens) ;
+        (ind ^ " ")
       end
-    else ()
-  end in
+    else ind
+  end
+;;
+
+
+let rec parse_tokens ?(trace=false) tokens : module_decl list =
+  let ind_next = print_trace ~start_trace:trace "" __FUNCTION__ tokens in
 
   let rec _parse_tokens tokens mod_decls_so_far =
     begin match tokens with
     | [] -> mod_decls_so_far
 
     | KWExtern(_) :: rest ->
-        let (rest, mod_decl) = parse_extern ~ind:" " rest in
+        let (rest, mod_decl) = parse_extern ~ind:ind_next rest in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
     | KWVariant(_) :: rest ->
-        let (rest, mod_decl) = parse_variant ~ind:" " rest in
+        let (rest, mod_decl) = parse_variant ~ind:ind_next rest in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
     | KWFn(_) :: rest ->
-        let (rest, func_def) = parse_func ~ind:" " rest in
+        let (rest, func_def) = parse_func ~ind:ind_next rest in
         let mod_decl = FuncDef(func_def) in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
@@ -49,15 +54,7 @@ let rec parse_tokens ?(trace=false) tokens : module_decl list =
 
 
 and parse_extern ?(ind="") tokens : (token list * module_decl) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | KWFn(_) :: rest ->
@@ -82,15 +79,7 @@ variant <`a, `b> {
 
 *)
 and parse_variant ?(ind="") tokens : (token list * module_decl) =
-  let _ = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let _ = print_trace ind __FUNCTION__ tokens in
 
   (* Parse eg:
     `a, `b, `c
@@ -225,15 +214,7 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
 
 
 and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LowIdent(_, f_name) :: LParen(_) :: rest ->
@@ -269,15 +250,7 @@ and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
 
 
 and parse_func_params ?(ind="") tokens : (token list * f_param list) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let parse_func_param ?(ind="") tokens params_so_far =
     let ind_next = begin
@@ -348,15 +321,7 @@ and parse_func_params ?(ind="") tokens : (token list * f_param list) =
 
 
 and parse_type ?(ind="") tokens : (token list * berk_t) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | KWi8(_)  :: rest -> (rest, I8)
@@ -433,15 +398,7 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
 
 
 and parse_func ?(ind="") tokens : (token list * func_def_t) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let (rest, f_decl) = parse_func_decl ~ind:ind_next tokens in
   let (rest, f_stmts) = parse_stmt_block ~ind:ind_next rest in
@@ -455,15 +412,7 @@ and parse_func ?(ind="") tokens : (token list * func_def_t) =
 
 
 and parse_stmt_block ?(ind="") tokens : (token list * stmt list) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LBrace(_) :: rest ->
@@ -492,15 +441,7 @@ and parse_stmt_block ?(ind="") tokens : (token list * stmt list) =
 
 
 and parse_expr_block ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LBrace(_) :: rest ->
@@ -528,15 +469,7 @@ and parse_expr_block ?(ind="") tokens : (token list * expr) =
 
 
 and parse_stmts ?(ind="") tokens : (token list * stmt list) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let rec _parse_stmts ?(ind="") tokens stmts_so_far =
     let ind_next = begin
@@ -562,15 +495,7 @@ and parse_stmts ?(ind="") tokens : (token list * stmt list) =
 
 
 and parse_stmt ?(ind="") tokens : (token list * stmt) option =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   try
     let (rest, stmt) =
@@ -621,15 +546,7 @@ and parse_stmt ?(ind="") tokens : (token list * stmt) option =
 
 
 and parse_var_qual ?(ind="") tokens : (token list * var_qual) =
-  let _ = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let _ = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | KWMut(_) :: rest -> (rest, {mut=true})
@@ -641,15 +558,7 @@ and parse_var_qual ?(ind="") tokens : (token list * var_qual) =
 
 
 and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let (rest, qual) = parse_var_qual ~ind:ind_next tokens in
 
@@ -694,15 +603,7 @@ and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
 
 
 and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   (* Parse `[<indexing-expr>]` *)
   let _parse_assign_array_index
@@ -813,45 +714,21 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
 
 
 and parse_expr_stmt ?(ind="") tokens : (token list * stmt) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let (rest, exp) = parse_expr ~ind:ind_next tokens in
   (rest, ExprStmt(exp))
 
 
 and parse_expr ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let (rest, exp) = parse_equality ~ind:ind_next tokens in
   (rest, exp)
 
 
 and parse_equality ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let rec _parse_equality ?(ind="") tokens exp_lhs =
     let ind_next = begin
@@ -884,15 +761,7 @@ and parse_equality ?(ind="") tokens : (token list * expr) =
 
 
 and parse_relation ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let rec _parse_relation ?(ind="") tokens exp_lhs =
     let ind_next = begin
@@ -935,15 +804,7 @@ and parse_relation ?(ind="") tokens : (token list * expr) =
 
 
 and parse_sum ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let rec _parse_sum ?(ind="") tokens exp_lhs =
     let ind_next = begin
@@ -976,15 +837,7 @@ and parse_sum ?(ind="") tokens : (token list * expr) =
 
 
 and parse_prod ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let rec _parse_prod ?(ind="") tokens exp_lhs =
     let ind_next = begin
@@ -1022,15 +875,7 @@ and parse_prod ?(ind="") tokens : (token list * expr) =
 
 
 and parse_value ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let (rest, exp) = begin
     try parse_tuple_expr ~ind:ind_next tokens
@@ -1093,15 +938,7 @@ and parse_value ?(ind="") tokens : (token list * expr) =
 
 
 and parse_func_call ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LowIdent(_, f_name) :: LParen(_) :: RParen(_) :: rest ->
@@ -1116,15 +953,7 @@ and parse_func_call ?(ind="") tokens : (token list * expr) =
 
 
 and parse_func_call_args ?(ind="") tokens : (token list * expr list) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let rec _parse_func_call_args ?(ind="") tokens exps_so_far =
     let ind_next = begin
@@ -1161,15 +990,7 @@ and parse_func_call_args ?(ind="") tokens : (token list * expr list) =
 
 
 and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | Dot(_) :: LParen(_) :: RParen(_) :: rest ->
@@ -1184,15 +1005,7 @@ and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
 
 
 and parse_array_index ?(ind="") tokens exp : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LBracket(_) :: rest ->
@@ -1210,15 +1023,7 @@ and parse_array_index ?(ind="") tokens exp : (token list * expr) =
 
 
 and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
-  let _ = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let _ = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | Dot(_) :: Integer(_, i) :: rest ->
@@ -1229,15 +1034,7 @@ and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
 
 
 and parse_tuple_expr ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LParen(_) :: rest ->
@@ -1292,15 +1089,7 @@ and parse_tuple_expr ?(ind="") tokens : (token list * expr) =
 
 
 and parse_paren_expr ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LParen(_) :: rest ->
@@ -1325,15 +1114,7 @@ and parse_paren_expr ?(ind="") tokens : (token list * expr) =
 
 
 and parse_if_expr ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | KWIf(_) :: rest ->
@@ -1357,15 +1138,7 @@ and parse_if_expr ?(ind="") tokens : (token list * expr) =
 
 
 and parse_while_expr ?(ind="") tokens : (token list * expr) =
-  let ind_next = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | KWWhile(_) :: LBrace(_) :: rest ->
@@ -1396,15 +1169,7 @@ and parse_while_expr ?(ind="") tokens : (token list * expr) =
 
 
 and parse_variant_ctor ?(ind="") tokens : (token list * expr) =
-  let _ = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let _ = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | CapIdent(_, name) :: LParen(_) :: rest ->
@@ -1445,15 +1210,7 @@ and parse_variant_ctor ?(ind="") tokens : (token list * expr) =
 
 
 and parse_expr_atom ?(ind="") tokens : (token list * expr) =
-  let _ = begin
-    if ind <> "" then
-      begin
-        Printf.printf "%sParsing: [%s] with [%s]\n"
-          ind __FUNCTION__ (fmt_next_token tokens) ;
-        (ind ^ " ")
-      end
-    else ind
-  end in
+  let _ = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
   | LParen(_) :: RParen(_) :: rest -> (rest, ValNil)
