@@ -376,39 +376,20 @@ let instr_lval instr =
 
 (* Wrap the given lval in an alloca, and yield that alloca lval. *)
 let lval_to_alloca mir_ctxt bb lval expected_t =
-  let (mir_ctxt, bb, alloca_lval, instructions) = begin match expected_t with
-  | Array(_, _) ->
-      (* Allocate stack space for the value *)
-      let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
+  (* Allocate stack space for the value *)
+  let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
+  let alloca_lval =
+    {t=Ptr(expected_t); kind=Tmp; lname=alloca_varname}
+  in
+  let alloca_instr = Alloca(alloca_lval, expected_t) in
 
-      let alloca_lval =
-        {t=Ptr(expected_t); kind=Tmp; lname=alloca_varname}
-      in
-      let alloca_instr = Alloca(alloca_lval, expected_t) in
+  (* Store the value into the alloca. *)
+  let store_instr = Store(alloca_lval, lval) in
 
-      (* Store the value into the alloca. *)
-      let store_instr = Store(alloca_lval, lval) in
-
-      (mir_ctxt, bb, alloca_lval, [alloca_instr; store_instr])
-
-  | _ ->
-      (* Allocate stack space for the value *)
-      let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
-
-      let alloca_lval =
-        {t=Ptr(expected_t); kind=Tmp; lname=alloca_varname}
-      in
-      let alloca_instr = Alloca(alloca_lval, expected_t) in
-
-      (* Store the value into the alloca. *)
-      let store_instr = Store(alloca_lval, lval) in
-
-      (mir_ctxt, bb, alloca_lval, [alloca_instr; store_instr])
-  end in
-
-  let bb = {bb with instrs = bb.instrs @ instructions} in
+  let bb = {bb with instrs = bb.instrs @ [alloca_instr; store_instr]} in
 
   (mir_ctxt, bb, alloca_lval)
+;;
 
 
 let literal_to_instr mir_ctxt bb t ctor =
