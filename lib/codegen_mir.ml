@@ -422,13 +422,6 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         end
       in
 
-      Printf.printf "LHS: [%s] [%s], RHS: [%s] [%s]\n"
-        lhs_name
-        (Llvm.value_name lhs_val)
-        rhs_name
-        (Llvm.value_name rhs_val)
-      ;
-
       let bin_op_val = begin match (lhs_t, rhs_t) with
       | ((U8 | U16 | U32 | U64), (U8 | U16 | U32 | U64)) ->
           begin match op with
