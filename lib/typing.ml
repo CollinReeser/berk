@@ -361,6 +361,33 @@ let type_bitwise_to from_t to_t =
 ;;
 
 
+(* Returns true if the given type is a variant such that all of its constructors
+have zero fields (ie, a C-style enum). Returns false otherwise. *)
+let is_zero_field_variant t : bool =
+  begin match t with
+  | Variant(_, name_to_field_t) ->
+      let field_ts =
+        List.map (fun (_, field_t) -> field_t) name_to_field_t
+      in
+      let all_nil =
+        List.fold_left (
+          fun so_far field_t ->
+            let cur =
+              begin match field_t with
+              | Nil -> true
+              | _ -> false
+              end
+            in
+            so_far && cur
+        ) true field_ts
+      in
+      all_nil
+
+  | _ -> false
+  end
+;;
+
+
 let is_index_type idx_t =
   match idx_t with
   | I64

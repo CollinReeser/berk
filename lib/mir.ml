@@ -1036,12 +1036,32 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           we can bitcast to the "generic" variant type and then load. *)
           let tmp_store_instr = Store(tmp_alloca_lval, ctor_lval) in
 
-          let (mir_ctxt, tmp_alloca_bitcast_varname) = get_varname mir_ctxt in
-          let tmp_alloca_bitcast_lval =
-            {t=Ptr(variant_t); kind=Tmp; lname = tmp_alloca_bitcast_varname}
-          in
-          let tmp_alloca_bitcast_instr =
-            UnOp(tmp_alloca_bitcast_lval, Bitwise, tmp_alloca_lval)
+          (* We might not actually need to do the bitwise cast, if the variant
+          has exclusively zero-member constructors, as there is then nothing
+          that needs to be "erased".
+
+          We avoid generating the bitcast, rather than just leaving it in
+          anyway, as otherwise the LLVM codegen will see that the bitcast is
+          entirely useless (bitcast from an `ptr {i8}` to an `ptr {i8}`) and
+          elide it entirely, which interferes with the MIR tmp naming and LLVM
+          tmp naming agreement.
+          *)
+          let is_complex_variant = not (is_zero_field_variant variant_t) in
+          let (mir_ctxt, resolved_tmp_alloca_lval, bitcast_instr_lst) =
+            begin if is_complex_variant then
+              let (mir_ctxt, tmp_alloca_bitcast_varname) =
+                get_varname mir_ctxt
+              in
+              let tmp_alloca_bitcast_lval =
+                {t=Ptr(variant_t); kind=Tmp; lname = tmp_alloca_bitcast_varname}
+              in
+              let tmp_alloca_bitcast_instr =
+                UnOp(tmp_alloca_bitcast_lval, Bitwise, tmp_alloca_lval)
+              in
+              (mir_ctxt, tmp_alloca_bitcast_lval, [tmp_alloca_bitcast_instr])
+            else
+              (mir_ctxt, tmp_alloca_lval, [])
+            end
           in
 
           let (mir_ctxt, tmp_load_variant_varname) = get_varname mir_ctxt in
@@ -1049,7 +1069,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             {t=variant_t; kind=Tmp; lname = tmp_load_variant_varname}
           in
           let tmp_load_variant_instr =
-            Load(tmp_load_variant_lval, tmp_alloca_bitcast_lval)
+            Load(tmp_load_variant_lval, resolved_tmp_alloca_lval)
           in
 
           let bb = {
@@ -1057,7 +1077,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
               construct_instr;
               tmp_alloca_instr;
               tmp_store_instr;
-              tmp_alloca_bitcast_instr;
+            ] @ bitcast_instr_lst @ [
               tmp_load_variant_instr;
             ]
           } in
