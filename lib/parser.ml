@@ -73,7 +73,14 @@ and parse_extern ?(ind="") tokens : (token list * module_decl) =
   | [] -> failwith "Unexpected EOF while parsing `extern` declaration."
   end
 
+(* Parse everything after the `variant` keyword in a variant decl, eg:
 
+variant <`a, `b> {
+  | Some(i32, i64)
+  | None
+}
+
+*)
 and parse_variant ?(ind="") tokens : (token list * module_decl) =
   let _ = begin
     if ind <> "" then
@@ -85,6 +92,9 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
     else ind
   end in
 
+  (* Parse eg:
+    `a, `b, `c
+  *)
   let _parse_variant_typ_vars tokens =
     let rec __parse_variant_type_vars tokens t_vars_so_far_rev =
       begin match tokens with
@@ -104,6 +114,11 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
     (rest, List.rev t_vars)
   in
 
+  (* Parse eg:
+    | Some(i32, i64, bool)
+    | Other(bool)
+    | Thing
+  *)
   let _parse_variant_constructors tokens =
     let rec __parse_variant_constructors tokens v_ctors_so_far_rev =
       begin match tokens with
@@ -151,6 +166,7 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
     (rest, v_ctors)
   in
 
+  (* Parse the closing brace at the end of the variant decl. *)
   let _parse_variant_end tokens v_name v_ctors v_typ_vars =
     begin match tokens with
     | RBrace(_) :: rest ->
@@ -170,6 +186,7 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
     end
   in
 
+  (* Parse everything after the `variant` keyword. *)
   begin match tokens with
   | CapIdent(_, v_name) :: Lesser(_) :: rest ->
       let (rest, v_typ_vars) = _parse_variant_typ_vars rest in

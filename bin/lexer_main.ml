@@ -18,7 +18,7 @@ let () =
     }
 
     variant Binary {
-    | True
+    | True(i32)
     | False
     }
 
