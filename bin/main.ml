@@ -26,7 +26,7 @@ let main = begin
             Undecided, [
               DeclStmt(
                 "my_inner_var_1", def_var_qual, Undecided,
-                ValI64(51)
+                ValInt(I64, 51)
               );
               DeclStmt(
                 "my_inner_var_2", {mut = true}, Undecided,
@@ -36,13 +36,13 @@ let main = begin
                 "my_inner_var_3", def_var_qual, Undecided,
                 IfThenElseExpr(
                   Undecided,
-                  BinOp(Undecided, Lt, ValI8(11), ValI64(9)),
-                  ValI64(6),
+                  BinOp(Undecided, Lt, ValInt(I8, 11), ValInt(I64, 9)),
+                  ValInt(I64, 6),
                   IfThenElseExpr(
                     Undecided,
                     BinOp(Undecided, Ge, ValF64(11.12), ValF32(9.34)),
-                    BlockExpr(Undecided, [], ValI64(9)),
-                    ValI64(8)
+                    BlockExpr(Undecided, [], ValInt(I64, 9)),
+                    ValInt(I64, 8)
                   )
                 )
               );
@@ -57,8 +57,8 @@ let main = begin
                 Undecided, Mul,
                 BinOp(
                   Undecided, Sub,
-                  ValI32(11),
-                  ValI64(7)
+                  ValInt(I32, 11),
+                  ValInt(I64, 7)
                 ),
                 ValVar(Undecided, "my_inner_var_3")
               )
@@ -91,9 +91,9 @@ let main = begin
             Undecided, Eq,
             BinOp(
               Undecided, Mod,
-              ValI16(7), ValI16(2)
+              ValInt(I16, 7), ValInt(I16, 2)
             ),
-            ValI32(1)
+            ValInt(I32, 1)
           )
         )
       ) in
@@ -101,7 +101,7 @@ let main = begin
         DeclStmt(
           "my_bitcast_var", def_var_qual,
           U32,
-          ValCastBitwise(U32, ValI32(-32000))
+          ValCastBitwise(U32, ValInt(I32, -32000))
         )
       ) in
       let decl_dodge_recursion_raw = (
@@ -110,7 +110,7 @@ let main = begin
           IfThenElseExpr(
             Undecided,
             ValBool(true),
-            ValI8(6),
+            ValInt(I8, 6),
             FuncCall(Undecided, "main", [])
           )
         )
@@ -118,7 +118,7 @@ let main = begin
       let decl_call_recursion_raw = (
         DeclStmt(
           "my_recursive_dodge_var", def_var_qual, Undecided,
-          FuncCall(Undecided, "rec_me", [ValI8(100)])
+          FuncCall(Undecided, "rec_me", [ValInt(I8, 100)])
         )
       ) in
       let decl_array_raw = (
@@ -126,11 +126,11 @@ let main = begin
           "my_array_var", def_var_qual, Undecided,
           ArrayExpr(
             Undecided, [
-              ValI8(10);
-              ValI8(9);
-              ValI8(8);
-              ValI8(7);
-              ValI8(6);
+              ValInt(I8, 10);
+              ValInt(I8, 9);
+              ValInt(I8, 8);
+              ValInt(I8, 7);
+              ValInt(I8, 6);
             ]
           )
         )
@@ -140,7 +140,7 @@ let main = begin
           "my_array_idx_var", def_var_qual, Undecided,
           IndexExpr(
             Undecided,
-            ValU64(2),
+            ValInt(U64, 2),
             ValVar(Undecided, "my_array_var")
           )
         )
@@ -150,10 +150,10 @@ let main = begin
           "my_tuple_var", def_var_qual, Undecided,
           TupleExpr(
             Undecided, [
-              ValI8(10);
-              ValU8(9);
-              ValI32(8);
-              ValU32(7);
+              ValInt(I8, 10);
+              ValInt(U8, 9);
+              ValInt(I32, 8);
+              ValInt(U32, 7);
               ValBool(false);
             ]
           )
@@ -169,9 +169,9 @@ let main = begin
           Undecided,
           TupleExpr(
             Undecided, [
-              ValI8(13);
-              ValU16(12);
-              ValI32(11);
+              ValInt(I8, 13);
+              ValInt(U16, 12);
+              ValInt(I32, 11);
             ]
           )
         )
@@ -197,8 +197,8 @@ let main = begin
           ],
           TupleExpr(
             Undecided, [
-              ValI8(13);
-              ValI32(11);
+              ValInt(I8, 13);
+              ValInt(I32, 11);
             ]
           )
         )
@@ -206,7 +206,7 @@ let main = begin
       let expr_raw = (
         BinOp(
           Undecided, Add,
-          ValI64(5),
+          ValInt(I64, 5),
           ValVar(Undecided, "my_var")
         )
       )
@@ -226,7 +226,7 @@ let main = begin
       let collatz_seq_stmt_raw =
         ExprStmt(
           FuncCall(
-            Undecided, "collatz_print_seq", [ValU64(9)]
+            Undecided, "collatz_print_seq", [ValInt(U64, 9)]
           )
         )
       in
@@ -243,8 +243,8 @@ let main = begin
                 ],
                 Undecided,
                 FuncCall(
-                  (* Undecided, "collatz_highest_seed", [ValU64(120)] *)
-                  Undecided, "collatz_highest_seed", [ValU64(1000000)]
+                  (* Undecided, "collatz_highest_seed", [ValInt(U64, 120)] *)
+                  Undecided, "collatz_highest_seed", [ValInt(U64, 1000000)]
                 )
               );
               DeclStmt(
@@ -310,7 +310,7 @@ let main = begin
                 (* ValCastBitwise(
                   I8,
                   FuncCall(
-                    Undecided, "tailcall_collatz_len", [ValU8(12)]
+                    Undecided, "tailcall_collatz_len", [ValInt(U8, 12)]
                   )
                 ) *)
 
@@ -360,11 +360,14 @@ let main = begin
           ReturnStmt(
             IfThenElseExpr(
               Undecided,
-              BinOp(Undecided, Eq, ValVar(Undecided, "counter"), ValI8(5)),
+              BinOp(Undecided, Eq, ValVar(Undecided, "counter"), ValInt(I8, 5)),
               ValVar(Undecided, "counter"),
               FuncCall(
                 Undecided, "rec_me", [
-                  BinOp(Undecided, Sub, ValVar(Undecided, "counter"), ValI8(1))
+                  BinOp(
+                    Undecided, Sub,
+                    ValVar(Undecided, "counter"), ValInt(I8, 1)
+                  )
                 ]
               )
             )
@@ -382,23 +385,32 @@ let main = begin
           ReturnStmt(
             IfThenElseExpr(
               Undecided,
-              BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValU64(1)),
+              BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValInt(U64, 1)),
               ValVar(Undecided, "len"),
               IfThenElseExpr(
                 Undecided,
                 BinOp(
                   Undecided, Eq,
-                  ValU64(1),
-                  BinOp(Undecided, Mod, ValVar(Undecided, "cur"), ValU64(2))
+                  ValInt(U64, 1),
+                  BinOp(
+                    Undecided, Mod,
+                    ValVar(Undecided, "cur"), ValInt(U64, 2)
+                  )
                 ),
                 FuncCall(
                   Undecided, "collatz_len_internal", [
                     BinOp(
                       Undecided, Add,
-                      ValU64(1),
-                      BinOp(Undecided, Mul, ValVar(Undecided, "cur"), ValU64(3))
+                      ValInt(U64, 1),
+                      BinOp(
+                        Undecided, Mul,
+                        ValVar(Undecided, "cur"), ValInt(U64, 3)
+                      )
                     );
-                    BinOp(Undecided, Add, ValVar(Undecided, "len"), ValU64(1));
+                    BinOp(
+                      Undecided, Add,
+                      ValVar(Undecided, "len"), ValInt(U64, 1)
+                    );
                   ]
                 ),
                 FuncCall(
@@ -406,9 +418,12 @@ let main = begin
                     BinOp(
                       Undecided, Div,
                       ValVar(Undecided, "cur"),
-                      ValU64(2)
+                      ValInt(U64, 2)
                     );
-                    BinOp(Undecided, Add, ValVar(Undecided, "len"), ValU64(1));
+                    BinOp(
+                      Undecided, Add,
+                      ValVar(Undecided, "len"), ValInt(U64, 1)
+                    );
                   ]
                 )
               )
@@ -428,7 +443,7 @@ let main = begin
             FuncCall(
               Undecided, "collatz_len_internal", [
                 ValVar(Undecided, "start");
-                ValU64(1);
+                ValInt(U64, 1);
               ]
             )
           )
@@ -445,7 +460,7 @@ let main = begin
           ExprStmt(
             IfThenElseExpr(
               Undecided,
-              BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValU8(1)),
+              BinOp(Undecided, Eq, ValVar(Undecided, "cur"), ValInt(U8, 1)),
               BlockExpr(
                 Undecided, [
                   ReturnStmt(ValVar(Undecided, "len"));
@@ -456,8 +471,8 @@ let main = begin
                 Undecided,
                 BinOp(
                   Undecided, Eq,
-                  ValU8(1),
-                  BinOp(Undecided, Mod, ValVar(Undecided, "cur"), ValU8(2))
+                  ValInt(U8, 1),
+                  BinOp(Undecided, Mod, ValVar(Undecided, "cur"), ValInt(U8, 2))
                 ),
                 BlockExpr(
                   Undecided,
@@ -467,17 +482,17 @@ let main = begin
                         Undecided, "tailcall_collatz_len_internal", [
                           BinOp(
                             Undecided, Add,
-                            ValU8(1),
+                            ValInt(U8, 1),
                             BinOp(
                               Undecided, Mul,
                               ValVar(Undecided, "cur"),
-                              ValU8(3)
+                              ValInt(U8, 3)
                             )
                           );
                           BinOp(
                             Undecided, Add,
                             ValVar(Undecided, "len"),
-                            ValU8(1)
+                            ValInt(U8, 1)
                           );
                         ]
                       )
@@ -494,12 +509,12 @@ let main = begin
                           BinOp(
                             Undecided, Div,
                             ValVar(Undecided, "cur"),
-                            ValU8(2)
+                            ValInt(U8, 2)
                           );
                           BinOp(
                             Undecided, Add,
                             ValVar(Undecided, "len"),
-                            ValU8(1)
+                            ValInt(U8, 1)
                           );
                         ]
                       )
@@ -524,7 +539,7 @@ let main = begin
             FuncCall(
               Undecided, "tailcall_collatz_len_internal", [
                 ValVar(Undecided, "start");
-                ValU64(1);
+                ValInt(U64, 1);
               ]
             )
           )
@@ -592,7 +607,7 @@ let main = begin
                                 ValVar(Undecided, "cur_len");
                                 BinOp(
                                   Undecided, Add,
-                                  ValU8(1), ValVar(Undecided, "cur_seed")
+                                  ValInt(U8, 1), ValVar(Undecided, "cur_seed")
                                 );
                                 ValVar(Undecided, "ceiling");
                               ]
@@ -610,7 +625,7 @@ let main = begin
                                 ValVar(Undecided, "max_len");
                                 BinOp(
                                   Undecided, Add,
-                                  ValU8(1), ValVar(Undecided, "cur_seed")
+                                  ValInt(U8, 1), ValVar(Undecided, "cur_seed")
                                 );
                                 ValVar(Undecided, "ceiling");
                               ]
@@ -639,9 +654,9 @@ let main = begin
           ReturnStmt(
             FuncCall(
               Undecided, "collatz_highest_seed_internal", [
-                ValU64(1);
-                ValU64(1);
-                ValU64(1);
+                ValInt(U64, 1);
+                ValInt(U64, 1);
+                ValInt(U64, 1);
                 ValVar(Undecided, "ceiling");
               ]
             )
@@ -665,7 +680,7 @@ let main = begin
                     BinOp(
                       Undecided, Ne,
                       ValVar(Undecided, "cur"),
-                      ValU64(1)
+                      ValInt(U64, 1)
                     ),
                     [
                       ExprStmt(
@@ -685,9 +700,9 @@ let main = begin
                             BinOp(
                               Undecided, Mod,
                               ValVar(Undecided, "cur"),
-                              ValU64(2)
+                              ValInt(U64, 2)
                             ),
-                            ValU64(0)
+                            ValInt(U64, 0)
                           ),
                           BlockExpr(
                             Undecided, [
@@ -697,7 +712,7 @@ let main = begin
                                   Undecided,
                                   Div,
                                   ValVar(Undecided, "cur"),
-                                  ValU64(2)
+                                  ValInt(U64, 2)
                                 )
                               );
                             ],
@@ -714,9 +729,9 @@ let main = begin
                                     Undecided,
                                     Mul,
                                     ValVar(Undecided, "cur"),
-                                    ValU64(3)
+                                    ValInt(U64, 3)
                                   ),
-                                  ValU64(1)
+                                  ValInt(U64, 1)
                                 )
                               );
                             ],
@@ -753,8 +768,8 @@ let main = begin
           ReturnStmt(
             TupleExpr(
               Undecided, [
-                ValU8(13);
-                ValU16(56);
+                ValInt(U8, 13);
+                ValInt(U16, 56);
                 ValF32(66.77);
               ]
             )
@@ -774,7 +789,7 @@ let main = begin
               Undecided,
               ValBool(true),
               VariantCtorExpr(Undecided, "None", ValNil),
-              VariantCtorExpr(Undecided, "Some", ValU8(17))
+              VariantCtorExpr(Undecided, "Some", ValInt(U8, 17))
             )
           )
         ];
@@ -813,7 +828,7 @@ let main = begin
                 ("Left", U64); ("Right", I16); ("Ziltch", Nil)
               ]
             ),
-            VariantCtorExpr(Undecided, "Right", ValI16(2222))
+            VariantCtorExpr(Undecided, "Right", ValInt(I16, 2222))
           );
           DeclStmt(
             "dummy_trilean_abstract", def_var_qual,
@@ -822,7 +837,7 @@ let main = begin
                 ("Left", U64); ("Right", Unbound("`b")); ("Ziltch", Nil)
               ]
             ),
-            VariantCtorExpr(Undecided, "Right", ValI16(2222))
+            VariantCtorExpr(Undecided, "Right", ValInt(I16, 2222))
           );
           DeclStmt(
             "dummy_trilean_tri_branch", def_var_qual, Undecided,
@@ -847,11 +862,11 @@ let main = begin
               IfThenElseExpr(
                 Undecided,
                 ValBool(true),
-                VariantCtorExpr(Undecided, "West", ValI32(-12)),
+                VariantCtorExpr(Undecided, "West", ValInt(I32, -12)),
                 IfThenElseExpr(
                   Undecided,
                   ValBool(true),
-                  VariantCtorExpr(Undecided, "North", ValU32(12)),
+                  VariantCtorExpr(Undecided, "North", ValInt(U32, 12)),
                   VariantCtorExpr(Undecided, "South", ValStr("Quatern world!"))
                 )
               )
@@ -864,18 +879,22 @@ let main = begin
               ValBool(false),
               VariantCtorExpr(
                 Undecided, "OneTup",
-                TupleExpr(Undecided, [ValU64(10)])
+                TupleExpr(Undecided, [ValInt(U64, 10)])
               ),
               IfThenElseExpr(
                 Undecided,
                 ValBool(true),
                 VariantCtorExpr(
                   Undecided, "TwoTup",
-                  TupleExpr(Undecided, [ValU32(20); ValI8(30)])
+                  TupleExpr(Undecided, [ValInt(U32, 20); ValInt(I8, 30)])
                 ),
                 VariantCtorExpr(
                   Undecided, "TriTup",
-                  TupleExpr(Undecided, [ValU64(20); ValI16(30); ValStr("Tri!")])
+                  TupleExpr(
+                    Undecided, [
+                      ValInt(U64, 20); ValInt(I16, 30); ValStr("Tri!")
+                    ]
+                  )
                 )
               )
             )
@@ -894,18 +913,22 @@ let main = begin
               ValBool(false),
               VariantCtorExpr(
                 Undecided, "OneTup",
-                TupleExpr(Undecided, [ValU32(10)])
+                TupleExpr(Undecided, [ValInt(U32, 10)])
               ),
               IfThenElseExpr(
                 Undecided,
                 ValBool(true),
                 VariantCtorExpr(
                   Undecided, "TwoTup",
-                  TupleExpr(Undecided, [ValU16(20); ValI8(30)])
+                  TupleExpr(Undecided, [ValInt(U16, 20); ValInt(I8, 30)])
                 ),
                 VariantCtorExpr(
                   Undecided, "TriTup",
-                  TupleExpr(Undecided, [ValU8(20); ValI16(30); ValI32(70)])
+                  TupleExpr(
+                    Undecided, [
+                      ValInt(U8, 20); ValInt(I16, 30); ValInt(I32, 70)
+                    ]
+                  )
                 )
               )
             )

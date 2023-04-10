@@ -403,12 +403,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       let llvm_nil_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t Nil in
       Llvm.undef llvm_nil_typ
 
-  | ValU64(n) | ValI64(n) -> Llvm.const_int i64_t n
-  | ValU32(n) | ValI32(n) -> Llvm.const_int i32_t n
-  | ValU16(n) | ValI16(n) -> Llvm.const_int i16_t n
-  | ValU8(n)  | ValI8(n)  -> Llvm.const_int  i8_t n
-
-  | ValInt(U8, n)  | ValInt(I8, n)  -> Llvm.const_int i8_t n
+  | ValInt(U8,  n) | ValInt(I8,  n) -> Llvm.const_int i8_t  n
   | ValInt(U16, n) | ValInt(I16, n) -> Llvm.const_int i16_t n
   | ValInt(U32, n) | ValInt(I32, n) -> Llvm.const_int i32_t n
   | ValInt(U64, n) | ValInt(I64, n) -> Llvm.const_int i64_t n

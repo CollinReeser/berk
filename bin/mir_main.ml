@@ -28,7 +28,7 @@ let main = begin
           f_ret_t = I8;
           f_params = [];
         };
-        f_stmts = [ReturnStmt(ValI8(101))];
+        f_stmts = [ReturnStmt(ValInt(I8, 101))];
       } in
 
       let main_func_def = {
@@ -147,9 +147,9 @@ let main = begin
             "my_array", {mut=false}, Undecided,
             ArrayExpr(
               Undecided, [
-                ValCastTrunc(U32, ValU64(65));
-                ValU16(66);
-                ValCastBitwise(U8, ValI8(67));
+                ValCastTrunc(U32, ValInt(U64, 65));
+                ValInt(U16, 66);
+                ValCastBitwise(U8, ValInt(I8, 67));
               ]
             )
           );
@@ -171,7 +171,11 @@ let main = begin
           DeclDeconStmt(
             [("a", {mut=false}); ("b", {mut=false}); ("c", {mut=false})],
             Undecided,
-            TupleExpr(Undecided, [ValU64(64); ValStr("!"); ValU16(16);])
+            TupleExpr(
+              Undecided, [
+                ValInt(U64, 64); ValStr("!"); ValInt(U16, 16)
+              ]
+            )
           );
           ExprStmt(
             FuncCall(
@@ -185,10 +189,14 @@ let main = begin
           );
           DeclStmt(
             "mut_tuple", {mut=true}, Undecided,
-            TupleExpr(Undecided, [ValU64(12345); ValStr("?"); ValU16(321);])
+            TupleExpr(
+              Undecided, [
+                ValInt(U64, 12345); ValStr("?"); ValInt(U16, 321)
+              ]
+            )
           );
-          AssignStmt("mut_tuple", [ALStaticIndex(0)], ValU64(23456));
-          AssignStmt("mut_tuple", [ALStaticIndex(2)], ValU16(432));
+          AssignStmt("mut_tuple", [ALStaticIndex(0)], ValInt(U64, 23456));
+          AssignStmt("mut_tuple", [ALStaticIndex(2)], ValInt(U16, 432));
           DeclDeconStmt(
             [("m", {mut=false}); ("n", {mut=false}); ("o", {mut=false})],
             Undecided,
@@ -209,10 +217,10 @@ let main = begin
             BlockExpr(
               Undecided, [
                 DeclStmt(
-                  "my_int32", {mut=false}, Undecided, ValU32(15)
+                  "my_int32", {mut=false}, Undecided, ValInt(U32, 15)
                 );
                 DeclStmt(
-                  "my_int64", {mut=false}, Undecided, ValU64(30)
+                  "my_int64", {mut=false}, Undecided, ValInt(U64, 30)
                 );
               ],
               BinOp(
@@ -243,7 +251,7 @@ let main = begin
                         FuncCall(Undecided, "printf", [ValStr("False arm!\n")])
                       )
                     ],
-                    ValU32(1)
+                    ValInt(U32, 1)
                   )
                 );
                 (
@@ -254,7 +262,7 @@ let main = begin
                         FuncCall(Undecided, "printf", [ValStr("True arm!\n")])
                       )
                     ],
-                    ValU32(2)
+                    ValInt(U32, 2)
                   )
                 );
               ]
@@ -274,7 +282,7 @@ let main = begin
                         FuncCall(Undecided, "printf", [ValStr("False arm!\n")])
                       )
                     ],
-                    ValU32(1)
+                    ValInt(U32, 1)
                   )
                 );
                 (
@@ -285,7 +293,7 @@ let main = begin
                         FuncCall(Undecided, "printf", [ValStr("True arm!\n")])
                       )
                     ],
-                    ValU32(2)
+                    ValInt(U32, 2)
                   )
                 );
               ]
@@ -300,7 +308,7 @@ let main = begin
                     FuncCall(Undecided, "printf", [ValStr(str)])
                   )
                 ],
-                ValU32(i)
+                ValInt(U32, i)
               )
             in
             MatchExpr(
@@ -335,7 +343,7 @@ let main = begin
                     FuncCall(Undecided, "printf", [ValStr(str)])
                   )
                 ],
-                ValU32(i)
+                ValInt(U32, i)
               )
             in
             let tuple_bools a b c =
@@ -378,7 +386,7 @@ let main = begin
                     )
                   )
                 ],
-                ValU32(i)
+                ValInt(U32, i)
               )
             in
             let tuple_bools a var c =
@@ -428,7 +436,7 @@ let main = begin
                     )
                   )
                 ],
-                ValU32(i)
+                ValInt(U32, i)
               )
             in
             MatchExpr(
@@ -458,7 +466,7 @@ let main = begin
                 );
                 (
                   Ctor(Undecided, "None", Wild(Undecided)),
-                  ValU32(5)
+                  ValInt(U32, 5)
                 )
               ]
             )
@@ -532,9 +540,9 @@ let main = begin
           ReturnStmt(
             IfThenElseExpr(
               Undecided,
-              BinOp(Undecided, Eq, ValU32(32), ValVar(Undecided, "c")),
-              ValI8(40),
-              ValI8(50)
+              BinOp(Undecided, Eq, ValInt(U32, 32), ValVar(Undecided, "c")),
+              ValInt(I8, 40),
+              ValInt(I8, 50)
             )
           );
         ];

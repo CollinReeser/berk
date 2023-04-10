@@ -103,8 +103,6 @@ and is_concrete_expr ?(verbose=false) expr =
   let _is_concrete_patt patt = is_concrete_patt ~verbose:verbose patt in
 
   let res = begin match expr with
-  | ValU64(_)  | ValU32(_) | ValU16(_) | ValU8(_)
-  | ValI64(_)  | ValI32(_) | ValI16(_) | ValI8(_)
   | ValF128(_) | ValF64(_) | ValF32(_)
   | ValBool(_)
   | ValStr(_)
@@ -687,16 +685,6 @@ and type_check_expr
     begin match exp with
     | ValNil -> ValNil
 
-    | ValU64(i) -> ValU64(i)
-    | ValU32(i) -> ValU32(i)
-    | ValU16(i) -> ValU16(i)
-    | ValU8 (i) -> ValU8 (i)
-
-    | ValI64(i) -> ValI64(i)
-    | ValI32(i) -> ValI32(i)
-    | ValI16(i) -> ValI16(i)
-    | ValI8 (i) -> ValI8 (i)
-
     | ValF128(str) -> ValF128(str)
     | ValF64(f)    -> ValF64(f)
     | ValF32(f)    -> ValF32(f)
@@ -1065,14 +1053,14 @@ and type_check_expr
             begin match arr_t with
             | Array(elem_typ, sz) ->
                 begin match idx_typechecked with
-                | ValI64(i) | ValI32(i) | ValI16(i) | ValI8(i)
-                | ValU64(i) | ValU32(i) | ValU16(i) | ValU8(i) ->
-                    if i < sz then
+                | ValInt(_, i) ->
+                    begin if i < sz && i >= 0 then
                       IndexExpr(
                         elem_typ, idx_typechecked, arr_typechecked
                       )
                     else
                       failwith "Static out-of-bounds index into array"
+                    end
                 | _ ->
                     IndexExpr(
                       elem_typ, idx_typechecked, arr_typechecked

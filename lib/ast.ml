@@ -11,14 +11,6 @@ type ident_t = string
 
 and expr =
   | ValNil
-  | ValU64 of int
-  | ValU32 of int
-  | ValU16 of int
-  | ValU8  of int
-  | ValI64 of int
-  | ValI32 of int
-  | ValI16 of int
-  | ValI8  of int
   | ValF128 of string
   | ValF64 of float
   | ValF32 of float
@@ -144,14 +136,6 @@ and stmt =
 let expr_type exp =
   match exp with
   | ValNil -> Nil
-  | ValU64(_) -> U64
-  | ValU32(_) -> U32
-  | ValU16(_) -> U16
-  | ValU8(_)  -> U8
-  | ValI64(_) -> I64
-  | ValI32(_) -> I32
-  | ValI16(_) -> I16
-  | ValI8(_)  -> I8
   | ValF128(_) -> F128
   | ValF64(_)  -> F64
   | ValF32(_)  -> F32
@@ -212,12 +196,6 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
   in
   match ex with
   | ValNil -> Printf.sprintf "%s()%s" init_ind typ_s
-
-  | ValU64(value) | ValU32(value) | ValU16(value) | ValU8(value) ->
-      Printf.sprintf "%s%d%s" init_ind value typ_s
-
-  | ValI64(value) | ValI32(value) | ValI16(value) | ValI8(value) ->
-      Printf.sprintf "%s%d%s" init_ind value typ_s
 
   | ValF128(str) -> Printf.sprintf "%s%s%s" init_ind str typ_s
 
@@ -566,14 +544,14 @@ let rec default_expr_for_t t =
 
   | Bool -> ValBool(false)
 
-  | U64  -> ValU64 (0)
-  | U32  -> ValU32 (0)
-  | U16  -> ValU16 (0)
-  | U8   -> ValU8  (0)
-  | I64  -> ValI64 (0)
-  | I32  -> ValI32 (0)
-  | I16  -> ValI16 (0)
-  | I8   -> ValI8  (0)
+  | U64  -> ValInt(U64, 0)
+  | U32  -> ValInt(U32, 0)
+  | U16  -> ValInt(U16, 0)
+  | U8   -> ValInt(U8,  0)
+  | I64  -> ValInt(I64, 0)
+  | I32  -> ValInt(I32, 0)
+  | I16  -> ValInt(I16, 0)
+  | I8   -> ValInt(I8,  0)
   | F32  -> ValF32 (0.0)
   | F64  -> ValF64 (0.0)
   | F128 -> ValF128("0.0")
@@ -838,22 +816,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         in
 
         MatchExpr(injected_t, matched_exp, patt_exp_pairs_injected)
-
-    | (U8,  ValU8 (_)) -> exp
-    | (U16, ValU16(_)) -> exp
-    | (U32, ValU32(_)) -> exp
-    | (U64, ValU64(_)) -> exp
-    | (U16, ValU8 (_))                          -> ValCastExtend(U16, exp)
-    | (U32, (ValU8(_) | ValU16(_)))             -> ValCastExtend(U32, exp)
-    | (U64, (ValU8(_) | ValU16(_) | ValU32(_))) -> ValCastExtend(U64, exp)
-
-    | (I8,  ValI8 (_)) -> exp
-    | (I16, ValI16(_)) -> exp
-    | (I32, ValI32(_)) -> exp
-    | (I64, ValI64(_)) -> exp
-    | (I16, ValI8 (_))                          -> ValCastExtend(I16, exp)
-    | (I32, (ValI8(_) | ValI16(_)))             -> ValCastExtend(I32, exp)
-    | (I64, (ValI8(_) | ValI16(_) | ValI32(_))) -> ValCastExtend(I64, exp)
 
     | (U8,  ValInt(U8,  _)) -> exp
     | (U16, ValInt(U16, _)) -> exp
@@ -1179,8 +1141,6 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
 
   and _rewrite_exp exp unique_varnames =
     begin match exp with
-    | ValU8(_) | ValU16(_) | ValU32(_) | ValU64(_)
-    | ValI8(_) | ValI16(_) | ValI32(_) | ValI64(_)
     | ValF32(_) | ValF64(_) | ValF128(_)
     | ValBool(_)
     | ValStr(_)

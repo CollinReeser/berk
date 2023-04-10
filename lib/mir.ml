@@ -421,14 +421,14 @@ let rec default_expr_for_t mir_ctxt t : (mir_ctxt * expr) =
 
   | Bool -> (mir_ctxt, ValBool(false))
 
-  | U64  -> (mir_ctxt, ValU64 (0))
-  | U32  -> (mir_ctxt, ValU32 (0))
-  | U16  -> (mir_ctxt, ValU16 (0))
-  | U8   -> (mir_ctxt, ValU8  (0))
-  | I64  -> (mir_ctxt, ValI64 (0))
-  | I32  -> (mir_ctxt, ValI32 (0))
-  | I16  -> (mir_ctxt, ValI16 (0))
-  | I8   -> (mir_ctxt, ValI8  (0))
+  | U64  -> (mir_ctxt, ValInt(U64, 0))
+  | U32  -> (mir_ctxt, ValInt(U32, 0))
+  | U16  -> (mir_ctxt, ValInt(U16, 0))
+  | U8   -> (mir_ctxt, ValInt(U8,  0))
+  | I64  -> (mir_ctxt, ValInt(I64, 0))
+  | I32  -> (mir_ctxt, ValInt(I32, 0))
+  | I16  -> (mir_ctxt, ValInt(I16, 0))
+  | I8   -> (mir_ctxt, ValInt(I8,  0))
   | F32  -> (mir_ctxt, ValF32 (0.0))
   | F64  -> (mir_ctxt, ValF64 (0.0))
   | F128 -> (mir_ctxt, ValF128("0.0"))
@@ -500,8 +500,11 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
           );
           ExprStmt(
             WhileExpr(
-              Nil, [DeclStmt(idx_varname, {mut=true}, U64, ValU64(0))],
-              BinOp(Bool, Lt, ValVar(U64, idx_varname), ValU64(total_arr_sz)),
+              Nil, [DeclStmt(idx_varname, {mut=true}, U64, ValInt(U64, 0))],
+              BinOp(
+                Bool, Lt,
+                ValVar(U64, idx_varname), ValInt(U64, total_arr_sz)
+              ),
               [
                 (* Initialize this index of the array. *)
                 AssignStmt(
@@ -514,7 +517,7 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
                 (* Increment the indexing variable. *)
                 AssignStmt(
                   idx_varname, [],
-                  BinOp(U64, Add, ValVar(U64, idx_varname), ValU64(1))
+                  BinOp(U64, Add, ValVar(U64, idx_varname), ValInt(U64, 1))
                 );
               ]
             )
@@ -588,21 +591,11 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
       | ValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb Bool
 
-      | ValU8 (x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb U8
-      | ValU16(x) -> ValU16(x) |> literal_to_instr mir_ctxt bb U16
-      | ValU32(x) -> ValU32(x) |> literal_to_instr mir_ctxt bb U32
-      | ValU64(x) -> ValU64(x) |> literal_to_instr mir_ctxt bb U64
-
-      | ValI8 (x) -> ValI8 (x) |> literal_to_instr mir_ctxt bb I8
-      | ValI16(x) -> ValI16(x) |> literal_to_instr mir_ctxt bb I16
-      | ValI32(x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
-      | ValI64(x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
-
-      | ValInt(U8, x) -> ValU8(x) |> literal_to_instr mir_ctxt bb U8
+      | ValInt(U8,  x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb U8
       | ValInt(U16, x) -> ValU16(x) |> literal_to_instr mir_ctxt bb U16
       | ValInt(U32, x) -> ValU32(x) |> literal_to_instr mir_ctxt bb U32
       | ValInt(U64, x) -> ValU64(x) |> literal_to_instr mir_ctxt bb U64
-      | ValInt(I8, x) -> ValI8(x) |> literal_to_instr mir_ctxt bb I8
+      | ValInt(I8,  x) -> ValI8(x)  |> literal_to_instr mir_ctxt bb I8
       | ValInt(I16, x) -> ValI16(x) |> literal_to_instr mir_ctxt bb I16
       | ValInt(I32, x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
       | ValInt(I64, x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
