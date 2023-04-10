@@ -428,12 +428,25 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
   | DeclDeconStmt(idents_quals, decl_t, exp) ->
       let exp_typechecked = type_check_expr tc_ctxt decl_t exp in
       let exp_t = expr_type exp_typechecked in
-      let resolved_t = match decl_t with
-      | Undecided -> exp_t
-      | _ ->
-        if type_convertible_to exp_t decl_t
-        then decl_t
-        else failwith "Explicitly declared type disagrees with expr"
+
+      (* If the declared type is fully concrete, assume we can use that. Else,
+      attempt to merge the two types, where success implies they're compatible.
+      *)
+      let resolved_t =
+        begin if is_concrete_type decl_t then
+          decl_t
+        else
+          let merged_t = merge_types decl_t exp_t in
+          begin if is_concrete_type merged_t then
+            merged_t
+          else
+            failwith (
+              Printf.sprintf
+                "Could not reconcile declared vs inferred types: [%s] vs [%s]"
+                (fmt_type decl_t) (fmt_type exp_t)
+            )
+          end
+        end
       in
 
       let vars_up = begin match resolved_t with
@@ -1187,7 +1200,8 @@ and type_check_expr
   inferred, as this will normalize/promote various types as necessary in
   possibly-misaligned branches within the expression (eg, if-expr) *)
   let inject_t = begin match expected_t with
-    | Undecided -> exp_typechecked_t
+    | Undecided ->
+        exp_typechecked_t
     | _ ->
         let inject_t = begin
           (* If the expected type is concrete, that should be all we need. If
@@ -1201,10 +1215,40 @@ and type_check_expr
           has enough information to create an overall-concrete, or
           more-concrete, type. *)
           else
+            (* First, collect the complete mutual set of typevars to concrete
+            types, between the declared and inferred types. *)
             let tvars_to_t = map_tvars_to_types expected_t exp_typechecked_t in
-            let concrete_t = concretify_unbound_types tvars_to_t expected_t in
 
-            concrete_t
+            (* Concretify the declared and inferred types as far as possible.
+
+            eg, if the declared type is
+              Variant <`a=u32, `b> { | Some(`a=u32) | Other(`b)}
+            and the inferred type is
+              Variant <`a, `b=bool> { | Some(`a) | Other(`b=bool)}
+            then this step will yield the following for both concretified types:
+              Variant <`a=u32, `b=bool> { | Some(`a=u32) | Other(`b=bool)}
+            *)
+            let concrete_expected_t =
+              concretify_unbound_types tvars_to_t expected_t
+            in
+            let concrete_exp_typechecked_t =
+              concretify_unbound_types tvars_to_t exp_typechecked_t
+            in
+
+            (* Attempt to merge the two types. The concretification steps should
+            have ideally eliminated all unbound typevars, but this step ensures
+            that if one side is still undecided about a particular part of the
+            type, then the other side is used as a reference.
+
+            eg, if the declared type is the tuple `(undecided, bool)`, and the
+            inferred type is (u32, bool), then we can merge the two into
+            `(u32, bool)`, as opposed to claiming the inferred type is wrong
+            because the declared type insists on a partial type. *)
+            let merged_t =
+              merge_types concrete_expected_t concrete_exp_typechecked_t
+            in
+
+            merged_t
         end in
         inject_t
   end in

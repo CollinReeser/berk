@@ -554,54 +554,117 @@ and parse_var_qual ?(ind="") tokens : (token list * var_qual) =
   begin match tokens with
   | KWMut(_) :: rest -> (rest, {mut=true})
 
-  | (_ :: _) as rest -> (rest, {mut=false})
-
-  | [] -> failwith "Unexpected EOF while parsing let declaration."
+  | _ -> (tokens, {mut=false})
   end
 
 
 and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
-  let (rest, qual) = parse_var_qual ~ind:ind_next tokens in
+  (* Parse eg:
+    my_var
+    mut my_var
+    mut my_var: (bool, u32)
+  *)
+  let _parse_qual_varname_t
+    ?(ind="") tokens : (token list * (var_qual * ident_t * berk_t))
+  =
+    let _ = print_trace ind __FUNCTION__ tokens in
 
-  begin match rest with
-  | LowIdent(_, name) :: Equal(_) :: rest ->
-      let (rest, exp) = parse_expr ~ind:ind_next rest in
-      (rest, DeclStmt(name, qual, Undecided, exp))
+    let (rest, qual) = parse_var_qual ~ind:ind_next tokens in
 
-  | LowIdent(_, name) :: Colon(_) :: rest ->
-      let (rest, t) = parse_type ~ind:ind_next rest in
+    begin match rest with
+    | LowIdent(_, name) :: Colon(_) :: rest ->
+        let (rest, t) = parse_type ~ind:ind_next rest in
+        (rest, (qual, name, t))
+
+    | LowIdent(_, name) :: rest ->
+        (rest, (qual, name, Undecided))
+
+    | tok :: _ ->
+        let fmted = fmt_token tok in
+        failwith (
+          Printf.sprintf
+            "Unexpected token [%s] (decl_stmt), expected identifier." fmted
+        )
+    | [] -> failwith "Unexpected EOF while parsing let declaration."
+    end
+  in
+
+  (* Parse eg:
+    my_var = 3
+    mut my_var: (bool, u32) = (true || false, 5 + 6)
+    (mut var1, var2: u32, mut var3: bool, var4) = (1, 2, true, 3)
+  *)
+  begin match tokens with
+  | LParen(_) :: rest ->
+      let (rest, first_qual_name_t) =
+        _parse_qual_varname_t ~ind:ind_next rest
+      in
+
+      let rec _parse_remaining_qual_varname_t tokens qual_name_ts_rev =
+        begin match tokens with
+        | Comma(_) :: rest ->
+            let (rest, next_name_qual_t) =
+              _parse_qual_varname_t ~ind:ind_next rest
+            in
+            let qual_name_ts_rev' = (next_name_qual_t :: qual_name_ts_rev) in
+            _parse_remaining_qual_varname_t rest qual_name_ts_rev'
+
+        | _ ->
+            (tokens, qual_name_ts_rev)
+        end
+      in
+
+      let (rest, qual_name_ts_rev) = _parse_remaining_qual_varname_t rest [] in
+      let qual_name_ts = List.rev qual_name_ts_rev in
+      let qual_name_ts = first_qual_name_t :: qual_name_ts in
+      let idents_quals =
+        List.map (fun (qual, name, _) -> (name, qual)) qual_name_ts
+      in
+      let ts =
+        List.map (fun (_, _, t) -> t) qual_name_ts
+      in
+      let tuple_t = Tuple(ts) in
 
       begin match rest with
-      | Equal(_) :: rest ->
+      | RParen(_) :: Equal(_) :: rest ->
           let (rest, exp) = parse_expr ~ind:ind_next rest in
-          (rest, DeclStmt(name, qual, t, exp))
-
-      (* Lookahead to the semicolon, if there is one. If so, this is a
-      "default declaration": `let var: bool; *)
-      | (Semicolon(_) :: _) as rest ->
-          (rest, DeclDefStmt([(name, qual, t)]))
+          (rest, DeclDeconStmt(idents_quals, tuple_t, exp))
 
       | tok :: _ ->
           let fmted = fmt_token tok in
           failwith (
             Printf.sprintf
-              "Unexpected token [%s] (decl_stmt), expected `=` or `;`" fmted
+              "Unexpected token [%s] (decl_stmt), expected identifier." fmted
           )
       | [] -> failwith "Unexpected EOF while parsing let declaration."
       end
 
-  (* TODO: Extend to recognize DeclDeconStmt *)
-  (* TODO: Extend to recognize DeclDefStmt with multiple fields. *)
+  | _ ->
+      let (rest, (qual, varname, t)) =
+        _parse_qual_varname_t ~ind:ind_next tokens
+      in
 
-  | tok :: _ ->
-      let fmted = fmt_token tok in
-      failwith (
-        Printf.sprintf
-          "Unexpected token [%s] (decl_stmt), expected identifier." fmted
-      )
-  | [] -> failwith "Unexpected EOF while parsing let declaration."
+      begin match rest with
+      | Equal(_) :: rest ->
+          let (rest, exp) = parse_expr ~ind:ind_next rest in
+          (rest, DeclStmt(varname, qual, t, exp))
+
+      (* Lookahead to the semicolon, if there is one. If so, this is a
+      "default declaration": `let var: bool; *)
+      | (Semicolon(_) :: _) as rest ->
+          (rest, DeclDefStmt([(varname, qual, t)]))
+
+      | tok :: _ ->
+          let fmted = fmt_token tok in
+          failwith (
+            Printf.sprintf
+              "Unexpected token [%s] (decl_stmt), expected identifier." fmted
+          )
+      | [] -> failwith "Unexpected EOF while parsing let declaration."
+      end
+  (* TODO: Extend to recognize DeclDefStmt with multiple fields. *)
   end
 
 

@@ -295,6 +295,23 @@ let () =
         f_val1, f_val2, f_val3
       );
 
+      let decl_test_1 = 3;
+      let mut decl_test_2: (bool, u32) = (true, 15 + 7);
+      let (decl_many_1, decl_many_2) = (1, 2);
+      let (
+        decl_many_1,
+        decl_many_2: u32,
+        mut decl_many_3,
+        mut decl_many_4: bool
+      ) = (1, 2, 3, true);
+
+      printf("decl_test_1: [%d]\n", decl_test_1);
+      printf("decl_test_2: [%d] [%d]\n", decl_test_2.0, decl_test_2.1);
+      printf("decl_many_1: [%d]\n", decl_many_1);
+      printf("decl_many_2: [%d]\n", decl_many_2);
+      printf("decl_many_3: [%d]\n", decl_many_3);
+      printf("decl_many_4: [%d]\n", decl_many_4);
+
       return 0;
     }
   |} in

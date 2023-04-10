@@ -243,7 +243,7 @@ let rec type_convertible_to from_t to_t =
         then false
         else begin
           let agreements = List.map2 type_convertible_to lhs_types rhs_types in
-          List.fold_left (==) true agreements
+          List.fold_left (&&) true agreements
         end
 
   | Array(lhs_elem_typ, lhs_sz), Array(rhs_elem_typ, rhs_sz) ->
@@ -263,7 +263,7 @@ let rec type_convertible_to from_t to_t =
                 else false
             ) lhs_ctors rhs_ctors
           in
-          List.fold_left (==) true agreements
+          List.fold_left (&&) true agreements
         else false
       else false
 
@@ -580,6 +580,129 @@ let rec is_concrete_type ?(verbose=false) typ =
   res
 ;;
 
+(* Given two types that are expected to be structurally "symmetric", attempt to
+"merge" the types. This means if an element of one type is undecided, but an
+element of the other type is concrete, then the resultant type reflects the
+concrete side. *)
+let merge_types lhs_orig_t rhs_orig_t : berk_t =
+  let rec _merge_types lhs_t rhs_t : berk_t =
+    begin match (lhs_t, rhs_t) with
+    | (Undecided, Undecided) ->
+        Undecided
+
+    (* Sanity check that unbound typevars agree with each other. *)
+    | (Unbound(a), Unbound(b)) ->
+        begin if a = b then
+          Unbound(a)
+        else
+          failwith (
+            Printf.sprintf "Cannot merge types: [%s] vs [%s]"
+              (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+          )
+        end
+
+    (* We're not in the business of assigning types to unbound typevars. *)
+    | (Unbound(_), _)
+    | (_, Unbound(_)) ->
+        failwith (
+          Printf.sprintf
+            "Unimplemented: Merging unbound vs bound types: [%s] vs [%s]"
+            (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+        )
+
+    (* The critical case: Defer to the concrete side if only one side is
+    undecided. *)
+    | (Undecided, _) -> rhs_t
+    | (_, Undecided) -> lhs_t
+
+    (* Base cases. *)
+    | (U64, U64)   -> U64
+    | (U32, U32)   -> U32
+    | (U16, U16)   -> U16
+    | (U8,  U8)    -> U8
+    | (I64, I64)   -> I64
+    | (I32, I32)   -> I32
+    | (I16, I16)   -> I16
+    | (I8,  I8)    -> I8
+    | (F128, F128) -> F128
+    | (F64,  F64)  -> F64
+    | (F32,  F32)  -> F32
+    | (Bool, Bool) -> Bool
+    | (Nil,  Nil)  -> Nil
+    | (String, String) -> String
+    | (VarArgSentinel, VarArgSentinel) -> VarArgSentinel
+
+    | (Ptr(lhs_t), Ptr(rhs_t)) ->
+        let merged_t = _merge_types lhs_t rhs_t in
+        Ptr(merged_t)
+
+    | (ByteArray(lhs_t), ByteArray(rhs_t)) ->
+        let merged_t = _merge_types lhs_t rhs_t in
+        ByteArray(merged_t)
+
+    | (Tuple(lhs_ts), Tuple(rhs_ts)) ->
+        let merged_ts = List.map2 _merge_types lhs_ts rhs_ts in
+        Tuple(merged_ts)
+
+    | (Array(lhs_t, lhs_sz), Array(rhs_t, rhs_sz)) ->
+        begin if lhs_sz = rhs_sz then
+          let merged_t = _merge_types lhs_t rhs_t in
+          Array(merged_t, lhs_sz)
+        else
+          failwith (
+            Printf.sprintf
+              "Cannot merge types: [%s] vs [%s]"
+              (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+          )
+        end
+
+    | (Function(lhs_ret_t, lhs_arg_ts), Function(rhs_ret_t, rhs_arg_ts)) ->
+        let merged_ret_t = _merge_types lhs_ret_t rhs_ret_t in
+        let merged_arg_ts = List.map2 _merge_types lhs_arg_ts rhs_arg_ts in
+        Function(merged_ret_t, merged_arg_ts)
+
+    | (
+        Variant(lhs_v_name, lhs_name_t_ctors),
+        Variant(rhs_v_name, rhs_name_t_ctors)
+      ) ->
+        begin if lhs_v_name = rhs_v_name then
+          let merged_name_t_ctors =
+            List.map2 (
+              fun (lhs_name, lhs_t) (rhs_name, rhs_t) ->
+                begin if lhs_name = rhs_name then
+                  let merged_t = _merge_types lhs_t rhs_t in
+                  (lhs_name, merged_t)
+                else
+                  failwith (
+                    Printf.sprintf
+                      "Cannot merge types: [%s] vs [%s]"
+                      (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+                  )
+                end
+            ) lhs_name_t_ctors rhs_name_t_ctors
+          in
+          Variant(lhs_v_name, merged_name_t_ctors)
+        else
+          failwith (
+            Printf.sprintf
+              "Cannot merge types: [%s] vs [%s]"
+              (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+          )
+        end
+
+    | _ ->
+        failwith (
+          Printf.sprintf
+            "Cannot merge types: [%s] vs [%s]"
+            (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+        )
+    end
+  in
+
+  _merge_types lhs_orig_t rhs_orig_t
+;;
+
+
 (* Given two types, each possibly some degree short of concrete, return a
 mapping from the string-type-variables in one to their corresponding concrete
 types in the other.
@@ -620,14 +743,25 @@ let map_tvars_to_types ?(init_map=StrMap.empty) lhs_typ rhs_typ =
           map_so_far
         end
 
+    (* Nothing to be gleaned when we don't know what the type is expected to
+    be at all, let alone mapping to a type variable. *)
+    | (Undecided, Undecided) ->
+        map_so_far
+
+    (* If one side or the other is undecided, then assume that the other side
+    is the correct type. Since neither side is unbound, just return the map. *)
+    | (Undecided, _)
+    | (_, Undecided) ->
+        map_so_far
+
     | ( (U64|U32|U16|U8), (U64|U32|U16|U8))
     | ( (I64|I32|I16|I8), (I64|I32|I16|I8))
     | ((F128|F64|F32),   (F128|F64|F32))
     | (Bool, Bool)
     | (String, String)
     | (Nil, Nil)
-    | (VarArgSentinel, VarArgSentinel)
-    | (Undecided, Undecided) -> map_so_far
+    | (VarArgSentinel, VarArgSentinel) ->
+        map_so_far
 
     | (Function(lhs_ret_t, lhs_args_ts), Function(rhs_ret_t, rhs_args_ts)) ->
         let map_so_far = _map_tvars_to_types map_so_far lhs_ret_t rhs_ret_t in
