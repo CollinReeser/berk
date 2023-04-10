@@ -376,8 +376,6 @@ let instr_lval instr =
 
 (* Wrap the given lval in an alloca, and yield that alloca lval. *)
 let lval_to_alloca mir_ctxt bb lval expected_t =
-  let {t=actual_t; _} = lval in
-
   let (mir_ctxt, bb, alloca_lval, instructions) = begin match expected_t with
   | Array(_, _) ->
       (* Allocate stack space for the value *)
@@ -1548,9 +1546,9 @@ and pattern_to_mir
               Printf.printf "Matched_t: [[ %s ]]\n" (fmt_type matched_t) ;
 
               let (mir_ctxt, generic_ctor_val_lname) = get_varname mir_ctxt in
-              (* FIXME: This probably isn't right; this should be the type of
-              the generic [N x i8] array of non-zero data contained in the ctor,
-              before it's bitcasted to its real type. *)
+
+              (* This will be the generic [N * i8] array aggregate form of the
+              constructor type. *)
               let generic_ctor_val_lval =
                 {t=ctor_val_t; kind=Tmp; lname=generic_ctor_val_lname}
               in
@@ -1565,11 +1563,7 @@ and pattern_to_mir
               can bitcast the ptr to the alloca and then extract the data back
               out in the right type. *)
 
-              (* TODO: We need to figure out how to get the type of the generic
-              array aggregate containing the ctor value. *)
               let generic_ctor_val_t = ByteArray(ctor_val_t) in
-
-              (* let generic_ctor_val_t = ctor_val_t in *)
 
               let (mir_ctxt, ctor_val_alloca_lname) = get_varname mir_ctxt in
               let generic_ctor_val_alloca_lval = {
