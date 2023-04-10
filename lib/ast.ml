@@ -64,8 +64,17 @@ and expr =
   | ArrayExpr of berk_t * expr list
   (* First expr is index, second is array *)
   | IndexExpr of berk_t * expr * expr
-  (* int is index, expr is array *)
-  | StaticIndexExpr of berk_t * int * expr
+  (* Represents static-integer indexing into a tuple expression, ie:
+
+    ```
+    let tup = (1, "hello", true);
+    let val1: bool = tup.2;
+    let val2: i32 = (21, "example", "index", "tuple", "expr", 21).0;
+    ```
+
+    int is index, expr is expected to be type tuple.
+  *)
+  | TupleIndexExpr of berk_t * int * expr
   | TupleExpr of berk_t * expr list
   (* Top-level variant type, ctor name, ctor expr,  *)
   | VariantCtorExpr of berk_t * string * expr
@@ -164,7 +173,7 @@ let expr_type exp =
   | ExprInvoke(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
   | IndexExpr(typ, _, _) -> typ
-  | StaticIndexExpr(typ, _, _) -> typ
+  | TupleIndexExpr(typ, _, _) -> typ
   | TupleExpr(typ, _) -> typ
   | VariantCtorExpr(typ, _, _) -> typ
   | MatchExpr(typ, _, _) -> typ
@@ -339,7 +348,7 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
         typ_s
 
-  | StaticIndexExpr(_, idx, arr) ->
+  | TupleIndexExpr(_, idx, arr) ->
       Printf.sprintf "%s%s.%d:%s"
         init_ind
         (fmt_expr ~print_typ:print_typ "" arr)
@@ -714,24 +723,24 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         in
         IndexExpr(injected_t, idx_exp, arr_exp_injected)
 
-    | (_, StaticIndexExpr(_, idx, agg_exp)) ->
-        let agg_t = expr_type agg_exp in
+    | (_, TupleIndexExpr(_, idx, tup_exp)) ->
+        let tuple_t = expr_type tup_exp in
 
-        (* For the given aggregate, assume the element at the given static index
-        must be the injection type, yielding an injected overall aggregate type.
+        (* For the given tuple, assume the element at the given static index
+        must be the injection type, yielding an injected overall tuple type.
         *)
-        let agg_injection_type = begin match agg_t with
+        let tuple_injection_type = begin match tuple_t with
           | Tuple(ts) ->
               let new_ts = replace ts idx injected_t in
               Tuple(new_ts)
-          | _ -> failwith ("Unexpected non-aggregate type: " ^ (fmt_type agg_t))
+          | _ -> failwith ("Unexpected non-tuple type: " ^ (fmt_type tuple_t))
         end in
 
-        (* Inject the expected aggregate type into the actual aggregate exp. *)
-        let agg_exp_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") agg_injection_type agg_exp
+        (* Inject the expected tuple type into the actual tuple exp. *)
+        let tup_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") tuple_injection_type tup_exp
         in
-        StaticIndexExpr(injected_t, idx, agg_exp_injected)
+        TupleIndexExpr(injected_t, idx, tup_exp_injected)
 
     | (Array(elem_t, sz), ArrayExpr(_, elem_lst)) ->
         let elem_t_lst = List.init sz (fun _ -> elem_t) in
@@ -1211,9 +1220,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         let exp_rewritten = _rewrite_exp exp unique_varnames in
         ValCastBitwise(t, exp_rewritten)
 
-    | StaticIndexExpr(t, idx, agg_exp) ->
-        let agg_exp_rewritten = _rewrite_exp agg_exp unique_varnames in
-        StaticIndexExpr(t, idx, agg_exp_rewritten)
+    | TupleIndexExpr(t, idx, tup_exp) ->
+        let tup_exp_rewritten = _rewrite_exp tup_exp unique_varnames in
+        TupleIndexExpr(t, idx, tup_exp_rewritten)
 
     | IndexExpr(t, idx_exp, arr_exp) ->
         let idx_exp_rewritten = _rewrite_exp idx_exp unique_varnames in

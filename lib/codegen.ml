@@ -745,19 +745,17 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       loaded
 
-  | StaticIndexExpr(_, idx, arr_expr) ->
-      let arr_typ = expr_type arr_expr in
-      let arr_sz = begin match arr_typ with
+  | TupleIndexExpr(_, idx, tuple_expr) ->
+      let tuple_t = expr_type tuple_expr in
+      let arr_sz = begin match tuple_t with
         | Tuple(_) -> failwith "Unimplemented: Static index into tuple"
         | _ ->
           begin
-            let pretty_typ = fmt_type arr_typ in
-            let err_msg = (
+            failwith (
               Printf.sprintf
-                "Indexing into other than static array: %s"
-                pretty_typ
-            ) in
-            failwith err_msg
+                "Indexing into other than tuple: %s"
+                  (fmt_type tuple_t)
+            )
           end
       end in
 
@@ -767,7 +765,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
         else failwith (Printf.sprintf "idx %d OoB for %d" idx arr_sz)
       end in
 
-      let llvm_arr_val = _codegen_expr arr_expr in
+      let llvm_arr_val = _codegen_expr tuple_expr in
 
       let extracted = (
         Llvm.build_extractvalue llvm_arr_val idx "idxtmp" builder

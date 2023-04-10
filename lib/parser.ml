@@ -1222,7 +1222,7 @@ and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
 
   begin match tokens with
   | Dot(_) :: Integer(_, i) :: rest ->
-      (rest, StaticIndexExpr(Undecided, i, exp))
+      (rest, TupleIndexExpr(Undecided, i, exp))
 
   | _ -> raise Backtrack
   end

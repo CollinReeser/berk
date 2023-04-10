@@ -121,7 +121,7 @@ and is_concrete_expr ?(verbose=false) expr =
   | ValCastTrunc(typ, expr)
   | ValCastBitwise(typ, expr)
   | ValCastExtend(typ, expr)
-  | StaticIndexExpr(typ, _, expr)
+  | TupleIndexExpr(typ, _, expr)
   | VariantCtorExpr(typ, _, expr) ->
       (_is_concrete_type typ) &&
         (_is_concrete_expr expr)
@@ -1089,23 +1089,27 @@ and type_check_expr
                 (fmt_expr ~print_typ:true "" idx_typechecked)
             )
 
-    | StaticIndexExpr(_, idx, agg) ->
-        let agg_typechecked = _type_check_expr agg in
-        let agg_t = expr_type agg_typechecked in
-        let static_idx_typechecked = begin
-          match agg_t with
+    | TupleIndexExpr(_, idx, agg) ->
+        let tuple_typechecked = _type_check_expr agg in
+        let tuple_t = expr_type tuple_typechecked in
+        let tuple_idx_typechecked = begin
+          match tuple_t with
           | Tuple(ts) ->
             begin
               if idx < 0 || idx >= List.length ts
               then failwith "out-of-bounds idx for tuple"
               else
                 let elem_typ = List.nth ts idx in
-                StaticIndexExpr(elem_typ, idx, agg_typechecked)
+                TupleIndexExpr(elem_typ, idx, tuple_typechecked)
             end
-          | _ -> failwith "Unexpectedly indexing into non-aggregate"
+          | _ ->
+              failwith (
+                Printf.sprintf "Unexpectedly indexing into non-tuple: [%s]"
+                  (fmt_type tuple_t)
+              )
         end in
 
-        static_idx_typechecked
+        tuple_idx_typechecked
 
     | TupleExpr(_, exprs) ->
         let elem_expected_t_lst = begin match expected_t with

@@ -955,9 +955,9 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, if_res_lval)
 
-      | StaticIndexExpr(_, idx, exp) ->
+      | TupleIndexExpr(_, idx, tuple_exp) ->
           let (mir_ctxt, bb, ({t=tup_t; _} as tup_lval)) =
-            _expr_to_mir mir_ctxt bb exp
+            _expr_to_mir mir_ctxt bb tuple_exp
           in
 
           let elem_t = unwrap_aggregate_indexable tup_t idx in
