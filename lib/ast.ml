@@ -177,15 +177,15 @@ let fmt_bin_op op =
   | Gt -> ">"
   | Ge -> ">="
 
-let rec fmt_join_exprs ?(print_typ = false) ind delim exprs : string =
+let rec fmt_join_exprs ?(ind = "")?(print_typ = false) delim exprs : string =
   match exprs with
   | [] -> ""
-  | [x] -> fmt_expr ~print_typ:print_typ ind x
+  | [x] -> fmt_expr ~ind:ind ~print_typ:print_typ x
   | x::xs ->
-      (fmt_expr ~print_typ:print_typ ind x) ^ delim ^
-      (fmt_join_exprs ~print_typ:print_typ ind delim xs)
+      (fmt_expr ~ind:ind ~print_typ:print_typ x) ^ delim ^
+      (fmt_join_exprs ~ind:ind ~print_typ:print_typ delim xs)
 
-and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
+and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
   let init_ind = if init_ind then ind else "" in
   let (typ_s, typ_s_rev) =
     if print_typ
@@ -229,29 +229,29 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
       Printf.sprintf "%scast_trunc<%s>(%s)%s"
         init_ind
         (fmt_type target_t)
-        (fmt_expr ~print_typ:print_typ "" exp)
+        (fmt_expr ~print_typ:print_typ exp)
         typ_s
 
   | ValCastBitwise (target_t, exp) ->
       Printf.sprintf "%scast_bitwise<%s>(%s)%s"
         init_ind
         (fmt_type target_t)
-        (fmt_expr ~print_typ:print_typ "" exp)
+        (fmt_expr ~print_typ:print_typ exp)
         typ_s
 
   | ValCastExtend (target_t, exp) ->
       Printf.sprintf "%scast_extend<%s>(%s)%s"
         init_ind
         (fmt_type target_t)
-        (fmt_expr ~print_typ:print_typ "" exp)
+        (fmt_expr ~print_typ:print_typ exp)
         typ_s
 
   | BinOp (_, op, lh, rh) ->
       Printf.sprintf "%s(%s %s %s)%s"
         init_ind
-        (fmt_expr ~print_typ:print_typ "" lh)
+        (fmt_expr ~print_typ:print_typ lh)
         (fmt_bin_op op)
-        (fmt_expr ~print_typ:print_typ "" rh)
+        (fmt_expr ~print_typ:print_typ rh)
         typ_s
 
   | BlockExpr (_, stmts, exp) ->
@@ -264,16 +264,22 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         init_ind
         typ_s_rev
         formatted_stmts
-        (fmt_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") exp)
+        (fmt_expr ~init_ind:true ~ind:(ind ^ "  ") ~print_typ:print_typ exp)
         ind
   | IfThenElseExpr (_, if_cond, then_expr, else_expr) ->
       Printf.sprintf "%s%sif (%s) {\n%s\n%s} else {\n%s\n%s}"
         init_ind
         typ_s_rev
-        (fmt_expr ~print_typ:print_typ "" if_cond)
-        (fmt_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") then_expr)
+        (fmt_expr ~print_typ:print_typ if_cond)
+        (
+          fmt_expr
+            ~init_ind:true ~ind:(ind ^ "  ") ~print_typ:print_typ then_expr
+        )
         ind
-        (fmt_expr ~init_ind:true ~print_typ:print_typ (ind ^ "  ") else_expr)
+        (
+          fmt_expr
+            ~init_ind:true ~ind:(ind ^ "  ") ~print_typ:print_typ else_expr
+        )
         ind
 
   | WhileExpr (_, init_stmts, while_cond, then_stmts) ->
@@ -303,7 +309,7 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         init_ind
         typ_s_rev
         formatted_init_stmts
-        (fmt_expr ~print_typ:print_typ "" while_cond)
+        (fmt_expr ~print_typ:print_typ while_cond)
         formatted_then_stmts
         ind
 
@@ -312,46 +318,46 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
         init_ind
         typ_s_rev
         id
-        (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
+        (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
 
   | ExprInvoke(_, exp, exprs) ->
       Printf.sprintf "%s%s%s(%s)"
         init_ind
         typ_s_rev
-        (fmt_expr ~print_typ:print_typ "" exp)
-        (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
+        (fmt_expr ~print_typ:print_typ exp)
+        (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
 
   | ArrayExpr(_, exprs) ->
       Printf.sprintf "%s[%s]%s"
         init_ind
-        (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
+        (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
         typ_s
 
   | TupleIndexExpr(_, idx, arr) ->
       Printf.sprintf "%s%s.%d:%s"
         init_ind
-        (fmt_expr ~print_typ:print_typ "" arr)
+        (fmt_expr ~print_typ:print_typ arr)
         idx
         typ_s
 
   | IndexExpr(_, idx, arr) ->
       Printf.sprintf "%s%s[%s]:%s"
         init_ind
-        (fmt_expr ~print_typ:print_typ "" arr)
-        (fmt_expr ~print_typ:print_typ "" idx)
+        (fmt_expr ~print_typ:print_typ arr)
+        (fmt_expr ~print_typ:print_typ idx)
         typ_s
 
   | TupleExpr(_, exprs) ->
       Printf.sprintf "%s(%s)%s"
         init_ind
-        (fmt_join_exprs ~print_typ:print_typ ind ", " exprs)
+        (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
         typ_s
 
   | VariantCtorExpr(_, ctor_name, expr) ->
       Printf.sprintf "%s%s(%s)%s"
         init_ind
         ctor_name
-        (fmt_expr ~print_typ:print_typ "" expr)
+        (fmt_expr ~print_typ:print_typ expr)
         typ_s
 
   | MatchExpr(_, matched_exp, pattern_exp_pairs) ->
@@ -363,7 +369,8 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
                 fmt_pattern ~print_typ:print_typ (ind) pattern
               in
               let exp_fmt =
-                fmt_expr ~init_ind:false ~print_typ:print_typ (ind ^ "  ") exp
+                fmt_expr
+                  ~init_ind:false ~ind:(ind ^ "  ") ~print_typ:print_typ exp
               in
               Printf.sprintf "%s -> %s\n" pattern_fmt exp_fmt
           ) pattern_exp_pairs
@@ -372,7 +379,7 @@ and fmt_expr ?(init_ind = false) ?(print_typ = false) ind ex : string =
       Printf.sprintf "%s%smatch %s {\n%s%s}"
         init_ind
         typ_s_rev
-        (fmt_expr ~print_typ:print_typ "" matched_exp)
+        (fmt_expr ~print_typ:print_typ matched_exp)
         pattern_exprs_fmt
         ind
 
@@ -457,7 +464,7 @@ and fmt_assign_lval_idx ?(print_typ = false) lval_idx =
       Printf.sprintf ".%d" i
 
   | ALIndex(exp) ->
-      Printf.sprintf "[%s]" (fmt_expr ~print_typ:print_typ "" exp)
+      Printf.sprintf "[%s]" (fmt_expr ~print_typ:print_typ exp)
   end
 
 and fmt_stmt ?(print_typ = false) ind stmt =
@@ -472,7 +479,7 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         (fmt_var_qual qual)
         ident
         typ_s
-        (fmt_expr ~print_typ:print_typ ind ex)
+        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
   | DeclDefStmt (idents_quals_ts) ->
       Printf.sprintf "%slet %s;\n"
@@ -488,14 +495,14 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         ind
         (fmt_join_idents_quals ", " idents_quals)
         typ_s
-        (fmt_expr ~print_typ:print_typ ind ex)
+        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
   | AssignStmt (ident, lval_idxs, ex) ->
       Printf.sprintf "%s%s%s = %s;\n"
         ind
         ident
         (fmt_assign_lval_idxs ~print_typ:print_typ lval_idxs)
-        (fmt_expr ~print_typ:print_typ ind ex)
+        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
   | AssignDeconStmt (ident_lval_idxs, ex) ->
       let lhs_exprs =
@@ -507,21 +514,21 @@ and fmt_stmt ?(print_typ = false) ind stmt =
       Printf.sprintf "%s(%s) = %s;\n"
         ind
         (fmt_join_strs ", " lhs_exprs)
-        (fmt_expr ~print_typ:print_typ ind ex)
+        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
   | ExprStmt (ex) ->
       Printf.sprintf "%s%s;\n"
         ind
-        (fmt_expr ~print_typ:print_typ ind ex)
+        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
   | ReturnStmt (ex) ->
       Printf.sprintf "%sreturn %s;\n"
         ind
-        (fmt_expr ~print_typ:print_typ ind ex)
+        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 ;;
 
 let pprint_expr ppf exp =
-  Format.fprintf ppf "%s" (fmt_expr ~print_typ:true "" exp)
+  Format.fprintf ppf "%s" (fmt_expr ~print_typ:true exp)
 ;;
 
 
@@ -857,12 +864,12 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         let _ =
           Printf.printf "%sGiven expr: [[ %s ]]\n"
             ind
-            (fmt_expr ~print_typ:true "" exp)
+            (fmt_expr ~print_typ:true exp)
         in
         failwith (
           Printf.sprintf "Cannot inject type [[ %s ]] into expr [[ %s ]]"
             (fmt_type injected_t)
-            (fmt_expr ~print_typ:true "" exp)
+            (fmt_expr ~print_typ:true exp)
         )
 
     | (Tuple(_), _)
@@ -874,7 +881,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             "Cannot inject incompatible aggregate types: [[ %s ]] into [[ %s ]] given [[ %s ]]"
             (fmt_type injected_t)
             (fmt_type exp_t)
-            (fmt_expr "" exp)
+            (fmt_expr exp)
         )
 
     | (Variant(_, _), _)
@@ -888,7 +895,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         failwith (
           Printf.sprintf
             "Cannot inject function type into non-func value: [[ %s ]]"
-            (fmt_expr ~print_typ:true "" exp)
+            (fmt_expr ~print_typ:true exp)
         )
 
     | (Ptr(_), _) -> failwith "Unimplemented"

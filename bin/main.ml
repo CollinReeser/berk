@@ -219,8 +219,8 @@ let main = begin
           type_check_expr tc_ctxt_up
             Undecided expr_raw |> expr_type |> fmt_type
         )
-        (fmt_expr "" expr_raw)
-        (fmt_expr "" (type_check_expr tc_ctxt_up Undecided expr_raw))
+        (fmt_expr expr_raw)
+        (fmt_expr (type_check_expr tc_ctxt_up Undecided expr_raw))
       in
 
       let collatz_seq_stmt_raw =

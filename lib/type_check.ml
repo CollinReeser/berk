@@ -174,7 +174,7 @@ and is_concrete_expr ?(verbose=false) expr =
   let _ = if verbose then
     begin
       Printf.printf "is_concrete_stmt[[ %s ]] == %B\n%!"
-        (fmt_expr ~print_typ:true "" expr)
+        (fmt_expr ~print_typ:true expr)
         res
     end
   else
@@ -402,7 +402,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
               )
               (fmt_type decl_t)
               (fmt_type exp_t)
-              (fmt_expr ~print_typ:true "" exp_typechecked)
+              (fmt_expr ~print_typ:true exp_typechecked)
             in
 
             failwith msg
@@ -1086,8 +1086,8 @@ and type_check_expr
             failwith (
               Printf.sprintf
                 "Unexpected components of index operation: [%s] [%s]"
-                (fmt_expr ~print_typ:true "" arr_typechecked)
-                (fmt_expr ~print_typ:true "" idx_typechecked)
+                (fmt_expr ~print_typ:true arr_typechecked)
+                (fmt_expr ~print_typ:true idx_typechecked)
             )
 
     | TupleIndexExpr(_, idx, agg) ->
