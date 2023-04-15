@@ -676,6 +676,8 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
       call
 
+  | UfcsCall(_, _, _, _) -> failwith "Unimplemented"
+
   | ExprInvoke(_, _, _) -> failwith "Unimplemented"
 
   | ArrayExpr(typ, exprs) ->

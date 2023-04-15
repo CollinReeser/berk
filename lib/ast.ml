@@ -49,6 +49,11 @@ and expr =
   | WhileExpr of berk_t * stmt list * expr * stmt list
   (* A direct call to an in-scope named function. *)
   | FuncCall of berk_t * ident_t * expr list
+  (* An invocation of a named function in UFCS style. ie, given an expression:
+    a1.func_name(a2, a3)
+  the expr is re-written to be `func_name(a1, a2, a3)`
+  *)
+  | UfcsCall of berk_t * expr * ident_t * expr list
   (* An indirect invocation of a function resolved from an expression. *)
   | ExprInvoke of berk_t * expr * expr list
   (* An expression representing a statically-sized array. *)
@@ -152,6 +157,7 @@ let expr_type exp =
   | IfThenElseExpr(typ, _, _, _) -> typ
   | WhileExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
+  | UfcsCall(typ, _, _, _) -> typ
   | ExprInvoke(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
   | IndexExpr(typ, _, _) -> typ
@@ -324,6 +330,14 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
       Printf.sprintf "%s%s%s(%s)"
         init_ind
         typ_s_rev
+        id
+        (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
+
+  | UfcsCall(_, expr, id, exprs) ->
+      Printf.sprintf "%s%s%s.%s(%s)"
+        init_ind
+        typ_s_rev
+        (fmt_expr ~print_typ:print_typ expr)
         id
         (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
 
@@ -1239,6 +1253,15 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           ) exps
         in
         FuncCall(t, func_name, exps_rewritten)
+
+    | UfcsCall(t, exp, func_name, exps) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        let exps_rewritten =
+          List.map (
+            fun exp -> _rewrite_exp exp unique_varnames
+          ) exps
+        in
+        UfcsCall(t, exp_rewritten, func_name, exps_rewritten)
 
     | BlockExpr(t, stmts, exp) ->
         let (stmts_rewritten_rev, unique_varnames) =

@@ -1121,6 +1121,12 @@ and parse_value ?(ind="") tokens : (token list * expr) =
       with Backtrack ->
       try
         let (rest, exp_chain) =
+          parse_ufcs_call ~ind:ind_next rest exp_so_far
+        in
+        _parse_value rest exp_chain
+      with Backtrack ->
+      try
+        let (rest, exp_chain) =
           parse_func_var_call ~ind:ind_next rest exp_so_far
         in
         _parse_value rest exp_chain
@@ -1198,6 +1204,25 @@ and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
   | Dot(_) :: LParen(_) :: rest ->
       let (rest, args) = parse_func_call_args ~ind:ind_next rest in
       (rest, ExprInvoke(Undecided, exp, args))
+
+  | _ -> raise Backtrack
+  end
+
+
+(* Parse a UFCS-style call, eg:
+  .func_name()
+  .other_func(arg1, arg2)
+*)
+and parse_ufcs_call ?(ind="") tokens exp : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  begin match tokens with
+  | Dot(_) :: LowIdent(_, name) :: LParen(_) :: RParen(_) :: rest ->
+      (rest, UfcsCall(Undecided, exp, name, []))
+
+  | Dot(_) :: LowIdent(_, name) :: LParen(_) :: rest ->
+      let (rest, args) = parse_func_call_args ~ind:ind_next rest in
+      (rest, UfcsCall(Undecided, exp, name, args))
 
   | _ -> raise Backtrack
   end

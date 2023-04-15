@@ -207,6 +207,11 @@ and is_concrete_expr ?(verbose=false) expr =
       (_is_concrete_type typ) &&
         (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
 
+  | UfcsCall(typ, exp, _, exprs) ->
+      (_is_concrete_type typ) &&
+        (_is_concrete_expr exp) &&
+        (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
+
   | ExprInvoke(typ, func_exp, arg_exprs) ->
       (_is_concrete_type typ) &&
         (_is_concrete_expr func_exp) &&
@@ -1076,6 +1081,68 @@ and type_check_expr
             else failwith "Could not convert expr type to arg type"
         ) exprs_t_non_variadic params_non_variadic_t_lst in
 
+        FuncCall(f_ret_t, f_name, exprs_typechecked)
+
+    | UfcsCall(_, exp, f_name, exprs) ->
+        let {f_name; f_params; f_ret_t} =
+          StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs
+        in
+
+        (* For now, a UFCS call is simply a different syntax for a normal
+        function call. Later, a UFCS call might also be a method call, where
+        we may need to do some additional checking. Unclear yet. *)
+
+        let exprs = exp :: exprs in
+
+        let (params_non_variadic_t_lst, is_var_arg) =
+          get_static_f_params f_params
+        in
+
+        let params_t_lst_padded = begin
+            let len_diff =
+              (List.length exprs) - (List.length params_non_variadic_t_lst)
+            in
+            if len_diff = 0 then
+              params_non_variadic_t_lst
+            else if len_diff > 0 then
+              let padding = List.init len_diff (fun _ -> Undecided) in
+              params_non_variadic_t_lst @ padding
+            else
+              failwith "Unexpected shorter expr list than non-variadic params"
+          end
+        in
+
+        let exprs_typechecked =
+          List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
+        in
+        let exprs_t = List.map expr_type exprs_typechecked in
+
+        let cmp_non_variadic_params_to_exprs =
+          List.compare_lengths params_non_variadic_t_lst exprs_t
+        in
+        let _ =
+          if (
+            is_var_arg && (cmp_non_variadic_params_to_exprs <= 0)
+          ) || (
+            cmp_non_variadic_params_to_exprs = 0
+          )
+          then ()
+          else failwith
+            "Func call args must not be less than num non-variadic func params"
+        in
+
+        let exprs_t_non_variadic =
+          take exprs_t (List.length params_non_variadic_t_lst)
+        in
+
+        let _ = List.iter2 (
+          fun expr_t param_t ->
+            if type_convertible_to expr_t param_t
+            then ()
+            else failwith "Could not convert expr type to arg type"
+        ) exprs_t_non_variadic params_non_variadic_t_lst in
+
+        (* Rewrite the UFCS call into a normal function call. *)
         FuncCall(f_ret_t, f_name, exprs_typechecked)
 
     | ExprInvoke(_, func_exp, exprs) ->

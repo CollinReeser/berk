@@ -668,6 +668,13 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, target_lval)
 
+      | UfcsCall(_, _, func_name, _) ->
+          failwith (
+            Printf.sprintf
+              "Expected UFCS invocation ([%s]) to be rewritten into func call"
+              func_name
+          )
+
       | FuncCall(t, func_name, exprs) ->
           let ((mir_ctxt, bb), arg_values) =
             List.fold_left_map (

@@ -117,6 +117,23 @@ let () =
       return val;
     }
 
+    fn ufcs_identity(v: u32): u32 {
+      return v;
+    }
+
+    fn ufcs_add(v1: u32, v2: u32): u32 {
+      return v1 + v2;
+    }
+
+    fn ufcs_mult(v1: u32, v2: u32): u32 {
+      return v1 * v2;
+    }
+
+    fn ufcs_sub_add(v1: u32, v2: u32, v3: u32): u32 {
+      let v4 = v2 - v3;
+      return v1 + v4;
+    }
+
     fn main(): i8 {
       let dup_hello_1 = "Hello, world!";
       let dup_hello_2 = "Hello, world!";
@@ -462,6 +479,20 @@ let () =
         "False? [%d], True? [%d], True? [%d], False? [%d]\n",
         test_false, test_true, negate_false_is_true, negate_true_is_false
       );
+
+      // Test UFCS "method" calls and chaining.
+
+      let ufcs_identity_test = 5.ufcs_identity();
+      let ufcs_identity_chained =
+        5.ufcs_identity().ufcs_identity().ufcs_identity().ufcs_identity();
+      let ufcs_add_test = 5.ufcs_add(10);
+      let ufcs_math_chain =
+        5.ufcs_identity().ufcs_add(10).ufcs_mult(3).ufcs_sub_add(20, 15);
+
+      printf("ufcs_identity_test: [%d] (5?)\n", ufcs_identity_test);
+      printf("ufcs_identity_chained: [%d]\n", ufcs_identity_chained);
+      printf("ufcs_add_test: [%d] (15?)\n", ufcs_add_test);
+      printf("ufcs_math_chain: [%d] (50?)\n", ufcs_math_chain);
 
       return 0;
     }
