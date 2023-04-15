@@ -59,6 +59,61 @@ let variant_decl_to_variant_type {v_name; v_ctors; _} ctor_name typ =
 ;;
 
 
+(* If the given type is an unbound type (some user-defined type), then try to
+yield the more concrete type known by that name. *)
+let bind_type mod_ctxt t =
+  begin match t with
+  | UnboundType(name, ts) ->
+      let {v_name=v_name; v_ctors=v_ctors; v_typ_vars=v_typ_vars} as v_decl =
+        begin match (StrMap.find_opt name mod_ctxt.variants) with
+        | Some(t) -> t
+        | None ->
+            failwith (
+              Printf.sprintf "No known type with name [%s]" name
+            )
+        end
+      in
+
+      Printf.printf "Variant decl: [%s]\n%!" (fmt_variant_decl v_decl);
+
+      let variant_t = Variant(v_name, v_ctors) in
+
+      Printf.printf "Variant type: [%s]\n%!" (fmt_type variant_t);
+
+      let tvars_to_ts =
+        begin if List.length v_typ_vars = List.length ts then
+          List.fold_left2 (
+            fun tvars_to_ts v_typ_var t ->
+              StrMap.add v_typ_var t tvars_to_ts
+          ) StrMap.empty v_typ_vars ts
+        else
+          failwith (
+            Printf.sprintf
+              (
+                "Type name [%s] matches [%s] but mismatch in instantiation " ^^
+                "types <%s> vs expected typevars <%s>"
+              )
+              name
+              (fmt_type variant_t)
+              (fmt_join_types ~pretty_unbound:true ", " ts)
+              (fmt_join_strs ", " v_typ_vars)
+          )
+        end
+      in
+
+      let concretified_variant_t =
+        concretify_unbound_types tvars_to_ts variant_t
+      in
+
+      Printf.printf "Variant type (concrete): [%s]\n%!" (fmt_type concretified_variant_t);
+
+      concretified_variant_t
+
+  | _ -> t
+  end
+;;
+
+
 (* Given a statement/expression, return true if all involved types are
 concretely bound/decided, false otherwise. *)
 
@@ -381,6 +436,9 @@ and update_vars_with_idents_quals vars_init idents_quals types =
 and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
   match stmt with
   | DeclStmt(ident, qual, decl_t, exp) ->
+      (* If decl_t is an unbound type (some user-defined type we only have
+      the name of), then bind it and shadow decl_t with our updated type. *)
+      let decl_t = bind_type tc_ctxt.mod_ctxt decl_t in
       let exp_typechecked = type_check_expr tc_ctxt decl_t exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
@@ -1453,6 +1511,7 @@ and generate_value_patts t : pattern list =
   match t with
   | Undecided -> failwith "Cannot generate values for undecided type"
   | Unbound(_) -> failwith "Cannot generate values for unbound typevar"
+  | UnboundType(_, _) -> failwith "Cannot generate values for unbound type"
   | VarArgSentinel -> failwith "Cannot generate values for var-arg sentinel"
 
   | Nil -> [PNil]

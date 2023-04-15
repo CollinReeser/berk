@@ -386,12 +386,30 @@ let () =
       printf("or_tf:  [%d] ([1] expected)\n", or_tf);
       printf("or_tt:  [%d] ([1] expected)\n", or_tt);
 
-      let some_test = Some(true);
+      // The template instantation can be inferred from the expression.
+      let some_test_1 = Some(true);
+      // An explicit template instantiation at decl time typechecks.
+      let some_test_2: Opt<bool> = Some(false);
+      // Not having a concrete typevar at decl time is okay if the expr knows
+      let some_test_3: Opt<`a> = Some(true);
+      // Using an alias for the expected typevar works?
+      let some_test_4: Opt<`b> = Some(true);
 
-      match some_test {
-      | Some(b) -> { printf("Matched `Some(%d)`\n", b); }
-      | None -> { printf("Incorrectly matched None?\n"); }
+      match (some_test_1, some_test_2, some_test_3) {
+      | (Some(b1), Some(b2), Some(b3)) -> {
+          printf("Matched `(Some(%d), Some(%d), Some(%d))`\n", b1, b2, b3);
+        }
+      | _ -> { printf("Incorrectly matched None?\n"); }
       }
+
+      // Explicit typevar instantiation at decl time is necessary when the
+      // expr is not enough.
+      let none_test: Opt<bool> = None;
+
+      // Not enough info to typecheck:
+      //let none_test = None;
+      //let none_test: Opt<`a> = None;
+
 
       //let none_test: Opt<bool> = None;
 

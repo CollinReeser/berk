@@ -406,6 +406,7 @@ let rec default_expr_for_t mir_ctxt t : (mir_ctxt * expr) =
   begin match t with
   | Undecided
   | Unbound(_)
+  | UnboundType(_, _)
   | VarArgSentinel
   | Ptr(_)
   | Variant(_, _)

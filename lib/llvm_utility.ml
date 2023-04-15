@@ -101,11 +101,15 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
         Llvm.pointer_type func_t
 
     | VarArgSentinel -> failwith "Should not need to determine type for var arg"
+
+    | UnboundType(name, _) ->
+        failwith ("Cannot determine llvm type for unbound type " ^ name)
+
     | Unbound(template) ->
         failwith (
-          "Cannot determine llvm type for unbound type template " ^
-          template
+          "Cannot determine llvm type for unbound type template " ^ template
         )
+
     | Undecided -> failwith "Cannot determine llvm type for undecided type"
   end in
 

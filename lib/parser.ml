@@ -414,6 +414,40 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
       | _ -> failwith "Failed to complete parse of tuple type."
       end
 
+  | CapIdent(_, name) :: Lesser(_) :: rest ->
+      let (rest, first_t) = parse_type ~ind:ind_next rest in
+
+      (* At this point, we want to match 0 or more `, <type>` sequences,
+      followed by a final closing angle bracket. *)
+      let rec _parse_remaining_template_inst_ts rest rest_ts_rev =
+        begin match rest with
+        | Comma(_) :: rest ->
+            let (rest, next_t) = parse_type ~ind:ind_next rest in
+            _parse_remaining_template_inst_ts rest (next_t :: rest_ts_rev)
+
+        | Greater(_) :: rest ->
+            (rest, rest_ts_rev)
+
+        | tok :: _ ->
+            let fmted = fmt_token tok in
+            failwith (
+              Printf.sprintf
+                "Unexpected token [%s] parsing type, expected `>`."
+                fmted
+            )
+        | [] -> failwith "Unexpected EOF while parsing type."
+        end
+      in
+
+      let (rest, rest_ts_rev) = _parse_remaining_template_inst_ts rest [] in
+      let rest_ts = List.rev rest_ts_rev in
+      let template_inst_ts = first_t :: rest_ts in
+
+      (rest, UnboundType(name, template_inst_ts))
+
+  | CapIdent(_, name) :: rest ->
+      (rest, UnboundType(name, []))
+
   | tok :: _ ->
       let fmted = fmt_token tok in
       failwith (

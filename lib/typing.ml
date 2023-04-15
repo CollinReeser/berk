@@ -30,7 +30,18 @@ type berk_t =
   | ByteArray of berk_t
   | Function of berk_t * berk_t list
   | VarArgSentinel
+
+  (* A user-defined type, that we're not sure what it is yet. Typically
+  generated during parse and resolved during typecheck.
+
+  The first field is the type name, and the second is the possibly-empty list of
+  template instantiation parameters.
+  *)
+  | UnboundType of string * berk_t list
+
+  (* A type variable, a la `t *)
   | Unbound of string
+
   | Undecided
 
 let rec fmt_join_types ?(pretty_unbound=false) delim types =
@@ -91,6 +102,18 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
         (fmt_type ~pretty_unbound:pretty_unbound ret_t)
 
   | VarArgSentinel -> "..."
+
+  | UnboundType(name, ts) ->
+      let ts_fmt =
+        if List.length ts = 0 then
+          ""
+        else
+          "<" ^ (fmt_join_types ~pretty_unbound:pretty_unbound ", " ts) ^ ">"
+      in
+      Printf.sprintf "%s%s"
+        name
+        ts_fmt
+
   | Unbound (type_var) ->
       if pretty_unbound
       then type_var
@@ -483,10 +506,14 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
   | Undecided -> typ
 
   | Unbound(tvar) ->
-    begin match (StrMap.find_opt tvar tvar_to_t) with
+      begin match (StrMap.find_opt tvar tvar_to_t) with
       | None -> Unbound(tvar)
       | Some(t) -> t
-    end
+      end
+
+  | UnboundType(name, ts) ->
+      let ts_concrete = List.map (concretify_unbound_types tvar_to_t) ts in
+      UnboundType(name, ts_concrete)
 
   | Ptr(pointed_t) ->
       let pointed_concretified_t =
@@ -543,6 +570,7 @@ let rec is_concrete_type ?(verbose=false) typ =
   let res = begin match typ with
   | Undecided  -> false
   | Unbound(_) -> false
+  | UnboundType(_, _) -> false
 
   | U64  | U32 | U16 | U8
   | I64  | I32 | I16 | I8
@@ -804,6 +832,9 @@ let get_tvars typ =
   let rec _get_tvars so_far typ =
     match typ with
     | Unbound(tvar) -> tvar :: so_far
+
+    | UnboundType(_, ts) ->
+        List.fold_left _get_tvars so_far ts
 
     | U64  | U32 | U16 | U8
     | I64  | I32 | I16 | I8

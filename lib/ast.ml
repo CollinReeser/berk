@@ -539,6 +539,7 @@ let rec default_expr_for_t t =
   begin match t with
   | Undecided
   | Unbound(_)
+  | UnboundType(_, _)
   | VarArgSentinel
   | Ptr(_)
   | Variant(_, _)
@@ -600,8 +601,10 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     match (injected_t, exp) with
     | (Undecided, _) -> failwith "Refuse to inject undecided type into expr"
 
+    | (UnboundType(_, _), _) ->
+        failwith "Unimplemented: Type injection with unbound types."
+
     | (Unbound(a), _) ->
-        let exp_t = expr_type exp in
         begin match exp_t with
         | Unbound(b) ->
             if a = b then
