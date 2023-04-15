@@ -37,6 +37,19 @@ let () =
     | None
     }
 
+    variant YesOrNo<`a> {
+    | Yes(`a)
+    | No(`a)
+    }
+
+    fn is_unsigned_sub_safe(lhs: u64, rhs: u64): YesOrNo<bool> {
+      if lhs >= rhs {
+        return Yes(true);
+      }
+
+      return No(false);
+    }
+
     fn fib_t(n: u64, s_last: u64, last: u64): u64 {
       if n == 1 {
         return last;
@@ -410,8 +423,36 @@ let () =
       //let none_test = None;
       //let none_test: Opt<`a> = None;
 
+      let sub_success_1 = is_unsigned_sub_safe(60, 25);
+      let sub_success_2 = is_unsigned_sub_safe(25, 25);
+      let sub_fail = is_unsigned_sub_safe(10, 25);
 
-      //let none_test: Opt<bool> = None;
+      match sub_success_1 {
+      | Yes(b) -> {
+          printf("Subtraction success: [%d]\n", b);
+        }
+      | No(b) -> {
+          printf("Unexpected failure to subtract! [%d]\n", b);
+        }
+      }
+
+      match sub_success_2 {
+      | Yes(b) -> {
+          printf("Subtraction success: [%d]\n", b);
+        }
+      | No(b) -> {
+          printf("Unexpected failure to subtract! [%d]\n", b);
+        }
+      }
+
+      match sub_fail {
+      | Yes(b) -> {
+          printf("Subtraction success: [%d]\n", b);
+        }
+      | No(b) -> {
+          printf("Correctly expected failure to subtract: [%d]\n", b);
+        }
+      }
 
       return 0;
     }

@@ -341,11 +341,15 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
   match mod_decl with
   | FuncExternDecl(f_decl_ast) ->
-      let {f_name; f_params; f_ret_t;} = f_decl_ast in
+      let {f_name; f_params; f_ret_t} = f_decl_ast in
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
       in
+
+      (* If the return type is a user-defined type, bind it now. *)
+      let f_ret_t = bind_type mod_ctxt f_ret_t in
+      let f_decl_ast = {f_name; f_params; f_ret_t} in
 
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
@@ -358,11 +362,15 @@ and type_check_mod_decl mod_ctxt mod_decl =
         (mod_ctxt_up, FuncExternDecl(f_decl_ast))
 
   | FuncDef(f_ast) ->
-      let {f_decl = {f_name; f_params; f_ret_t;}; _} = f_ast in
+      let {f_decl = {f_name; f_params; f_ret_t}; f_stmts} = f_ast in
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
       in
+
+      (* If the return type is a user-defined type, bind it now. *)
+      let f_ret_t = bind_type mod_ctxt f_ret_t in
+      let f_ast = {f_decl = {f_name; f_params; f_ret_t}; f_stmts} in
 
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
