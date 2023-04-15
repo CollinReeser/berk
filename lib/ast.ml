@@ -176,6 +176,8 @@ let fmt_bin_op op =
   | Le -> "<="
   | Gt -> ">"
   | Ge -> ">="
+  | LOr -> "||"
+  | LAnd -> "&&"
 
 let rec fmt_join_exprs ?(ind = "")?(print_typ = false) delim exprs : string =
   match exprs with

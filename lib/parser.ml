@@ -789,8 +789,64 @@ and parse_expr_stmt ?(ind="") tokens : (token list * stmt) =
 and parse_expr ?(ind="") tokens : (token list * expr) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
-  let (rest, exp) = parse_equality ~ind:ind_next tokens in
+  let (rest, exp) = parse_logical_or ~ind:ind_next tokens in
   (rest, exp)
+
+
+and parse_logical_or ?(ind="") tokens : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  let rec _parse_logical_or ?(ind="") tokens exp_lhs =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match tokens with
+    | BarBar(_) :: rest ->
+        let (rest, exp_rhs) = parse_logical_and ~ind:ind_next rest in
+        let exp = BinOp(Undecided, LOr, exp_lhs, exp_rhs) in
+        _parse_logical_or ~ind:ind_next rest exp
+
+    | _ -> (tokens, exp_lhs)
+    end
+  in
+
+  let (rest, exp_lhs) = parse_logical_and ~ind:ind_next tokens in
+  _parse_logical_or ~ind:ind_next rest exp_lhs
+
+
+and parse_logical_and ?(ind="") tokens : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  let rec _parse_logical_and ?(ind="") tokens exp_lhs =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match tokens with
+    | AmpAmp(_) :: rest ->
+        let (rest, exp_rhs) = parse_equality ~ind:ind_next rest in
+        let exp = BinOp(Undecided, LAnd, exp_lhs, exp_rhs) in
+        _parse_logical_and ~ind:ind_next rest exp
+
+    | _ -> (tokens, exp_lhs)
+    end
+  in
+
+  let (rest, exp_lhs) = parse_equality ~ind:ind_next tokens in
+  _parse_logical_and ~ind:ind_next rest exp_lhs
 
 
 and parse_equality ?(ind="") tokens : (token list * expr) =

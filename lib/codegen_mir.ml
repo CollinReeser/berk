@@ -424,19 +424,20 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       let bin_op_val = begin match (lhs_t, rhs_t) with
       | ((U8 | U16 | U32 | U64), (U8 | U16 | U32 | U64)) ->
-          begin match op with
-          | Add -> Llvm.build_add lhs_val rhs_val lname builder
-          | Sub -> Llvm.build_sub lhs_val rhs_val lname builder
-          | Mul -> Llvm.build_mul lhs_val rhs_val lname builder
-          | Div -> Llvm.build_udiv lhs_val rhs_val lname builder
-          | Mod -> Llvm.build_urem lhs_val rhs_val lname builder
-          | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
-          | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
-          | Lt -> Llvm.build_icmp Llvm.Icmp.Ult lhs_val rhs_val lname builder
-          | Le -> Llvm.build_icmp Llvm.Icmp.Ule lhs_val rhs_val lname builder
-          | Gt -> Llvm.build_icmp Llvm.Icmp.Ugt lhs_val rhs_val lname builder
-          | Ge -> Llvm.build_icmp Llvm.Icmp.Uge lhs_val rhs_val lname builder
-          end
+        begin match op with
+        | Add -> Llvm.build_add lhs_val rhs_val lname builder
+        | Sub -> Llvm.build_sub lhs_val rhs_val lname builder
+        | Mul -> Llvm.build_mul lhs_val rhs_val lname builder
+        | Div -> Llvm.build_udiv lhs_val rhs_val lname builder
+        | Mod -> Llvm.build_urem lhs_val rhs_val lname builder
+        | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
+        | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
+        | Lt -> Llvm.build_icmp Llvm.Icmp.Ult lhs_val rhs_val lname builder
+        | Le -> Llvm.build_icmp Llvm.Icmp.Ule lhs_val rhs_val lname builder
+        | Gt -> Llvm.build_icmp Llvm.Icmp.Ugt lhs_val rhs_val lname builder
+        | Ge -> Llvm.build_icmp Llvm.Icmp.Uge lhs_val rhs_val lname builder
+        | LOr | LAnd -> failwith "Operation not supported for types."
+        end
 
       | ((I8 | I16 | I32 | I64), (I8 | I16 | I32 | I64)) ->
         begin match op with
@@ -451,6 +452,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Le -> Llvm.build_icmp Llvm.Icmp.Sle lhs_val rhs_val lname builder
         | Gt -> Llvm.build_icmp Llvm.Icmp.Sgt lhs_val rhs_val lname builder
         | Ge -> Llvm.build_icmp Llvm.Icmp.Sge lhs_val rhs_val lname builder
+        | LOr | LAnd -> failwith "Operation not supported for types."
         end
 
       | ((F128 | F64 | F32), (F128 | F64 | F32)) ->
@@ -466,6 +468,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Le -> Llvm.build_fcmp Llvm.Fcmp.Ule lhs_val rhs_val lname builder
         | Gt -> Llvm.build_fcmp Llvm.Fcmp.Ugt lhs_val rhs_val lname builder
         | Ge -> Llvm.build_fcmp Llvm.Fcmp.Uge lhs_val rhs_val lname builder
+        | LOr | LAnd -> failwith "Operation not supported for types."
         end
 
 
@@ -473,6 +476,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         begin match op with
         | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
         | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
+        | LOr | LAnd -> Llvm.build_or lhs_val rhs_val lname builder
         | _ -> failwith "Non-equality binop not supported for bool"
         end
 

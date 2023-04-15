@@ -845,10 +845,11 @@ and type_check_expr
         let lhs_typechecked = _type_check_expr lhs_typechecked in
         let rhs_typechecked = _type_check_expr rhs_typechecked in
 
+        let lhs_t = expr_type lhs_typechecked in
+        let rhs_t = expr_type rhs_typechecked in
+
         begin match op with
         | Add | Sub | Mul | Div | Mod ->
-            let lhs_t = expr_type lhs_typechecked in
-            let rhs_t = expr_type rhs_typechecked in
             let common_t = common_type_of_lr lhs_t rhs_t in
             BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
 
@@ -856,6 +857,19 @@ and type_check_expr
             (* TODO: There should be an additional check that these are actually
             comparable, as relevant. *)
             BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
+
+        | LOr | LAnd ->
+            begin match (lhs_t, rhs_t) with
+            | (Bool, Bool) ->
+                BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
+
+            | _ ->
+                failwith (
+                  Printf.sprintf
+                    "Cannot logical-and/or on non-bool operands: [%s] vs [%s]"
+                    (fmt_type lhs_t) (fmt_type rhs_t)
+                )
+            end
         end
 
     | BlockExpr(_, stmts, exp) ->

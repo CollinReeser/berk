@@ -509,6 +509,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
               Llvm.build_icmp Llvm.Icmp.Ugt lhs_comm rhs_comm "uicmptmp" builder
           | Ge ->
               Llvm.build_icmp Llvm.Icmp.Uge lhs_comm rhs_comm "uicmptmp" builder
+          | LOr | LAnd -> failwith "Not implemented: ||, &&"
           end
       | I64 | I32 | I16 | I8 ->
           let signed_cast init_t init_llvm_val = begin
@@ -537,6 +538,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
               Llvm.build_icmp Llvm.Icmp.Sgt lhs_comm rhs_comm "iicmptmp" builder
           | Ge ->
               Llvm.build_icmp Llvm.Icmp.Sge lhs_comm rhs_comm "iicmptmp" builder
+          | LOr | LAnd -> failwith "Not implemented: ||, &&"
           end
       | F128 | F64 | F32 ->
           let lhs_comm = Llvm.build_fpcast lhs_val llvm_t "fcasttmp" builder in
@@ -559,6 +561,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
               Llvm.build_fcmp Llvm.Fcmp.Ugt lhs_comm rhs_comm "fcmptmp" builder
           | Ge ->
               Llvm.build_fcmp Llvm.Fcmp.Uge lhs_comm rhs_comm "fcmptmp" builder
+          | LOr | LAnd -> failwith "Not implemented: ||, &&"
           end
       | typ ->
         failwith (

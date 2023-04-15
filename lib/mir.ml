@@ -807,6 +807,73 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, lval)
 
+      (* Short-circuiting logical comparison (eg, `&&`, `||`) *)
+      | BinOp(t, ((LOr | LAnd) as op), lhs, rhs) ->
+          let (mir_ctxt, done_bb_name) = get_bbname mir_ctxt in
+          let (mir_ctxt, eval_rhs_bb_name) = get_bbname mir_ctxt in
+          let done_bb = {name=done_bb_name; instrs=[]} in
+          let eval_rhs_bb = {name=eval_rhs_bb_name; instrs=[]} in
+
+          (* Depending on how this value resolve, we may be able to short
+          circuit and don't need to evaluate the RHS. *)
+          let (mir_ctxt, bb, lhs_lval) = _expr_to_mir mir_ctxt bb lhs in
+
+          (* Where to store the result of the logical-or operation. *)
+          let (mir_ctxt, result_alloca_name) = get_varname mir_ctxt in
+          let result_alloca_lval =
+            {t=Ptr(Bool); kind=Tmp; lname=result_alloca_name}
+          in
+          let alloca_instr = Alloca(result_alloca_lval, t) in
+
+          (* Store the LHS value. *)
+          let lhs_store_instr = Store(result_alloca_lval, lhs_lval) in
+
+          (* Either we're done, or we need to try to evaluate the RHS. *)
+          let cond_br_instr =
+            begin match op with
+            | LOr ->
+                (* Logical-or short circuits if the LHS is true. *)
+                CondBr(lhs_lval, done_bb, eval_rhs_bb)
+            | LAnd ->
+                (* Logical-and short circuits if the LHS is false. *)
+                CondBr(lhs_lval, eval_rhs_bb, done_bb)
+            | _ -> failwith "Impossible."
+            end
+          in
+
+          let bb = {
+            bb with instrs =
+              bb.instrs @ [alloca_instr; lhs_store_instr; cond_br_instr]
+          } in
+
+          (* Evaluate the RHS in the dedicated, skippable bb. *)
+          let (mir_ctxt, eval_rhs_bb, rhs_lval) =
+            _expr_to_mir mir_ctxt eval_rhs_bb rhs
+          in
+
+          (* Store the RHS value, then jump to the result block. *)
+          let rhs_store_instr = Store(result_alloca_lval, rhs_lval) in
+          let br_instr = Br(done_bb) in
+          let eval_rhs_bb = {
+            eval_rhs_bb with instrs =
+              eval_rhs_bb.instrs @ [rhs_store_instr; br_instr]
+          } in
+
+          (* Load the result of the logical op. *)
+          let (mir_ctxt, result_varname) = get_varname mir_ctxt in
+          let result_lval = {t=Bool; kind=Tmp; lname=result_varname} in
+          let result_instr = Load(result_lval, result_alloca_lval) in
+          let done_bb =
+            {done_bb with instrs = done_bb.instrs @ [result_instr]}
+          in
+
+          let mir_ctxt = update_bb mir_ctxt bb in
+          let mir_ctxt = update_bb mir_ctxt eval_rhs_bb in
+          let mir_ctxt = update_bb mir_ctxt done_bb in
+
+          (mir_ctxt, done_bb, result_lval)
+
+
       | BinOp(t, op, lhs, rhs) ->
           let (mir_ctxt, bb, lhs_lval) = _expr_to_mir mir_ctxt bb lhs in
           let (mir_ctxt, bb, rhs_lval) = _expr_to_mir mir_ctxt bb rhs in

@@ -93,6 +93,12 @@ let () =
       return;
     }
 
+    fn short_circuit(val: bool, str: string): bool {
+      printf("%s", str);
+
+      return val;
+    }
+
     fn main(): i8 {
       let dup_hello_1 = "Hello, world!";
       let dup_hello_2 = "Hello, world!";
@@ -311,6 +317,69 @@ let () =
       printf("decl_many_2: [%d]\n", decl_many_2);
       printf("decl_many_3: [%d]\n", decl_many_3);
       printf("decl_many_4: [%d]\n", decl_many_4);
+
+      let sanity_true = true;
+      let sanity_false = false;
+
+      printf("sanity_true: [%d]\n", sanity_true);
+      printf("sanity_false: [%d]\n", sanity_false);
+
+      let and_true = true && true;
+      let and_false_1 = false && true;
+      let and_false_2 = true && false;
+      let and_false_3 = false && false;
+
+      let or_false = false || false;
+      let or_true_1 = true || false;
+      let or_true_2 = false || true;
+      let or_true_3 = true || true;
+
+      printf("and_true:    [%d] ([1] expected)\n", and_true);
+      printf("and_false_1: [%d] ([0] expected)\n", and_false_1);
+      printf("and_false_2: [%d] ([0] expected)\n", and_false_2);
+      printf("and_false_3: [%d] ([0] expected)\n", and_false_3);
+      printf("or_false:    [%d] ([0] expected)\n", or_false);
+      printf("or_true_1:   [%d] ([1] expected)\n", or_true_1);
+      printf("or_true_2:   [%d] ([1] expected)\n", or_true_2);
+      printf("or_true_3:   [%d] ([1] expected)\n", or_true_3);
+
+      short_circuit(true, "short circuit sanity");
+
+      printf("Expect LHS only: ");
+      let and_ff =
+        short_circuit(false, "do LHS") && short_circuit(false, ", NO RHS");
+      printf("\nExpect LHS only: ");
+      let and_ft =
+        short_circuit(false, "do LHS") && short_circuit(true, ", NO RHS");
+      printf("\nExpect LHS and RHS: ");
+      let and_tf =
+        short_circuit(true, "do LHS") && short_circuit(false, ", do RHS");
+      printf("\nExpect LHS and RHS: ");
+      let and_tt =
+        short_circuit(true, "do LHS") && short_circuit(true, ", do RHS");
+
+      printf("\nExpect LHS and RHS: ");
+      let or_ff =
+        short_circuit(false, "do LHS") || short_circuit(false, ", do RHS");
+      printf("\nExpect LHS and RHS: ");
+      let or_ft =
+        short_circuit(false, "do LHS") || short_circuit(true, ", do RHS");
+      printf("\nExpect LHS only: ");
+      let or_tf =
+        short_circuit(true, "do LHS") || short_circuit(false, ", NO RHS");
+      printf("\nExpect LHS only: ");
+      let or_tt =
+        short_circuit(true, "do LHS") || short_circuit(true, ", NO RHS");
+      printf("\n");
+
+      printf("and_ff: [%d] ([0] expected)\n", and_ff);
+      printf("and_ft: [%d] ([0] expected)\n", and_ft);
+      printf("and_tf: [%d] ([0] expected)\n", and_tf);
+      printf("and_tt: [%d] ([1] expected)\n", and_tt);
+      printf("or_ff:  [%d] ([0] expected)\n", or_ff);
+      printf("or_ft:  [%d] ([1] expected)\n", or_ft);
+      printf("or_tf:  [%d] ([1] expected)\n", or_tf);
+      printf("or_tt:  [%d] ([1] expected)\n", or_tt);
 
       return 0;
     }

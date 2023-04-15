@@ -10,6 +10,8 @@ type bin_op =
 | Le
 | Gt
 | Ge
+| LOr
+| LAnd
 
 type un_op =
 | Truncate

@@ -52,7 +52,9 @@ type token =
 | Semicolon of position
 | TriEllipses of position
 | BiEllipses of position
+| BarBar of position
 | Bar of position
+| AmpAmp of position
 | Plus of position
 | Minus of position
 | Star of position
@@ -156,7 +158,9 @@ let fmt_token tok =
   | Semicolon(p)   -> Printf.sprintf ";   (syn)      : %s"   (fmt_pos p)
   | TriEllipses(p) -> Printf.sprintf "... (syn)      : %s"   (fmt_pos p)
   | BiEllipses(p)  -> Printf.sprintf "..  (syn)      : %s"   (fmt_pos p)
+  | BarBar(p)      -> Printf.sprintf "||  (syn)      : %s"   (fmt_pos p)
   | Bar(p)         -> Printf.sprintf "|   (syn)      : %s"   (fmt_pos p)
+  | AmpAmp(p)      -> Printf.sprintf "&&  (syn)      : %s"   (fmt_pos p)
   | Plus(p)        -> Printf.sprintf "+   (syn)      : %s"   (fmt_pos p)
   | Minus(p)       -> Printf.sprintf "-   (syn)      : %s"   (fmt_pos p)
   | Star(p)        -> Printf.sprintf "*   (syn)      : %s"   (fmt_pos p)
@@ -413,8 +417,14 @@ let tokenize buf =
     | ".." ->
         let tok = BiEllipses(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "||" ->
+        let tok = BarBar(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "|" ->
         let tok = Bar(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "&&" ->
+        let tok = AmpAmp(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "+" ->
         let tok = Plus(get_pos buf) in
