@@ -1184,6 +1184,10 @@ and parse_func_call_args ?(ind="") tokens : (token list * expr list) =
   _parse_func_call_args ~ind:ind_next tokens []
 
 
+(* Parse invocation of a function pointer, eg:
+  .()
+  .(arg1, arg2)
+*)
 and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
@@ -1199,6 +1203,10 @@ and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
   end
 
 
+(* Parse indexing into an array, eg:
+  [6]
+  [val + 5]
+*)
 and parse_array_index ?(ind="") tokens exp : (token list * expr) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
@@ -1217,6 +1225,10 @@ and parse_array_index ?(ind="") tokens exp : (token list * expr) =
   end
 
 
+(* Parse indexing into a tuple by constant integer, eg:
+  .0
+  .3
+*)
 and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
   let _ = print_trace ind __FUNCTION__ tokens in
 
