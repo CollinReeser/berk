@@ -471,6 +471,7 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
       | _ -> failwith "Cannot extend non-numeric types"
       end
     end
+  | UnOp(_, _, _) -> failwith "Unimplemented: UnOp"
   | BinOp(_, op, lhs, rhs) ->
       let lhs_val = _codegen_expr lhs in
       let rhs_val = _codegen_expr rhs in

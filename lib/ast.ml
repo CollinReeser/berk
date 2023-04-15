@@ -38,6 +38,7 @@ and expr =
   | ValRawArray of berk_t
 
   | ValCast of berk_t * cast_op * expr
+  | UnOp of berk_t * un_op * expr
   | BinOp of berk_t * bin_op * expr * expr
   (* Sequence of statements followed by an expression, where if the expression
   is None, then the BlockExpr resolves to a nil value. *)
@@ -145,6 +146,7 @@ let expr_type exp =
   | ValName(typ, _) -> typ
   | ValRawArray(typ) -> typ
   | ValCast(typ, _, _) -> typ
+  | UnOp(typ, _, _) -> typ
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
@@ -164,6 +166,11 @@ let fmt_cast_op op =
   | Truncate -> "trunc"
   | Bitwise -> "bitwise"
   | Extend -> "extend"
+;;
+
+let fmt_un_op op =
+  match op with
+  | LNot -> "!"
 ;;
 
 let fmt_bin_op op =
@@ -236,6 +243,13 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
         init_ind
         op_fmt
         (fmt_type target_t)
+        (fmt_expr ~print_typ:print_typ exp)
+        typ_s
+
+  | UnOp (_, op, exp) ->
+      Printf.sprintf "%s(%s %s)%s"
+        init_ind
+        (fmt_un_op op)
         (fmt_expr ~print_typ:print_typ exp)
         typ_s
 
@@ -737,6 +751,11 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         in
         TupleExpr(injected_t, exp_injected_lst)
 
+    (* It only makes sense to inject bools into logical negation. *)
+    | (Bool as t, UnOp(Bool, LNot, exp)) ->
+        let exp_injected = inject_type_into_expr ~ind:(ind ^ "  ") t exp in
+        UnOp(t, LNot, exp_injected)
+
     (* BinOps are an interesting case because they can "switch types"
     arbitrarily deep into a nested bin-op tree, we don't want to eg
     propagate the expectation of a bool due to an eg LessEq op into the
@@ -1179,6 +1198,10 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         let idx_exp_rewritten = _rewrite_exp idx_exp unique_varnames in
         let arr_exp_rewritten = _rewrite_exp arr_exp unique_varnames in
         IndexExpr(t, idx_exp_rewritten, arr_exp_rewritten)
+
+    | UnOp(t, op, exp) ->
+        let exp_rewritten = _rewrite_exp exp unique_varnames in
+        UnOp(t, op, exp_rewritten)
 
     | BinOp(t, op, exp_lhs, exp_rhs) ->
         let exp_lhs_rewritten = _rewrite_exp exp_lhs unique_varnames in

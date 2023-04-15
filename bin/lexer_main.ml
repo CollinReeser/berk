@@ -454,6 +454,15 @@ let () =
         }
       }
 
+      let test_false = false;
+      let test_true = true;
+      let negate_false_is_true = !test_false;
+      let negate_true_is_false = !test_true;
+      printf(
+        "False? [%d], True? [%d], True? [%d], False? [%d]\n",
+        test_false, test_true, negate_false_is_true, negate_true_is_false
+      );
+
       return 0;
     }
   |} in

@@ -1032,17 +1032,17 @@ and parse_prod ?(ind="") tokens : (token list * expr) =
 
     begin match tokens with
     | Star(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let (rest, exp_rhs) = parse_unary ~ind:ind_next rest in
         let exp = BinOp(Undecided, Mul, exp_lhs, exp_rhs) in
         _parse_prod ~ind:ind_next rest exp
 
     | Slash(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let (rest, exp_rhs) = parse_unary ~ind:ind_next rest in
         let exp = BinOp(Undecided, Div, exp_lhs, exp_rhs) in
         _parse_prod ~ind:ind_next rest exp
 
     | Percent(_) :: rest ->
-        let (rest, exp_rhs) = parse_value ~ind:ind_next rest in
+        let (rest, exp_rhs) = parse_unary ~ind:ind_next rest in
         let exp = BinOp(Undecided, Mod, exp_lhs, exp_rhs) in
         _parse_prod ~ind:ind_next rest exp
 
@@ -1050,8 +1050,21 @@ and parse_prod ?(ind="") tokens : (token list * expr) =
     end
   in
 
-  let (rest, exp_lhs) = parse_value ~ind:ind_next tokens in
+  let (rest, exp_lhs) = parse_unary ~ind:ind_next tokens in
   _parse_prod ~ind:ind_next rest exp_lhs
+
+
+and parse_unary ?(ind="") tokens : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  begin match tokens with
+  | Bang(_) :: rest ->
+      let (rest, exp) = parse_value ~ind:ind_next rest in
+      (rest, UnOp(Undecided, LNot, exp))
+
+  | _ ->
+      parse_value ~ind:ind_next tokens
+  end
 
 
 and parse_value ?(ind="") tokens : (token list * expr) =

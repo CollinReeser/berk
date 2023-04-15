@@ -49,6 +49,7 @@ type token =
 | Lesser of position
 | GreatEqual of position
 | Greater of position
+| Bang of position
 | Semicolon of position
 | TriEllipses of position
 | BiEllipses of position
@@ -155,6 +156,7 @@ let fmt_token tok =
   | Lesser(p)      -> Printf.sprintf "<   (syn)      : %s"   (fmt_pos p)
   | GreatEqual(p)  -> Printf.sprintf "<=  (syn)      : %s"   (fmt_pos p)
   | Greater(p)     -> Printf.sprintf ">   (syn)      : %s"   (fmt_pos p)
+  | Bang(p)        -> Printf.sprintf "!   (syn)      : %s"   (fmt_pos p)
   | Semicolon(p)   -> Printf.sprintf ";   (syn)      : %s"   (fmt_pos p)
   | TriEllipses(p) -> Printf.sprintf "... (syn)      : %s"   (fmt_pos p)
   | BiEllipses(p)  -> Printf.sprintf "..  (syn)      : %s"   (fmt_pos p)
@@ -407,6 +409,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | ">=" ->
         let tok = GreatEqual(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "!" ->
+        let tok = Bang(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | ";" ->
         let tok = Semicolon(get_pos buf) in

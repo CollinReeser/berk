@@ -399,6 +399,22 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
+  | UnOp({lname=out_name; _}, op, {lname=in_name; _}) ->
+      let in_llvm_val = StrMap.find in_name func_ctxt.cur_vars in
+
+      let out_llvm_val =
+        begin match op with
+        | LNot -> Llvm.build_not in_llvm_val out_name builder
+        end
+        |> enforce_mir_llvm_name_agreement out_name
+      in
+      let func_ctxt = {
+        func_ctxt with
+          cur_vars = StrMap.add out_name out_llvm_val func_ctxt.cur_vars
+      } in
+
+      func_ctxt
+
   | BinOp(
       {lname; t; _},
       op, {lname=lhs_name; t=lhs_t; _}, {lname=rhs_name; t=rhs_t; _}

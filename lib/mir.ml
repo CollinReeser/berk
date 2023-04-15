@@ -52,6 +52,7 @@ type instr =
 (* Load -> lhs is loaded value, rhs memory target *)
 | Load of lval * lval
 | Assign of lval * rval
+| UnOp of lval * un_op * lval
 | BinOp of lval * bin_op * lval * lval
 (* Cast the RHS value by the cast_op into the LHS. *)
 | Cast of lval * cast_op * lval
@@ -157,6 +158,12 @@ let fmt_instr instr =
       sprintf "  %s = %s\n"
         (fmt_lval lval)
         (fmt_rval rval)
+
+  | UnOp(out_lval, op, in_lval) ->
+      sprintf "  %s = %s %s\n"
+        (fmt_lval out_lval)
+        (fmt_un_op op)
+        (fmt_lval in_lval)
 
   | BinOp(lval, op, lhs_lval, rhs_lval) ->
       sprintf "  %s = %s %s %s\n"
@@ -362,6 +369,7 @@ let instr_lval instr =
   | Alloca(lval, _) -> lval
   | Store(lval, _) -> lval
   | Load(lval, _) -> lval
+  | UnOp(lval, _, _) -> lval
   | BinOp(lval, _, _, _) -> lval
   | Cast(lval, _, _) -> lval
   | PtrTo(lval, _, _) -> lval
@@ -784,6 +792,17 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let bb = {bb with instrs=bb.instrs @ [arr_instr]} in
 
           (mir_ctxt, bb, lval)
+
+      | UnOp(t, op, exp) ->
+          let (mir_ctxt, bb, exp_lval) = _expr_to_mir mir_ctxt bb exp in
+
+          let (mir_ctxt, varname) = get_varname mir_ctxt in
+          let result_lval = {t=t; kind=Tmp; lname=varname} in
+          let instr = UnOp(result_lval, op, exp_lval) in
+
+          let bb = {bb with instrs = bb.instrs @ [instr]} in
+
+          (mir_ctxt, bb, result_lval)
 
       (* Short-circuiting logical comparison (eg, `&&`, `||`) *)
       | BinOp(t, ((LOr | LAnd) as op), lhs, rhs) ->

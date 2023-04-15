@@ -172,6 +172,7 @@ and is_concrete_expr ?(verbose=false) expr =
   | ValRawArray(typ) -> _is_concrete_type typ
 
   | ValCast(typ, _, expr)
+  | UnOp(typ, _, expr)
   | TupleIndexExpr(typ, _, expr)
   | VariantCtorExpr(typ, _, expr) ->
       (_is_concrete_type typ) &&
@@ -876,6 +877,20 @@ and type_check_expr
           failwith (
             Printf.sprintf "Cannot [%s] incompatible types" (fmt_cast_op op)
           )
+
+    | UnOp(_, op, exp) ->
+        let exp_typechecked = _type_check_expr exp in
+        let exp_t = expr_type exp_typechecked in
+
+        begin match (op, exp_t) with
+        | (LNot, Bool) -> UnOp(exp_t, op, exp_typechecked)
+        | _ ->
+            failwith (
+              Printf.sprintf "Invalid combination of op/type for [%s]/[%s]"
+              (fmt_un_op op)
+              (fmt_type exp_t)
+            )
+        end
 
     | BinOp(_, op, lhs, rhs) ->
         let lhs_typechecked = _type_check_expr lhs in

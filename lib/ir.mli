@@ -13,6 +13,9 @@ type bin_op =
 | LOr
 | LAnd
 
+type un_op =
+| LNot
+
 type cast_op =
 | Truncate
 | Extend
