@@ -409,6 +409,16 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
           end
       in
 
+      let _ = if not (is_concrete_type resolved_t) then
+        failwith (
+          Printf.sprintf "Resolved type for `let %s` not concrete: [%s]"
+            ident
+            (fmt_type ~pretty_unbound:true resolved_t)
+        )
+      else ()
+      in
+
+
       let vars_up = StrMap.add ident (resolved_t, qual) tc_ctxt.vars in
       let tc_ctxt_up = {tc_ctxt with vars = vars_up} in
 

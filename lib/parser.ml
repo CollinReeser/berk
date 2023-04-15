@@ -79,16 +79,21 @@ variant <`a, `b> {
 
 *)
 and parse_variant ?(ind="") tokens : (token list * module_decl) =
-  let _ = print_trace ind __FUNCTION__ tokens in
+  let ind_next = print_trace ind __FUNCTION__ tokens in
 
   (* Parse eg:
     `a, `b, `c
   *)
-  let _parse_variant_typ_vars tokens =
-    let rec __parse_variant_type_vars tokens t_vars_so_far_rev =
+  let _parse_variant_typ_vars ?(ind="") tokens =
+    let ind_next = print_trace ind __FUNCTION__ tokens in
+
+    let rec __parse_variant_type_vars ?(ind="") tokens t_vars_so_far_rev =
+      let _ = print_trace ind __FUNCTION__ tokens in
+
       begin match tokens with
       | Backtick(_) :: LowIdent(_, typ_var_name) :: Comma(_) :: rest ->
-          __parse_variant_type_vars rest (typ_var_name :: t_vars_so_far_rev)
+          let t_vars_so_far_rev' = (typ_var_name :: t_vars_so_far_rev) in
+          __parse_variant_type_vars ~ind:ind rest t_vars_so_far_rev'
 
       | Backtick(_) :: LowIdent(_, typ_var_name) :: rest ->
           (rest, (typ_var_name :: t_vars_so_far_rev))
@@ -98,7 +103,9 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
       end
     in
 
-    let (rest, t_vars_rev) = __parse_variant_type_vars tokens [] in
+    let (rest, t_vars_rev) =
+      __parse_variant_type_vars ~ind:ind_next tokens []
+    in
     let t_vars = List.rev t_vars_rev in
     (rest, List.rev t_vars)
   in
@@ -108,24 +115,33 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
     | Other(bool)
     | Thing
   *)
-  let _parse_variant_constructors tokens =
-    let rec __parse_variant_constructors tokens v_ctors_so_far_rev =
+  let _parse_variant_constructors ?(ind="") tokens =
+    let ind_next = print_trace ind __FUNCTION__ tokens in
+
+    let rec __parse_variant_constructors ?(ind="") tokens v_ctors_so_far_rev =
+      let ind_next = print_trace ind __FUNCTION__ tokens in
+
       begin match tokens with
       | Bar(_) :: CapIdent(_, v_ctor_name) :: LParen(_) :: rest ->
           let (rest, first_t) = parse_type rest in
 
-          let rec _parse_variant_ctor_types tokens collected_ts_rev =
+          let rec _parse_variant_ctor_types ?(ind="") tokens collected_ts_rev =
+            let _ = print_trace ind __FUNCTION__ tokens in
+
             begin match tokens with
             | Comma(_) :: rest ->
                 let (rest, next_t) = parse_type rest in
-                _parse_variant_ctor_types rest (next_t :: collected_ts_rev)
+                let collected_ts_rev' = (next_t :: collected_ts_rev) in
+                _parse_variant_ctor_types ~ind:ind rest collected_ts_rev'
 
             | _ ->
                 (tokens, collected_ts_rev)
             end
           in
 
-          let (rest, collected_ts_rev) = _parse_variant_ctor_types rest [] in
+          let (rest, collected_ts_rev) =
+            _parse_variant_ctor_types ~ind:ind_next rest []
+          in
           let collected_ts = List.rev collected_ts_rev in
 
           let all_ts = first_t :: collected_ts in
@@ -134,7 +150,7 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
           | RParen(_) :: rest ->
               let v_ctor = (v_ctor_name, Tuple(all_ts)) in
               let v_ctors_so_far_rev' = v_ctor :: v_ctors_so_far_rev in
-              __parse_variant_constructors rest v_ctors_so_far_rev'
+              __parse_variant_constructors ~ind:ind rest v_ctors_so_far_rev'
 
           | _ ->
               failwith "Could not find matching `)` in variant ctor decl"
@@ -143,20 +159,24 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
       | Bar(_) :: CapIdent(_, v_ctor_name) :: rest ->
           let v_ctor = (v_ctor_name, Nil) in
           let v_ctors_so_far_rev' = v_ctor :: v_ctors_so_far_rev in
-          __parse_variant_constructors rest v_ctors_so_far_rev'
+          __parse_variant_constructors ~ind:ind rest v_ctors_so_far_rev'
 
       | _ ->
           (tokens, v_ctors_so_far_rev)
       end
     in
 
-    let (rest, v_ctors_rev) = __parse_variant_constructors tokens [] in
+    let (rest, v_ctors_rev) =
+      __parse_variant_constructors ~ind:ind_next tokens []
+    in
     let v_ctors = List.rev v_ctors_rev in
     (rest, v_ctors)
   in
 
   (* Parse the closing brace at the end of the variant decl. *)
-  let _parse_variant_end tokens v_name v_ctors v_typ_vars =
+  let _parse_variant_end ?(ind="") tokens v_name v_ctors v_typ_vars =
+    let _ = print_trace ind __FUNCTION__ tokens in
+
     begin match tokens with
     | RBrace(_) :: rest ->
         (
@@ -178,7 +198,7 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
   (* Parse everything after the `variant` keyword. *)
   begin match tokens with
   | CapIdent(_, v_name) :: Lesser(_) :: rest ->
-      let (rest, v_typ_vars) = _parse_variant_typ_vars rest in
+      let (rest, v_typ_vars) = _parse_variant_typ_vars ~ind:ind_next rest in
 
       let rest =
         begin match rest with
@@ -195,12 +215,12 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
         end
       in
 
-      let (rest, v_ctors) = _parse_variant_constructors rest in
-      _parse_variant_end rest v_name v_ctors v_typ_vars
+      let (rest, v_ctors) = _parse_variant_constructors ~ind:ind_next rest in
+      _parse_variant_end ~ind:ind_next rest v_name v_ctors v_typ_vars
 
   | CapIdent(_, v_name) :: LBrace(_) :: rest ->
-      let (rest, v_ctors) = _parse_variant_constructors rest in
-      _parse_variant_end rest v_name v_ctors []
+      let (rest, v_ctors) = _parse_variant_constructors ~ind:ind_next rest in
+      _parse_variant_end ~ind:ind_next rest v_name v_ctors []
 
 
   | tok :: _ ->
@@ -338,11 +358,15 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   | KWBool(_) :: rest -> (rest, Bool)
   | KWString(_) :: rest -> (rest, String)
 
+  (* Type variable *)
+  | Backtick(_) :: LowIdent(_, name) :: rest -> (rest, Unbound(name))
+
   (* Static array. *)
   | LBracket(_) :: Integer(_, i) :: RBracket(_) :: rest ->
       let (rest, arr_t) = parse_type ~ind:ind_next rest in
       (rest, Array(arr_t, i))
 
+  (* Parse tuple. *)
   | LParen(_) :: rest ->
       let (rest, init_t) = parse_type ~ind:ind_next rest in
 
@@ -1441,6 +1465,7 @@ and parse_match_expr ?(ind="") tokens : (token list * expr) =
   end
 
 
+(* Parse a variant constructor expression value. *)
 and parse_variant_ctor ?(ind="") tokens : (token list * expr) =
   let _ = print_trace ind __FUNCTION__ tokens in
 

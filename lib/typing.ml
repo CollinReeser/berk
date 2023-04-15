@@ -33,13 +33,13 @@ type berk_t =
   | Unbound of string
   | Undecided
 
-let rec fmt_join_types delim types =
+let rec fmt_join_types ?(pretty_unbound=false) delim types =
   match types with
   | [] -> ""
-  | [x] -> fmt_type x
+  | [x] -> fmt_type ~pretty_unbound:pretty_unbound x
   | x::xs ->
-      let lhs = fmt_type x in
-      lhs ^ delim ^ (fmt_join_types delim xs)
+      let lhs = fmt_type ~pretty_unbound:pretty_unbound x in
+      lhs ^ delim ^ (fmt_join_types ~pretty_unbound:pretty_unbound delim xs)
 
 and fmt_type ?(pretty_unbound=false) berk_type : string =
   match berk_type with
@@ -59,28 +59,36 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
   | Nil -> "()"
   | Array (typ, sz) ->
       let sz_s = Printf.sprintf "%d" sz in
-      "[" ^ (fmt_type typ) ^ " x " ^ sz_s ^ "]"
-  | Tuple (types) -> "(" ^ (fmt_join_types ", " types) ^ ")"
+      "[" ^ (fmt_type ~pretty_unbound:pretty_unbound typ) ^ " x " ^ sz_s ^ "]"
+  | Tuple (types) ->
+      "(" ^ (fmt_join_types ~pretty_unbound:pretty_unbound ", " types) ^ ")"
   | Variant (type_name, variants) ->
       let variant_fmts = List.map (
         fun (var_name, typ) ->
           begin match typ with
           | Nil -> Printf.sprintf "%s" var_name
-          | _ -> Printf.sprintf "%s(%s)" var_name (fmt_type typ)
+          | _ ->
+              Printf.sprintf "%s(%s)"
+                var_name
+                (fmt_type ~pretty_unbound:pretty_unbound typ)
           end
       ) variants in
       let variants_fmt = fmt_join_strs " | " variant_fmts in
 
       Printf.sprintf "variant %s {%s}" type_name variants_fmt
 
-  | Ptr (typ) -> Printf.sprintf "ptr %s" (fmt_type typ)
+  | Ptr (typ) ->
+      Printf.sprintf "ptr %s"
+        (fmt_type ~pretty_unbound:pretty_unbound typ)
 
-  | ByteArray (typ) -> Printf.sprintf "bytesof(%s)" (fmt_type typ)
+  | ByteArray (typ) ->
+      Printf.sprintf "bytesof(%s)"
+        (fmt_type ~pretty_unbound:pretty_unbound typ)
 
   | Function (ret_t, arg_t_lst) ->
       Printf.sprintf "(%s)->%s"
-        (fmt_join_types ", " arg_t_lst)
-        (fmt_type ret_t)
+        (fmt_join_types ~pretty_unbound:pretty_unbound ", " arg_t_lst)
+        (fmt_type ~pretty_unbound:pretty_unbound ret_t)
 
   | VarArgSentinel -> "..."
   | Unbound (type_var) ->

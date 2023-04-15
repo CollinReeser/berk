@@ -32,6 +32,11 @@ let () =
     | False
     }
 
+    variant Opt<`a> {
+    | Some(`a)
+    | None
+    }
+
     fn fib_t(n: u64, s_last: u64, last: u64): u64 {
       if n == 1 {
         return last;
@@ -380,6 +385,15 @@ let () =
       printf("or_ft:  [%d] ([1] expected)\n", or_ft);
       printf("or_tf:  [%d] ([1] expected)\n", or_tf);
       printf("or_tt:  [%d] ([1] expected)\n", or_tt);
+
+      let some_test = Some(true);
+
+      match some_test {
+      | Some(b) -> { printf("Matched `Some(%d)`\n", b); }
+      | None -> { printf("Incorrectly matched None?\n"); }
+      }
+
+      //let none_test: Opt<bool> = None;
 
       return 0;
     }
