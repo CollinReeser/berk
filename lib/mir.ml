@@ -53,7 +53,8 @@ type instr =
 | Load of lval * lval
 | Assign of lval * rval
 | BinOp of lval * bin_op * lval * lval
-| UnOp of lval * un_op * lval
+(* Cast the RHS value by the cast_op into the LHS. *)
+| Cast of lval * cast_op * lval
 (* Yields an lval of some ptr type, that when loaded yields a value of the type
 within the ptr, and can store a value of the type pointed to by the ptr. The RHS
 lval is the object to index into, to either load from or store into. The LHS is
@@ -164,7 +165,7 @@ let fmt_instr instr =
         (fmt_bin_op op)
         (fmt_lval rhs_lval)
 
-  | UnOp({t=target_t; _} as lval, un_op, rhs_lval) ->
+  | Cast({t=target_t; _} as lval, un_op, rhs_lval) ->
       let fmt_un_op un_op = begin match un_op with
         | Truncate -> "truncate of"
         | Extend -> "extend of"
@@ -362,7 +363,7 @@ let instr_lval instr =
   | Store(lval, _) -> lval
   | Load(lval, _) -> lval
   | BinOp(lval, _, _, _) -> lval
-  | UnOp(lval, _, _) -> lval
+  | Cast(lval, _, _) -> lval
   | PtrTo(lval, _, _) -> lval
   | ConstructAggregate(lval, _) -> lval
   | IntoAggregate(lval, _, _, _) -> lval
@@ -555,7 +556,7 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
           let bitcast_lval = {
             t=ptr_to_unflattened_t; kind=Tmp; lname=bitcast_varname
           } in
-          let bitcast_instr = UnOp(
+          let bitcast_instr = Cast(
             bitcast_lval, Bitwise, array_lval
           ) in
 
@@ -648,12 +649,12 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, alloca_arr_lval)
 
-      | UnOp(t, op, exp) ->
+      | ValCast(t, op, exp) ->
           let (mir_ctxt, bb, exp_lval) = _expr_to_mir mir_ctxt bb exp in
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
           let target_lval = {t=t; kind=Tmp; lname=varname} in
-          let instr = UnOp(target_lval, op, exp_lval) in
+          let instr = Cast(target_lval, op, exp_lval) in
 
           let bb = {bb with instrs=bb.instrs @ [instr]} in
 
@@ -864,7 +865,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           if lhs_t <> common_t then
             let (mir_ctxt, extend_name) = get_varname mir_ctxt in
             let extend_lval = {t=common_t; kind=Tmp; lname=extend_name} in
-            let extend_instr = UnOp(extend_lval, Extend, lhs_lval) in
+            let extend_instr = Cast(extend_lval, Extend, lhs_lval) in
             let instructions = instructions @ [extend_instr] in
 
             (mir_ctxt, instructions, extend_lval)
@@ -876,7 +877,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           if rhs_t <> common_t then
             let (mir_ctxt, extend_name) = get_varname mir_ctxt in
             let extend_lval = {t=common_t; kind=Tmp; lname=extend_name} in
-            let extend_instr = UnOp(extend_lval, Extend, rhs_lval) in
+            let extend_instr = Cast(extend_lval, Extend, rhs_lval) in
             let instructions = instructions @ [extend_instr] in
 
             (mir_ctxt, instructions, extend_lval)
@@ -1093,7 +1094,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                 {t=Ptr(variant_t); kind=Tmp; lname = tmp_alloca_bitcast_varname}
               in
               let tmp_alloca_bitcast_instr =
-                UnOp(tmp_alloca_bitcast_lval, Bitwise, tmp_alloca_lval)
+                Cast(tmp_alloca_bitcast_lval, Bitwise, tmp_alloca_lval)
               in
               (mir_ctxt, tmp_alloca_bitcast_lval, [tmp_alloca_bitcast_instr])
             else
@@ -1622,7 +1623,7 @@ and pattern_to_mir
                 {t=Ptr(ctor_val_t); kind=Tmp; lname=ctor_val_bitcast_lname}
               in
               let ctor_val_bitcast_instr =
-                UnOp(
+                Cast(
                   ctor_val_bitcast_lval, Bitwise, generic_ctor_val_alloca_lval
                 )
               in

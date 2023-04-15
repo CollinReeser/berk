@@ -372,7 +372,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | UnOp({lname; t; _}, op, {lname=rhs_name; _}) ->
+  | Cast({lname; t; _}, op, {lname=rhs_name; _}) ->
       let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
       let op_val = StrMap.find rhs_name func_ctxt.cur_vars in
 

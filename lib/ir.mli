@@ -13,7 +13,7 @@ type bin_op =
 | LOr
 | LAnd
 
-type un_op =
+type cast_op =
 | Truncate
 | Extend
 | Bitwise

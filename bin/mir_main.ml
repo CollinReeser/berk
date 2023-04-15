@@ -147,9 +147,9 @@ let main = begin
             "my_array", {mut=false}, Undecided,
             ArrayExpr(
               Undecided, [
-                UnOp(U32, Truncate, ValInt(U64, 65));
+                ValCast(U32, Truncate, ValInt(U64, 65));
                 ValInt(U16, 66);
-                UnOp(U8, Bitwise, ValInt(I8, 67));
+                ValCast(U8, Bitwise, ValInt(I8, 67));
               ]
             )
           );

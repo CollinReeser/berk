@@ -101,7 +101,7 @@ let main = begin
         DeclStmt(
           "my_bitcast_var", def_var_qual,
           U32,
-          UnOp(U32, Bitwise, ValInt(I32, -32000))
+          ValCast(U32, Bitwise, ValInt(I32, -32000))
         )
       ) in
       let decl_dodge_recursion_raw = (
@@ -302,12 +302,12 @@ let main = begin
                   ValVar(Undecided, "my_array_idx_var"),
                   BinOp(
                     Undecided, Add,
-                    UnOp(I8, Truncate, expr_raw),
+                    ValCast(I8, Truncate, expr_raw),
                     ValVar(Undecided, "my_recursive_dodge_var")
                   )
                 ) *)
 
-                (* UnOp(
+                (* ValCast(
                   I8,
                   Bitwise,
                   FuncCall(
@@ -315,9 +315,9 @@ let main = begin
                   )
                 ) *)
 
-                UnOp(
+                ValCast(
                   I8, Bitwise,
-                  UnOp(U8, Truncate, ValVar(Undecided, "collatz_max_seed"))
+                  ValCast(U8, Truncate, ValVar(Undecided, "collatz_max_seed"))
                 )
               );
             ],

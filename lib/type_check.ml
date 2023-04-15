@@ -171,7 +171,7 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ValRawArray(typ) -> _is_concrete_type typ
 
-  | UnOp(typ, _, expr)
+  | ValCast(typ, _, expr)
   | TupleIndexExpr(typ, _, expr)
   | VariantCtorExpr(typ, _, expr) ->
       (_is_concrete_type typ) &&
@@ -858,7 +858,7 @@ and type_check_expr
 
     | ValRawArray(t) -> ValRawArray(t)
 
-    | UnOp(target_t, op, exp) ->
+    | ValCast(target_t, op, exp) ->
         let exp_typechecked = _type_check_expr exp in
         let exp_t = expr_type exp_typechecked in
 
@@ -871,10 +871,10 @@ and type_check_expr
         in
 
         if op_func_check exp_t target_t then
-          UnOp(target_t, op, exp_typechecked)
+          ValCast(target_t, op, exp_typechecked)
         else
           failwith (
-            Printf.sprintf "Cannot [%s] incompatible types" (fmt_un_op op)
+            Printf.sprintf "Cannot [%s] incompatible types" (fmt_cast_op op)
           )
 
     | BinOp(_, op, lhs, rhs) ->
