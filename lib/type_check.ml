@@ -171,9 +171,7 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ValRawArray(typ) -> _is_concrete_type typ
 
-  | ValCastTrunc(typ, expr)
-  | ValCastBitwise(typ, expr)
-  | ValCastExtend(typ, expr)
+  | UnOp(typ, _, expr)
   | TupleIndexExpr(typ, _, expr)
   | VariantCtorExpr(typ, _, expr) ->
       (_is_concrete_type typ) &&
@@ -860,26 +858,24 @@ and type_check_expr
 
     | ValRawArray(t) -> ValRawArray(t)
 
-    | ValCastTrunc(target_t, exp) ->
+    | UnOp(target_t, op, exp) ->
         let exp_typechecked = _type_check_expr exp in
         let exp_t = expr_type exp_typechecked in
-        if type_truncatable_to exp_t target_t
-          then ValCastTrunc(target_t, exp_typechecked)
-          else failwith "Cannot truncate-cast incompatible types"
 
-    | ValCastBitwise(target_t, exp) ->
-        let exp_typechecked = _type_check_expr exp in
-        let exp_t = expr_type exp_typechecked in
-        if type_bitwise_to exp_t target_t
-          then ValCastBitwise(target_t, exp_typechecked)
-          else failwith "Cannot bitwise-cast incompatible types"
+        let op_func_check =
+          begin match op with
+          | Truncate -> type_truncatable_to
+          | Bitwise -> type_bitwise_to
+          | Extend -> type_extendable_to
+          end
+        in
 
-    | ValCastExtend(target_t, exp) ->
-        let exp_typechecked = _type_check_expr exp in
-        let exp_t = expr_type exp_typechecked in
-        if type_extendable_to exp_t target_t
-          then ValCastExtend(target_t, exp_typechecked)
-          else failwith "Cannot extend incompatible types"
+        if op_func_check exp_t target_t then
+          UnOp(target_t, op, exp_typechecked)
+        else
+          failwith (
+            Printf.sprintf "Cannot [%s] incompatible types" (fmt_un_op op)
+          )
 
     | BinOp(_, op, lhs, rhs) ->
         let lhs_typechecked = _type_check_expr lhs in

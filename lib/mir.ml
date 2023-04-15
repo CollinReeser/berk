@@ -648,40 +648,16 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, alloca_arr_lval)
 
-      (* FIXME: These casts are are identical in structure; is there a way to
-      cleanly collapse their implementations? *)
-      | ValCastTrunc(t, exp) ->
-          let (mir_ctxt, bb, to_trunc_lval) = _expr_to_mir mir_ctxt bb exp in
+      | UnOp(t, op, exp) ->
+          let (mir_ctxt, bb, exp_lval) = _expr_to_mir mir_ctxt bb exp in
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
-          let lval = {t=t; kind=Tmp; lname=varname} in
-          let instr = UnOp(lval, Truncate, to_trunc_lval) in
+          let target_lval = {t=t; kind=Tmp; lname=varname} in
+          let instr = UnOp(target_lval, op, exp_lval) in
 
           let bb = {bb with instrs=bb.instrs @ [instr]} in
 
-          (mir_ctxt, bb, lval)
-
-      | ValCastBitwise(t, exp) ->
-          let (mir_ctxt, bb, to_bitwise_lval) = _expr_to_mir mir_ctxt bb exp in
-
-          let (mir_ctxt, varname) = get_varname mir_ctxt in
-          let lval = {t=t; kind=Tmp; lname=varname} in
-          let instr = UnOp(lval, Bitwise, to_bitwise_lval) in
-
-          let bb = {bb with instrs=bb.instrs @ [instr]} in
-
-          (mir_ctxt, bb, lval)
-
-      | ValCastExtend(t, exp) ->
-          let (mir_ctxt, bb, to_extend_lval) = _expr_to_mir mir_ctxt bb exp in
-
-          let (mir_ctxt, varname) = get_varname mir_ctxt in
-          let lval = {t=t; kind=Tmp; lname=varname} in
-          let instr = UnOp(lval, Extend, to_extend_lval) in
-
-          let bb = {bb with instrs=bb.instrs @ [instr]} in
-
-          (mir_ctxt, bb, lval)
+          (mir_ctxt, bb, target_lval)
 
       | FuncCall(t, func_name, exprs) ->
           let ((mir_ctxt, bb), arg_values) =

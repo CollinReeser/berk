@@ -445,19 +445,19 @@ and codegen_expr llvm_ctxt builder func_ctxt expr =
 
   | ValRawArray(_) -> failwith "Unimplemented: ValRawArray"
 
-  | ValCastTrunc(target_t, exp) ->
+  | UnOp(target_t, Truncate, exp) ->
     begin
       let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in
       let exp_val = _codegen_expr exp in
       Llvm.build_trunc exp_val llvm_t "trunctmp" builder
     end
-  | ValCastBitwise(target_t, exp) ->
+  | UnOp(target_t, Bitwise, exp) ->
     begin
       let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in
       let exp_val = _codegen_expr exp in
       Llvm.build_bitcast exp_val llvm_t "bitcasttmp" builder
     end
-  | ValCastExtend(target_t, exp) ->
+  | UnOp(target_t, Extend, exp) ->
     begin
       let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t target_t in
       let exp_val = _codegen_expr exp in

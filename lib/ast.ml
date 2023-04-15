@@ -37,9 +37,7 @@ and expr =
   *)
   | ValRawArray of berk_t
 
-  | ValCastTrunc of berk_t * expr
-  | ValCastBitwise of berk_t * expr
-  | ValCastExtend of berk_t * expr
+  | UnOp of berk_t * un_op * expr
   | BinOp of berk_t * bin_op * expr * expr
   (* Sequence of statements followed by an expression, where if the expression
   is None, then the BlockExpr resolves to a nil value. *)
@@ -146,9 +144,7 @@ let expr_type exp =
   | ValFunc(typ, _) -> typ
   | ValName(typ, _) -> typ
   | ValRawArray(typ) -> typ
-  | ValCastTrunc(typ, _) -> typ
-  | ValCastBitwise(typ, _) -> typ
-  | ValCastExtend(typ, _) -> typ
+  | UnOp(typ, _, _) -> typ
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
@@ -161,6 +157,13 @@ let expr_type exp =
   | TupleExpr(typ, _) -> typ
   | VariantCtorExpr(typ, _, _) -> typ
   | MatchExpr(typ, _, _) -> typ
+;;
+
+let fmt_un_op op =
+  match op with
+  | Truncate -> "trunc"
+  | Bitwise -> "bitwise"
+  | Extend -> "extend"
 ;;
 
 let fmt_bin_op op =
@@ -227,21 +230,21 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
       Printf.sprintf "%s<uninitialized of %s>%s"
         init_ind (fmt_type t) typ_s
 
-  | ValCastTrunc (target_t, exp) ->
+  | UnOp(target_t, Truncate, exp) ->
       Printf.sprintf "%scast_trunc<%s>(%s)%s"
         init_ind
         (fmt_type target_t)
         (fmt_expr ~print_typ:print_typ exp)
         typ_s
 
-  | ValCastBitwise (target_t, exp) ->
+  | UnOp(target_t, Bitwise, exp) ->
       Printf.sprintf "%scast_bitwise<%s>(%s)%s"
         init_ind
         (fmt_type target_t)
         (fmt_expr ~print_typ:print_typ exp)
         typ_s
 
-  | ValCastExtend (target_t, exp) ->
+  | UnOp(target_t, Extend, exp) ->
       Printf.sprintf "%scast_extend<%s>(%s)%s"
         init_ind
         (fmt_type target_t)
@@ -633,31 +636,30 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
           if has_ret_t = inj_ret_t then
             exp
           else if type_extendable_to has_ret_t inj_ret_t then
-            ValCastExtend(inj_ret_t, exp)
+            UnOp(inj_ret_t, Extend, exp)
           else
             failwith "Cannot extend func ret type to injected"
         else
           failwith "Cannot inject function type with non-matching args"
 
-    | (_, ValCastTrunc  (t, _))
-    | (_, ValCastExtend (t, _))
-    | (_, ValCastBitwise(t, _)) ->
+    | (_, UnOp(t, op, _)) ->
         if t = injected_t then
           exp
         else if type_extendable_to t injected_t then
-          ValCastExtend(injected_t, exp)
+          UnOp(injected_t, Extend, exp)
         else
           failwith (
-            Printf.sprintf "Cannot inject [[ %s ]] into casted type [[ %s ]]"
+            Printf.sprintf "Cannot inject [[ %s ]] into type [[ %s ]] ([%s])"
               (fmt_type injected_t)
               (fmt_type t)
+              (fmt_un_op op)
           )
 
     | (_, ValVar(t, _)) ->
         if t = injected_t then
           exp
         else if type_extendable_to t injected_t then
-          ValCastExtend(injected_t, exp)
+          UnOp(injected_t, Extend, exp)
         else
           failwith (
             Printf.sprintf "Cannot inject [[ %s ]] into var type [[ %s ]]"
@@ -669,7 +671,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         if t = injected_t then
           exp
         else if type_extendable_to t injected_t then
-          ValCastExtend(injected_t, exp)
+          UnOp(injected_t, Extend, exp)
         else
           failwith (
             Printf.sprintf "Cannot inject [[ %s ]] into func ret_t [[ %s ]]"
@@ -681,7 +683,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         if t = injected_t then
           exp
         else if type_extendable_to t injected_t then
-          ValCastExtend(injected_t, exp)
+          UnOp(injected_t, Extend, exp)
         else
           failwith (
             Printf.sprintf "Cannot inject [[ %s ]] into invoke ret_t [[ %s ]]"
@@ -834,30 +836,26 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     | (U16, ValInt(U16, _)) -> exp
     | (U32, ValInt(U32, _)) -> exp
     | (U64, ValInt(U64, _)) -> exp
-    | (U16, ValInt(U8, _)) ->
-        ValCastExtend(U16, exp)
-    | (U32, (ValInt(U8, _) | ValInt(U16, _))) ->
-        ValCastExtend(U32, exp)
+    | (U16, ValInt(U8, _)) ->                    UnOp(U16, Extend, exp)
+    | (U32, (ValInt(U8, _) | ValInt(U16, _))) -> UnOp(U32, Extend, exp)
     | (U64, (ValInt(U8, _) | ValInt(U16, _) | ValInt(U32, _))) ->
-        ValCastExtend(U64, exp)
+                                                 UnOp(U64, Extend, exp)
 
     | (I8,  ValInt(I8,  _)) -> exp
     | (I16, ValInt(I16, _)) -> exp
     | (I32, ValInt(I32, _)) -> exp
     | (I64, ValInt(I64, _)) -> exp
-    | (I16, ValInt(I8, _)) ->
-        ValCastExtend(I16, exp)
-    | (I32, (ValInt(I8, _) | ValInt(I16, _))) ->
-        ValCastExtend(I32, exp)
+    | (I16, ValInt(I8, _)) ->                    UnOp(I16, Extend, exp)
+    | (I32, (ValInt(I8, _) | ValInt(I16, _))) -> UnOp(I32, Extend, exp)
     | (I64, (ValInt(I8, _) | ValInt(I16, _) | ValInt(I32, _))) ->
-        ValCastExtend(I64, exp)
+                                                 UnOp(I64, Extend, exp)
 
     | (F32,  ValF32 (_)) -> exp
     | (F64,  ValF64 (_)) -> exp
     | (F128, ValF128(_)) -> exp
 
-    | (F64,   ValF32(_))              -> ValCastExtend( F64, exp)
-    | (F128, (ValF32(_) | ValF64(_))) -> ValCastExtend(F128, exp)
+    | (F64,   ValF32(_))              -> UnOp(F64,  Extend, exp)
+    | (F128, (ValF32(_) | ValF64(_))) -> UnOp(F128, Extend, exp)
 
     | (Nil,    ValNil)
     | (Bool,   ValBool(_))
@@ -1181,17 +1179,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | ValRawArray(_) ->
         failwith "Cannot rewrite ValRawArray(): Should not be present"
 
-    | ValCastExtend(t, exp) ->
+    | UnOp(t, op, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in
-        ValCastExtend(t, exp_rewritten)
-
-    | ValCastTrunc(t, exp) ->
-        let exp_rewritten = _rewrite_exp exp unique_varnames in
-        ValCastTrunc(t, exp_rewritten)
-
-    | ValCastBitwise(t, exp) ->
-        let exp_rewritten = _rewrite_exp exp unique_varnames in
-        ValCastBitwise(t, exp_rewritten)
+        UnOp(t, op, exp_rewritten)
 
     | TupleIndexExpr(t, idx, tup_exp) ->
         let tup_exp_rewritten = _rewrite_exp tup_exp unique_varnames in
