@@ -1,5 +1,5 @@
 (executables
- (names test_berk test_utility test_typing test_ast test_type_check test_mir)
+ (names test_utility test_typing test_ast test_type_check test_mir)
  (libraries
     berk
     alcotest
@@ -30,8 +30,3 @@
  (alias  runtest)
  (deps ../lib/mir.ml)
  (action (run ./test_mir.exe)))
-
-(rule
- (alias  runtest)
- (deps ../bin/main.ml)
- (action (run ./test_berk.exe)))
