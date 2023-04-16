@@ -19,7 +19,7 @@ type berk_t =
   | Nil
   | Tuple of berk_t list
   | Array of berk_t * int
-  | Variant of string * (string * berk_t) list
+  | Variant of string * v_ctor list
       (*
         Variant("Option", [("Some", Unbound("`a")); (None, Nil)])
       *)
@@ -43,6 +43,8 @@ type berk_t =
   | Unbound of string
 
   | Undecided
+
+and v_ctor = (string * berk_t)
 
 let rec fmt_join_types ?(pretty_unbound=false) delim types =
   match types with

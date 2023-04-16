@@ -913,9 +913,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     | (ByteArray(_), _) -> failwith "Unimplemented"
 ;;
 
-type v_ctor = (string * berk_t)
-
-and variant_decl_t = {
+type variant_decl_t = {
   v_name: string;
   v_ctors: v_ctor list;
   v_typ_vars: string list;
