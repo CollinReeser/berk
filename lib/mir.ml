@@ -2020,8 +2020,6 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
             (mir_ctxt, bb)
         end
-
-    | AssignDeconStmt(_, _) -> failwith "AssignDeconStmt: Unimplemented"
   in
 
   _stmt_to_mir mir_ctxt bb stmt

@@ -346,29 +346,6 @@ and codegen_stmt llvm_ctxt builder func_ctxt stmt : func_gen_context =
   | AssignStmt (_, _, _) ->
       failwith "Unimplemented: AST Codegen for AssignStmt with indexing"
 
-  | AssignDeconStmt (idents_lval_idxs, expr) ->
-      (* TODO: Add support for deconstructed assignment to indexed variables. *)
-      let idents =
-        List.map (
-          fun (ident, lval_idxs) -> match lval_idxs with
-          | [] -> ident
-          | _ -> failwith "Unimplemented: AssignDeconStmt with indexing"
-        ) idents_lval_idxs
-      in
-
-      let agg_expr = codegen_expr llvm_ctxt builder func_ctxt expr in
-      let decon_exprs = deconstruct_aggregate builder idents agg_expr in
-
-      let _ = List.iter2 (
-        fun ident exp ->
-          let var_alloca = StrMap.find ident func_ctxt.cur_vars in
-          let _ : Llvm.llvalue = Llvm.build_store exp var_alloca builder in
-
-          ()
-      ) idents decon_exprs in
-
-      func_ctxt
-
   | ReturnStmt(expr) ->
       let return_val = codegen_expr llvm_ctxt builder func_ctxt expr in
       let _ = begin match (expr_type expr) with

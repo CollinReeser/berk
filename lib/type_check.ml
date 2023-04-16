@@ -124,8 +124,7 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
   let res = begin match stmt with
   | ExprStmt(expr)
   | ReturnStmt(expr)
-  | AssignStmt(_, _, expr)
-  | AssignDeconStmt(_, expr) ->
+  | AssignStmt(_, _, expr) ->
       _is_concrete_expr expr
 
   | DeclStmt(_, _, typ, expr)
@@ -612,82 +611,6 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         failwith (
           Printf.sprintf "Expr for assignment to [%s] does not typecheck" ident
         )
-
-  | AssignDeconStmt(idents_lval_idxs, exp) ->
-      (* TODO: Add support for deconstructed assignment to indexed variables. *)
-      let idents =
-        List.map (
-          fun (ident, lval_idx) -> match lval_idx with
-          | [] -> ident
-          | _ -> failwith "Unimplemented: AssignDeconStmt with indexing"
-        ) idents_lval_idxs
-      in
-
-      let assign_types = List.map (
-          fun id ->
-            let (var_t, _) = StrMap.find id tc_ctxt.vars in
-
-            var_t
-        ) idents
-      in
-
-      let expected_t = begin match exp with
-        | TupleExpr(_, _) ->
-            Tuple(assign_types)
-
-        | ArrayExpr(_, _) ->
-            let array_len = List.length idents in
-            let elem_t = List.hd assign_types in
-            Array(elem_t, array_len)
-
-        | _ -> failwith "Cannot deconstruct non-tuple/array"
-        end
-      in
-
-      let exp_typechecked = type_check_expr tc_ctxt expected_t exp in
-      let exp_t = expr_type exp_typechecked in
-
-      let typecheck_id_typ_pairs idents types =
-        List.iter2 (
-          fun id typ ->
-            let (var_t, {mut}) = StrMap.find id tc_ctxt.vars in
-            let _ = if mut
-              then ()
-              else failwith "Cannot assign to immutable var"
-            in
-            if type_convertible_to typ var_t
-              then ()
-              else failwith "Cannot assign type to var"
-        ) idents types
-      in
-
-      begin match exp_t with
-        | Array(typ, sz) ->
-          let _ =
-            if List.length idents == sz
-              then
-                let types = List.init sz (fun _ -> typ) in
-                typecheck_id_typ_pairs idents types
-              else failwith "Mismatch in number of idents vs array expr in assi"
-          in
-
-          (* FIXME: We are not actually typechecking the lval_idxs because we
-          don't support them yet in this deconstruction context. *)
-          (tc_ctxt, AssignDeconStmt(idents_lval_idxs, exp_typechecked))
-
-        | Tuple(types) ->
-          let _ =
-            if List.length idents == List.length types
-              then typecheck_id_typ_pairs idents types
-              else failwith "Mismatch in number of idents vs tuple expr in assi"
-          in
-
-          (* FIXME: We are not actually typechecking the lval_idxs because we
-          don't support them yet in this deconstruction context. *)
-          (tc_ctxt, AssignDeconStmt(idents_lval_idxs, exp_typechecked))
-
-        | _ -> failwith "Cannot deconstruct non-aggregate type into ids"
-      end
 
   | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt Undecided exp))
 

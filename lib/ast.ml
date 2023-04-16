@@ -132,7 +132,6 @@ and stmt =
   variable, where the idx list is empty, or could be arbitrarily-deep indexing
   to the _real_ target of assignment, starting at that named variable. *)
   | AssignStmt of ident_t * assign_idx_lval list * expr
-  | AssignDeconStmt of (ident_t * assign_idx_lval list) list * expr
   | ExprStmt of expr
   | ReturnStmt of expr
 ;;
@@ -523,18 +522,6 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         ind
         ident
         (fmt_assign_lval_idxs ~print_typ:print_typ lval_idxs)
-        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
-
-  | AssignDeconStmt (ident_lval_idxs, ex) ->
-      let lhs_exprs =
-        List.map (
-          fun (ident, lval_idxs) ->
-            Printf.sprintf "%s%s" ident (fmt_assign_lval_idxs lval_idxs)
-        ) ident_lval_idxs
-      in
-      Printf.sprintf "%s(%s) = %s;\n"
-        ind
-        (fmt_join_strs ", " lhs_exprs)
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
   | ExprStmt (ex) ->
@@ -1157,10 +1144,6 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | AssignStmt(varname, lval_idxs, exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in
         (AssignStmt(varname, lval_idxs, exp_rewritten), unique_varnames)
-
-    | AssignDeconStmt(varnames, exp) ->
-        let exp_rewritten = _rewrite_exp exp unique_varnames in
-        (AssignDeconStmt(varnames, exp_rewritten), unique_varnames)
 
     | ExprStmt(exp) ->
         let exp_rewritten = _rewrite_exp exp unique_varnames in

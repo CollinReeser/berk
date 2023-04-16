@@ -189,20 +189,6 @@ let main = begin
           ValVar(Undecided, "my_tuple_var")
         )
       ) in
-      let assign_tuple_unpack_lit_raw = (
-        AssignDeconStmt(
-          [
-            ("my_tuple_lit_unpack_var_1", []);
-            ("my_tuple_lit_unpack_var_3", []);
-          ],
-          TupleExpr(
-            Undecided, [
-              ValInt(I8, 13);
-              ValInt(I32, 11);
-            ]
-          )
-        )
-      ) in
       let expr_raw = (
         BinOp(
           Undecided, Add,
@@ -344,7 +330,6 @@ let main = begin
           decl_tuple_raw;
           decl_tuple_unpack_lit_raw;
           decl_tuple_unpack_var_raw;
-          assign_tuple_unpack_lit_raw;
           collatz_seq_stmt_raw;
           return_stmt_raw;
         ];
