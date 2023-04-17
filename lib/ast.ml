@@ -72,8 +72,9 @@ and expr =
   *)
   | TupleIndexExpr of berk_t * int * expr
   | TupleExpr of berk_t * expr list
-  (* Top-level variant type, ctor name, ctor expr,  *)
-  | VariantCtorExpr of berk_t * string * expr
+  (* Top-level variant type, ctor name, possibly-empty list of ctor field exprs
+  *)
+  | VariantCtorExpr of berk_t * string * expr list
   (* Match/pattern expression. First expr is value to match on. Remainder are
   pairs of patterns and their resultant expressions *)
   | MatchExpr of berk_t * expr * (pattern * expr) list
@@ -94,7 +95,7 @@ and pattern =
   (* ie: (x, y, z) -> ...  *)
   | PTuple of berk_t * pattern list
   (* ie: Some(_) -> ... *)
-  | Ctor of berk_t * ident_t * pattern
+  | Ctor of berk_t * ident_t * pattern list
   (*
   (* ie: [_, _, _] -> ... *)
   | DeconArray of berk_t * pattern list
@@ -373,11 +374,20 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
         (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
         typ_s
 
-  | VariantCtorExpr(_, ctor_name, expr) ->
-      Printf.sprintf "%s%s(%s)%s"
+  | VariantCtorExpr(_, ctor_name, exprs) ->
+      let exprs_fmt =
+        begin match exprs with
+        | [] -> ""
+        | _ ->
+            let exprs_fmt = fmt_join_exprs ", " exprs in
+            Printf.sprintf "(%s)" exprs_fmt
+        end
+      in
+
+      Printf.sprintf "%s%s%s%s"
         init_ind
         ctor_name
-        (fmt_expr ~print_typ:print_typ expr)
+        exprs_fmt
         typ_s
 
   | MatchExpr(_, matched_exp, pattern_exp_pairs) ->
@@ -427,8 +437,18 @@ and fmt_pattern ?(print_typ=false) init_ind pattern =
     | PTuple(t, patterns) ->
         let patterns_fmt = List.map _fmt_pattern patterns in
         sprintf "(%s)%s" (fmt_join_strs ", " patterns_fmt) (_maybe_fmt_type t)
-    | Ctor(t, ctor_name, pattern) ->
-        sprintf "%s(%s)%s" ctor_name (_fmt_pattern pattern) (_maybe_fmt_type t)
+    | Ctor(t, ctor_name, patterns) ->
+        let patterns_fmt =
+          begin match patterns with
+          | [] -> ""
+          | _ ->
+              let patterns_fmt = List.map _fmt_pattern patterns in
+              sprintf "(%s)%s"
+                (fmt_join_strs ", " patterns_fmt)
+                (_maybe_fmt_type t)
+          end
+        in
+        sprintf "%s%s%s" ctor_name patterns_fmt (_maybe_fmt_type t)
     | PatternAs(t, pattern, var_name) ->
         sprintf "%s%s as %s" (_fmt_pattern pattern) (_maybe_fmt_type t) var_name
     end
@@ -815,16 +835,19 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         else
           WhileExpr(Nil, init_stmts, cond_expr, stmts)
 
-    | (Variant(_, ctors), VariantCtorExpr(_, ctor_name, ctor_exp)) ->
-        let (_, ctor_exp_t) = List.find (
-            fun (name, _) -> name = ctor_name
+    | (Variant(_, ctors), VariantCtorExpr(_, ctor_name, ctor_exps)) ->
+        let {fields; _} = List.find (
+            fun {name; _} -> name = ctor_name
           ) ctors
         in
-        let ctor_exp_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") ctor_exp_t ctor_exp
+        let fields_ts = List.map (fun {t} -> t) fields in
+
+        let ctor_exps_injected =
+          List.map2
+            (inject_type_into_expr ~ind:(ind ^ "  ")) fields_ts ctor_exps
         in
 
-        VariantCtorExpr(injected_t, ctor_name, ctor_exp_injected)
+        VariantCtorExpr(injected_t, ctor_name, ctor_exps_injected)
 
     | (_, MatchExpr(_, matched_exp, patt_exp_pairs)) ->
         let patt_exp_pairs_injected =
@@ -992,16 +1015,24 @@ let fmt_func_ast ?(print_typ = false) {f_decl; f_stmts;} : string =
     formatted_stmts
 ;;
 
-let fmt_variant_ctor ?(pretty_unbound=false) (ctor_name, ctor_typ) : string =
-  let fmt_typ = begin
-    match ctor_typ with
-    | Nil -> ""
-    | _ ->
-        Printf.sprintf " of %s"
-          (fmt_type ~pretty_unbound:pretty_unbound ctor_typ)
-  end in
+let fmt_variant_fields ?(pretty_unbound=false) fields : string =
+  begin match fields with
+  | [] -> ""
+  | _ ->
+      let each_field_fmt =
+        List.map (
+          fun {t} ->
+            fmt_type ~pretty_unbound:pretty_unbound t
+        ) fields
+      in
+      Printf.sprintf "(%s)" (fmt_join_strs ", " each_field_fmt)
+  end
+;;
 
-  Printf.sprintf " | %s%s\n" ctor_name fmt_typ
+let fmt_variant_ctor ?(pretty_unbound=false) {name; fields} : string =
+  Printf.sprintf " | %s%s\n"
+    name
+    (fmt_variant_fields ~pretty_unbound:pretty_unbound fields)
 ;;
 
 let fmt_variant_decl
@@ -1040,6 +1071,52 @@ let fmt_mod_decl
   | VariantDecl(v_ast) ->
       Printf.sprintf "%s"(fmt_variant_decl ~pretty_unbound:pretty_unbound v_ast)
   end
+;;
+
+
+(* Returns true if the target variant declaration contains a constructor that
+matches the given one. *)
+let v_decl_has_ctor {v_ctors; _} search_ctor =
+  let candidate_ctor_opt =
+    List.find_opt (
+      fun candidate_ctor ->
+        v_ctors_match search_ctor candidate_ctor
+    ) v_ctors
+  in
+  begin match candidate_ctor_opt with
+  | Some(_) -> true
+  | None -> false
+  end
+;;
+
+
+(* Given a variant declaration that may contain some arbitrary number of unbound
+types, a variant constructor name that exists in the given variant declaration,
+and the corresponding field types of the constructor, yield an
+as-concrete-as-possible Variant type. *)
+let variant_decl_to_variant_type
+  {v_name; v_ctors; _} {name=target_ctor_name; fields=target_ctor_fields}
+=
+  let {fields=found_ctor_fields; _} =
+    List.find (fun {name; _} -> name = target_ctor_name) v_ctors
+  in
+
+  let tvars_to_types =
+    List.fold_left2 (
+      fun tvars_to_types {t=lhs_t} {t=rhs_t} ->
+        map_tvars_to_types ~init_map:tvars_to_types lhs_t rhs_t
+    ) StrMap.empty found_ctor_fields target_ctor_fields
+  in
+
+  let init_variant_t = Variant(v_name, v_ctors) in
+
+  let variant_t_concretified =
+    concretify_unbound_types tvars_to_types init_variant_t
+  in
+
+  variant_t_concretified
+;;
+
 
 (* Return the pair of all the non-variadic function parameter types, and whether
 the parameter list ends with a variadic-args sentinel. Fails if ill-formed. *)
@@ -1258,9 +1335,11 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         let exp_rewritten = _rewrite_exp exp unique_varnames in
         BlockExpr(t, stmts_rewritten, exp_rewritten)
 
-    | VariantCtorExpr(t, ctor_name, exp) ->
-        let exp_rewritten = _rewrite_exp exp unique_varnames in
-        VariantCtorExpr(t, ctor_name, exp_rewritten)
+    | VariantCtorExpr(t, ctor_name, exps) ->
+        let exps_rewritten =
+          List.map (fun exp -> _rewrite_exp exp unique_varnames) exps
+        in
+        VariantCtorExpr(t, ctor_name, exps_rewritten)
 
     | MatchExpr(t, exp_match, patt_exp_pairs) ->
         let exp_match_rewritten = _rewrite_exp exp_match unique_varnames in
@@ -1336,11 +1415,18 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         let patts_rewritten = List.rev patts_rewritten_rev in
         (PTuple(t, patts_rewritten), unique_varnames)
 
-    | Ctor(t, ctor_name, patt) ->
-        let (patt_rewritten, unique_varnames) =
-          _rewrite_patt_exp patt unique_varnames
+    | Ctor(t, ctor_name, patts) ->
+        let (patts_rewritten_rev, unique_varnames) =
+          List.fold_left (
+            fun (patts_rewritten_rev, unique_varnames) patt ->
+              let (patt_rewritten, unique_varnames) =
+                _rewrite_patt_exp patt unique_varnames
+              in
+              (patt_rewritten :: patts_rewritten_rev, unique_varnames)
+          ) ([], unique_varnames) patts
         in
-        (Ctor(t, ctor_name, patt_rewritten), unique_varnames)
+        let patts_rewritten = List.rev patts_rewritten_rev in
+        (Ctor(t, ctor_name, patts_rewritten), unique_varnames)
 
     | PatternAs(t, patt, varname) ->
         let (uniq_varname, unique_varnames) =

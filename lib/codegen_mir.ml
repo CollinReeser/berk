@@ -541,7 +541,7 @@ let codegen_func_bbs llvm_ctxt builder func_ctxt (mir_ctxt : mir_ctxt) =
 
   let (llvm_bbs_map, _) =
     List.fold_left_map (
-      fun map_so_far {name=bb_name; _} ->
+      fun map_so_far ({name=bb_name; _} : bb) ->
         let llvm_bb = Llvm.append_block llvm_ctxt bb_name func_ctxt.cur_func in
         (StrMap.add bb_name llvm_bb map_so_far, ())
     ) StrMap.empty bbs_control_flow_order

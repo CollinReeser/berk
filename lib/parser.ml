@@ -121,34 +121,46 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
     let rec __parse_variant_constructors ?(ind="") tokens v_ctors_so_far_rev =
       let ind_next = print_trace ind __FUNCTION__ tokens in
 
+      (* Parse an individual field of an individual variant constructor. *)
+      let _parse_variant_field ?(ind="") tokens : (token list * v_ctor_field) =
+        let _ = print_trace ind __FUNCTION__ tokens in
+
+        let (rest, field_t) = parse_type tokens in
+        (rest, {t=field_t})
+      in
+
       begin match tokens with
       | Bar(_) :: CapIdent(_, v_ctor_name) :: LParen(_) :: rest ->
-          let (rest, first_t) = parse_type rest in
+          let (rest, first_field) = _parse_variant_field rest in
 
-          let rec _parse_variant_ctor_types ?(ind="") tokens collected_ts_rev =
+          let rec _parse_variant_ctor_fields
+            ?(ind="") tokens collected_fields_rev
+          =
             let _ = print_trace ind __FUNCTION__ tokens in
 
             begin match tokens with
             | Comma(_) :: rest ->
-                let (rest, next_t) = parse_type rest in
-                let collected_ts_rev' = (next_t :: collected_ts_rev) in
-                _parse_variant_ctor_types ~ind:ind rest collected_ts_rev'
+                let (rest, next_field) = _parse_variant_field rest in
+                let collected_fields_rev' =
+                  (next_field :: collected_fields_rev)
+                in
+                _parse_variant_ctor_fields ~ind:ind rest collected_fields_rev'
 
             | _ ->
-                (tokens, collected_ts_rev)
+                (tokens, collected_fields_rev)
             end
           in
 
-          let (rest, collected_ts_rev) =
-            _parse_variant_ctor_types ~ind:ind_next rest []
+          let (rest, collected_fields_rev) =
+            _parse_variant_ctor_fields ~ind:ind_next rest []
           in
-          let collected_ts = List.rev collected_ts_rev in
+          let collected_fields = List.rev collected_fields_rev in
 
-          let all_ts = first_t :: collected_ts in
+          let all_fields = first_field :: collected_fields in
 
           begin match rest with
           | RParen(_) :: rest ->
-              let v_ctor = (v_ctor_name, Tuple(all_ts)) in
+              let v_ctor = {name=v_ctor_name; fields=all_fields} in
               let v_ctors_so_far_rev' = v_ctor :: v_ctors_so_far_rev in
               __parse_variant_constructors ~ind:ind rest v_ctors_so_far_rev'
 
@@ -157,7 +169,7 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
           end
 
       | Bar(_) :: CapIdent(_, v_ctor_name) :: rest ->
-          let v_ctor = (v_ctor_name, Nil) in
+          let v_ctor = {name=v_ctor_name; fields=[]} in
           let v_ctors_so_far_rev' = v_ctor :: v_ctors_so_far_rev in
           __parse_variant_constructors ~ind:ind rest v_ctors_so_far_rev'
 
@@ -1473,13 +1485,12 @@ and parse_match_expr ?(ind="") tokens : (token list * expr) =
         let (rest, more_patterns_rev) = _parse_comma_pattern_multi rest [] in
         let more_patterns = List.rev more_patterns_rev in
         let ctor_sub_patterns = first_pattern :: more_patterns in
-        let ctor_tuple_pattern_wrapper = PTuple(Undecided, ctor_sub_patterns) in
-        let pattern = Ctor(Undecided, v_name, ctor_tuple_pattern_wrapper) in
+        let pattern = Ctor(Undecided, v_name, ctor_sub_patterns) in
         _parse_pattern_as rest pattern
 
     (* Variant deconstruction with no fields. *)
     | CapIdent(_, v_name) :: rest ->
-        let pattern = Ctor(Undecided, v_name, PNil) in
+        let pattern = Ctor(Undecided, v_name, []) in
         _parse_pattern_as rest pattern
 
     | _ ->
@@ -1577,7 +1588,7 @@ and parse_variant_ctor ?(ind="") tokens : (token list * expr) =
       | RParen(_) :: rest ->
           (
             rest,
-            VariantCtorExpr(Undecided, name, TupleExpr(Undecided, all_elems))
+            VariantCtorExpr(Undecided, name, all_elems)
           )
 
       | _ ->
@@ -1585,7 +1596,7 @@ and parse_variant_ctor ?(ind="") tokens : (token list * expr) =
       end
 
   | CapIdent(_, name) :: rest ->
-      (rest, VariantCtorExpr(Undecided, name, ValNil))
+      (rest, VariantCtorExpr(Undecided, name, []))
 
   | _ -> raise Backtrack
   end

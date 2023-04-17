@@ -22,10 +22,20 @@ let test_determine_pattern_completeness expect lhs_given rhs_given () =
     ~expected:expect
     ~actual:(determine_pattern_completeness lhs_given rhs_given)
 
-let variant_option_bool = Variant("Option", [("Some", Bool); ("None", Nil)])
-let variant_left_right = Variant(
-  "LeftRight", [("Left", variant_option_bool); ("Right", variant_option_bool)]
-)
+let variant_option_bool =
+  Variant(
+    "Option", [
+      {name="Some"; fields=[{t=Bool}]};
+      {name="None"; fields=[]}
+    ]
+  )
+let variant_left_right =
+  Variant(
+    "LeftRight", [
+      {name="Left"; fields=[{t=variant_option_bool}]};
+      {name="Right"; fields=[{t=variant_option_bool}]}
+    ]
+  )
 
 let tuple_t = Tuple([variant_option_bool; variant_left_right])
 
@@ -34,14 +44,14 @@ type lr = Left of bool option | Right of bool option
 let gen_tuple_patt lhs rhs =
   let gen_opt b_opt =
     begin match b_opt with
-    | None -> Ctor(variant_option_bool, "None", PNil)
-    | Some(b) -> Ctor(variant_option_bool, "Some", PBool(b))
+    | None -> Ctor(variant_option_bool, "None", [])
+    | Some(b) -> Ctor(variant_option_bool, "Some", [PBool(b)])
     end
   in
   let lhs = gen_opt lhs in
   let rhs = begin match rhs with
-  | Left(b_opt) -> Ctor(variant_left_right, "Left", (gen_opt b_opt))
-  | Right(b_opt) -> Ctor(variant_left_right, "Right", (gen_opt b_opt))
+  | Left(b_opt) -> Ctor(variant_left_right, "Left", [gen_opt b_opt])
+  | Right(b_opt) -> Ctor(variant_left_right, "Right", [gen_opt b_opt])
   end in
 
   [lhs; rhs]
@@ -64,28 +74,28 @@ let pattern_domination = let open Alcotest in [
     test_pattern_dominates true (
       Wild(Undecided)
     ) (
-      Ctor(variant_option_bool, "Some", Wild(Undecided))
+      Ctor(variant_option_bool, "Some", [Wild(Undecided)])
     )
   ));
   (test_case "ctor_var" `Quick (
     test_pattern_dominates true (
       VarBind(Undecided, "x")
     ) (
-      Ctor(variant_option_bool, "Some", Wild(Undecided))
+      Ctor(variant_option_bool, "Some", [Wild(Undecided)])
     )
   ));
   (test_case "ctor_full_match" `Quick (
     test_pattern_dominates true (
-      Ctor(variant_option_bool, "Some", PBool(true))
+      Ctor(variant_option_bool, "Some", [PBool(true)])
     ) (
-      Ctor(variant_option_bool, "Some", PBool(true))
+      Ctor(variant_option_bool, "Some", [PBool(true)])
     )
   ));
   (test_case "ctor_full_non_match" `Quick (
     test_pattern_dominates false (
-      Ctor(variant_option_bool, "Some", PBool(true))
+      Ctor(variant_option_bool, "Some", [PBool(true)])
     ) (
-      Ctor(variant_option_bool, "Some", PBool(false))
+      Ctor(variant_option_bool, "Some", [PBool(false)])
     )
   ));
   (test_case "nested_variant_superset" `Quick (
@@ -93,41 +103,46 @@ let pattern_domination = let open Alcotest in [
       Wild(variant_left_right)
     ) (
       Ctor(
-        variant_left_right, "Left",
-        Ctor(variant_option_bool, "Some", PBool(false))
+        variant_left_right, "Left", [
+          Ctor(variant_option_bool, "Some", [PBool(false)])
+        ]
       )
     )
   ));
   (test_case "nested_variant_superset" `Quick (
     test_pattern_dominates true (
-      Ctor(variant_left_right, "Left", Wild(variant_option_bool))
+      Ctor(variant_left_right, "Left", [Wild(variant_option_bool)])
     ) (
       Ctor(
-        variant_left_right, "Left",
-        Ctor(variant_option_bool, "Some", PBool(false))
+        variant_left_right, "Left", [
+          Ctor(variant_option_bool, "Some", [PBool(false)])
+        ]
       )
     )
   ));
   (test_case "nested_variant_superset" `Quick (
     test_pattern_dominates true (
       Ctor(
-        variant_left_right, "Left",
-        Ctor(variant_option_bool, "Some", Wild(Bool))
+        variant_left_right, "Left", [
+          Ctor(variant_option_bool, "Some", [Wild(Bool)])
+        ]
       )
     ) (
       Ctor(
-        variant_left_right, "Left",
-        Ctor(variant_option_bool, "Some", PBool(false))
+        variant_left_right, "Left", [
+          Ctor(variant_option_bool, "Some", [PBool(false)])
+        ]
       )
     )
   ));
   (test_case "nested_variant_superset" `Quick (
     test_pattern_dominates false (
-      Ctor(variant_left_right, "Right", Wild(variant_option_bool))
+      Ctor(variant_left_right, "Right", [Wild(variant_option_bool)])
     ) (
       Ctor(
-        variant_left_right, "Left",
-        Ctor(variant_option_bool, "Some", PBool(false))
+        variant_left_right, "Left", [
+          Ctor(variant_option_bool, "Some", [PBool(false)])
+        ]
       )
     )
   ));
@@ -148,7 +163,7 @@ let pattern_domination = let open Alcotest in [
   (test_case "tuple_partial" `Quick (
     test_pattern_dominates true (
       PTuple(tuple_t, [
-        Ctor(variant_option_bool, "None", PNil);
+        Ctor(variant_option_bool, "None", []);
         Wild(variant_left_right)
       ])
     ) (
@@ -159,7 +174,7 @@ let pattern_domination = let open Alcotest in [
     test_pattern_dominates true (
       PTuple(tuple_t, [
         Wild(variant_option_bool);
-        Ctor(variant_left_right, "Left", Wild(variant_option_bool))
+        Ctor(variant_left_right, "Left", [Wild(variant_option_bool)])
       ])
     ) (
       PTuple(tuple_t, gen_tuple_patt None (Left(None)))
@@ -170,8 +185,9 @@ let pattern_domination = let open Alcotest in [
       PTuple(tuple_t, [
         Wild(variant_option_bool);
         Ctor(
-          variant_left_right, "Left",
-          Ctor(variant_option_bool, "Some", PBool(true))
+          variant_left_right, "Left", [
+            Ctor(variant_option_bool, "Some", [PBool(true)])
+          ]
         )
       ])
     ) (
@@ -183,8 +199,9 @@ let pattern_domination = let open Alcotest in [
       PTuple(tuple_t, [
         Wild(variant_option_bool);
         Ctor(
-          variant_left_right, "Left",
-          Ctor(variant_option_bool, "Some", PBool(true))
+          variant_left_right, "Left", [
+            Ctor(variant_option_bool, "Some", [PBool(true)])
+          ]
         )
       ])
     ) (
@@ -196,8 +213,9 @@ let pattern_domination = let open Alcotest in [
       PTuple(tuple_t, [
         Wild(variant_option_bool);
         Ctor(
-          variant_left_right, "Left",
-          Ctor(variant_option_bool, "Some", PBool(false))
+          variant_left_right, "Left", [
+            Ctor(variant_option_bool, "Some", [PBool(false)])
+          ]
         )
       ])
     ) (
@@ -215,9 +233,9 @@ let value_patts = let open Alcotest in [
   (test_case "option_vals" `Quick (
     test_generate_value_patts
       [
-        Ctor(variant_option_bool, "Some", PBool(true));
-        Ctor(variant_option_bool, "Some", PBool(false));
-        Ctor(variant_option_bool, "None", PNil);
+        Ctor(variant_option_bool, "Some", [PBool(true)]);
+        Ctor(variant_option_bool, "Some", [PBool(false)]);
+        Ctor(variant_option_bool, "None", []);
       ]
       variant_option_bool
   ));
@@ -225,28 +243,34 @@ let value_patts = let open Alcotest in [
     test_generate_value_patts
       [
         Ctor(
-          variant_left_right, "Left",
-          Ctor(variant_option_bool, "Some", PBool(true))
+          variant_left_right, "Left", [
+            Ctor(variant_option_bool, "Some", [PBool(true)])
+          ]
         );
         Ctor(
-          variant_left_right, "Left",
-          Ctor(variant_option_bool, "Some", PBool(false))
+          variant_left_right, "Left", [
+            Ctor(variant_option_bool, "Some", [PBool(false)])
+          ]
         );
         Ctor(
-          variant_left_right, "Left",
-          Ctor(variant_option_bool, "None", PNil)
+          variant_left_right, "Left", [
+            Ctor(variant_option_bool, "None", [])
+          ]
         );
         Ctor(
-          variant_left_right, "Right",
-          Ctor(variant_option_bool, "Some", PBool(true))
+          variant_left_right, "Right", [
+            Ctor(variant_option_bool, "Some", [PBool(true)])
+          ]
         );
         Ctor(
-          variant_left_right, "Right",
-          Ctor(variant_option_bool, "Some", PBool(false))
+          variant_left_right, "Right", [
+            Ctor(variant_option_bool, "Some", [PBool(false)])
+          ]
         );
         Ctor(
-          variant_left_right, "Right",
-          Ctor(variant_option_bool, "None", PNil)
+          variant_left_right, "Right", [
+            Ctor(variant_option_bool, "None", [])
+          ]
         );
       ]
       variant_left_right
@@ -336,7 +360,7 @@ let pattern_completeness = let open Alcotest in [
     test_determine_pattern_completeness
       ([], [])
       [
-        Ctor(variant_option_bool, "Some", Wild(Bool));
+        Ctor(variant_option_bool, "Some", [Wild(Bool)]);
         Wild(variant_option_bool);
       ]
       (generate_value_patts variant_option_bool)
@@ -345,8 +369,8 @@ let pattern_completeness = let open Alcotest in [
     test_determine_pattern_completeness
       ([], [])
       [
-        Ctor(variant_option_bool, "Some", Wild(Bool));
-        Ctor(variant_option_bool, "None", PNil);
+        Ctor(variant_option_bool, "Some", [Wild(Bool)]);
+        Ctor(variant_option_bool, "None", []);
       ]
       (generate_value_patts variant_option_bool)
   ));
@@ -354,18 +378,18 @@ let pattern_completeness = let open Alcotest in [
     test_determine_pattern_completeness
       ([], [])
       [
-        Ctor(variant_option_bool, "Some", PBool(true));
-        Ctor(variant_option_bool, "Some", PBool(false));
-        Ctor(variant_option_bool, "None", PNil);
+        Ctor(variant_option_bool, "Some", [PBool(true)]);
+        Ctor(variant_option_bool, "Some", [PBool(false)]);
+        Ctor(variant_option_bool, "None", []);
       ]
       (generate_value_patts variant_option_bool)
   ));
   (test_case "incomplete_option_vals" `Quick (
     test_determine_pattern_completeness
-      ([], [Ctor(variant_option_bool, "Some", PBool(false))])
+      ([], [Ctor(variant_option_bool, "Some", [PBool(false)])])
       [
-        Ctor(variant_option_bool, "Some", PBool(true));
-        Ctor(variant_option_bool, "None", PNil);
+        Ctor(variant_option_bool, "Some", [PBool(true)]);
+        Ctor(variant_option_bool, "None", []);
       ]
       (generate_value_patts variant_option_bool)
   ));
@@ -374,12 +398,12 @@ let pattern_completeness = let open Alcotest in [
       (
         [],
         [
-          Ctor(variant_option_bool, "Some", PBool(true));
-          Ctor(variant_option_bool, "Some", PBool(false));
+          Ctor(variant_option_bool, "Some", [PBool(true)]);
+          Ctor(variant_option_bool, "Some", [PBool(false)]);
         ]
       )
       [
-        Ctor(variant_option_bool, "None", Wild(Nil));
+        Ctor(variant_option_bool, "None", []);
       ]
       (generate_value_patts variant_option_bool)
   ));
@@ -388,9 +412,9 @@ let pattern_completeness = let open Alcotest in [
       (
         [],
         [
-          Ctor(variant_option_bool, "Some", PBool(true));
-          Ctor(variant_option_bool, "Some", PBool(false));
-          Ctor(variant_option_bool, "None", PNil);
+          Ctor(variant_option_bool, "Some", [PBool(true)]);
+          Ctor(variant_option_bool, "Some", [PBool(false)]);
+          Ctor(variant_option_bool, "None", []);
         ]
       )
       []
@@ -398,11 +422,11 @@ let pattern_completeness = let open Alcotest in [
   ));
   (test_case "useless_option_vals" `Quick (
     test_determine_pattern_completeness
-      ([Ctor(variant_option_bool, "Some", PBool(false))], [])
+      ([Ctor(variant_option_bool, "Some", [PBool(false)])], [])
       [
-        Ctor(variant_option_bool, "Some", Wild(Bool));
-        Ctor(variant_option_bool, "Some", PBool(false));
-        Ctor(variant_option_bool, "None", PNil);
+        Ctor(variant_option_bool, "Some", [Wild(Bool)]);
+        Ctor(variant_option_bool, "Some", [PBool(false)]);
+        Ctor(variant_option_bool, "None", []);
       ]
       (generate_value_patts variant_option_bool)
   ));
@@ -410,8 +434,8 @@ let pattern_completeness = let open Alcotest in [
     test_determine_pattern_completeness
       ([Wild(variant_option_bool)], [])
       [
-        Ctor(variant_option_bool, "Some", Wild(Bool));
-        Ctor(variant_option_bool, "None", PNil);
+        Ctor(variant_option_bool, "Some", [Wild(Bool)]);
+        Ctor(variant_option_bool, "None", []);
         Wild(variant_option_bool);
       ]
       (generate_value_patts variant_option_bool)

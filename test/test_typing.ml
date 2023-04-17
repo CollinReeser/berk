@@ -12,15 +12,21 @@ let common_type = let open Alcotest in [(
   test_case "lst_sanity" `Quick (
     test_common_type_of_lst (
       Variant("Tri", [
-        ("A", U64); ("B", Tuple([I32; U32])); ("C", Tuple([String; Bool; I16]));
+        {name="A"; fields=[{t=U64}]};
+        {name="B"; fields=[{t=I32}; {t=U32}]};
+        {name="C"; fields=[{t=String}; {t=Bool}; {t=I16}]};
       ])
     )
     [
       Variant("Tri", [
-        ("A", U64); ("B", Tuple([I32; U32])); ("C", Tuple([String; Bool; I16]));
+        {name="A"; fields=[{t=U64}]};
+        {name="B"; fields=[{t=I32}; {t=U32}]};
+          {name="C"; fields=[{t=String}; {t=Bool}; {t=I16}]};
       ]);
       Variant("Tri", [
-        ("A", U64); ("B", Tuple([I32; U32])); ("C", Tuple([String; Bool; I16]));
+        {name="A"; fields=[{t=U64}]};
+        {name="B"; fields=[{t=I32}; {t=U32}]};
+          {name="C"; fields=[{t=String}; {t=Bool}; {t=I16}]};
       ]);
     ]
   )
@@ -28,18 +34,26 @@ let common_type = let open Alcotest in [(
   test_case "implicit_type_promotion" `Quick (
     test_common_type_of_lst (
       Variant("Tri", [
-        ("A", U64); ("B", Tuple([I32; U32])); ("C", Tuple([String; Bool; I16]));
+        {name="A"; fields=[{t=U64}]};
+        {name="B"; fields=[{t=I32}; {t=U32}]};
+          {name="C"; fields=[{t=String}; {t=Bool}; {t=I16}]};
       ])
     )
     [
       Variant("Tri", [
-        ("A", U32); ("B", Tuple([I32; U8])); ("C", Tuple([String; Bool; I8]));
+        {name="A"; fields=[{t=U32}]};
+        {name="B"; fields=[{t=I32}; {t=U8}]};
+          {name="C"; fields=[{t=String}; {t=Bool}; {t=I8}]};
       ]);
       Variant("Tri", [
-        ("A", U16); ("B", Tuple([I16; U16])); ("C", Tuple([String; Bool; I16]));
+        {name="A"; fields=[{t=U16}]};
+        {name="B"; fields=[{t=I16}; {t=U16}]};
+          {name="C"; fields=[{t=String}; {t=Bool}; {t=I16}]};
       ]);
       Variant("Tri", [
-        ("A", U64); ("B", Tuple([I8; U32])); ("C", Tuple([String; Bool; I8]));
+        {name="A"; fields=[{t=U64}]};
+        {name="B"; fields=[{t=I8}; {t=U32}]};
+          {name="C"; fields=[{t=String}; {t=Bool}; {t=I8}]};
       ]);
     ]
   )
@@ -47,24 +61,26 @@ let common_type = let open Alcotest in [(
   test_case "resolve_tvars" `Quick (
     test_common_type_of_lst (
       Variant("Tri", [
-        ("A", U64); ("B", Tuple([I32; U16])); ("C", Tuple([String; Bool; I16]));
+        {name="A"; fields=[{t=U64}]};
+        {name="B"; fields=[{t=I32}; {t=U16}]};
+        {name="C"; fields=[{t=String}; {t=Bool}; {t=I16}]};
       ])
     )
     [
       Variant("Tri", [
-        ("A", Unbound("`a"));
-        ("B", Tuple([I32; Unbound("`c")]));
-        ("C", Tuple([Unbound("`d"); Bool; I16]));
+        {name="A"; fields=[{t=Unbound("`a")}]};
+        {name="B"; fields=[{t=I32}; {t=Unbound("`c")}]};
+        {name="C"; fields=[{t=Unbound("`d")}; {t=Bool}; {t=I16}]};
       ]);
       Variant("Tri", [
-        ("A", Unbound("`a"));
-        ("B", Tuple([Unbound("`b"); U16]));
-        ("C", Tuple([String; Unbound("`e"); I8]));
+        {name="A"; fields=[{t=Unbound("`a")}]};
+        {name="B"; fields=[{t=Unbound("`b")}; {t=U16}]};
+        {name="C"; fields=[{t=String}; {t=Unbound("`e")}; {t=I8}]};
       ]);
       Variant("Tri", [
-        ("A", U64);
-        ("B", Tuple([Unbound("`b"); Unbound("`c")]));
-        ("C", Tuple([String; Bool; Unbound("`f")]));
+        {name="A"; fields=[{t=U64}]};
+        {name="B"; fields=[{t=Unbound("`b")}; {t=Unbound("`c")}]};
+        {name="C"; fields=[{t=String}; {t=Bool}; {t=Unbound("`f")}]};
       ]);
     ]
   )

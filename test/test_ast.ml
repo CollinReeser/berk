@@ -16,9 +16,9 @@ let inject_type = let open Alcotest in [(
   = begin
     Variant(
       "Ternary", [
-        ("Off",       Tuple([a; b]));
-        ("On",        Tuple([b; c]));
-        ("Unstable",  Tuple([String; d]));
+        {name="Off";      fields=[{t=a}; {t=b}]};
+        {name="On";       fields=[{t=b}; {t=c}]};
+        {name="Unstable"; fields=[{t=String}; {t=d}]};
       ]
     )
   end in
@@ -31,14 +31,11 @@ let inject_type = let open Alcotest in [(
           ValBool(true),
           VariantCtorExpr(
             resolved_variant, "Off",
-            TupleExpr(
-              Tuple([I32; String]),
-              [ValCast(I32, Extend, ValInt(I16, 123)); ValStr("!")]
-            )
+            [ValCast(I32, Extend, ValInt(I16, 123)); ValStr("!")]
           ),
           VariantCtorExpr(
             resolved_variant, "On",
-            TupleExpr(Tuple([String; F32]), [ValStr("?"); ValF32(1.2)])
+            [ValStr("?"); ValF32(1.2)]
           )
         )
       ) (
@@ -48,11 +45,11 @@ let inject_type = let open Alcotest in [(
             ValBool(true),
             VariantCtorExpr(
               bounded_variant ~a:I16 ~b:String (), "Off",
-              TupleExpr(Tuple([I16; String]), [ValInt(I16, 123); ValStr("!")])
+              [ValInt(I16, 123); ValStr("!")]
             ),
             VariantCtorExpr(
               bounded_variant ~b:String ~c:F32 (), "On",
-              TupleExpr(Tuple([String; F32]), [ValStr("?"); ValF32(1.2)])
+              [ValStr("?"); ValF32(1.2)]
             )
           )
         )

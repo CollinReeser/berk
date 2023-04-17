@@ -1,7 +1,18 @@
 open Typing
 
 let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
-  let rec _berk_t_to_llvm_t typ =
+  (* Helper function to map an individual variant constructor into an abstract
+  type we can translate into an LLVM type. *)
+  let rec _v_ctor_to_llvm_t {fields; _} =
+    begin match fields with
+    | [] ->
+        Nil
+    | _ ->
+        let ts = List.map (fun {t} -> t) fields in
+        Tuple(ts)
+    end
+
+  and _berk_t_to_llvm_t typ =
     begin match typ with
     | Nil -> Llvm.void_type llvm_ctxt
 
@@ -33,29 +44,30 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
         llvm_tuple_t
 
     | Variant(_, ctors) ->
-        let llvm_nonempty_typs = List.filter_map (
-          fun (_, typ) ->
-            match typ with
-            | Nil -> None
-            | _ -> Some(_berk_t_to_llvm_t typ)
-        ) ctors in
-
         let _ = if List.length ctors > 255 then
           failwith "Variants with >255 constructors not implemented"
         else
           ()
         in
 
+        let v_ctor_ts = List.map _v_ctor_to_llvm_t ctors in
+        let llvm_nonempty_typs = List.filter_map (
+          fun typ ->
+            match typ with
+            | Nil -> None
+            | _ -> Some(_berk_t_to_llvm_t typ)
+        ) v_ctor_ts in
+
         let typ_sizes = List.map llvm_sizeof llvm_nonempty_typs in
         let largest = List.fold_left max 0 typ_sizes in
 
         let union_t = begin
-          if largest = 0
-          then
+          if largest = 0 then
             Tuple([U8])
           else
             Tuple([U8; Array(U8, largest)])
-        end in
+          end
+        in
 
         _berk_t_to_llvm_t union_t
 

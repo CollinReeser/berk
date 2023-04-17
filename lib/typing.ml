@@ -44,7 +44,9 @@ type berk_t =
 
   | Undecided
 
-and v_ctor = (string * berk_t)
+and v_ctor = {name: string; fields: v_ctor_field list}
+
+and v_ctor_field = {t: berk_t}
 
 let rec fmt_join_types ?(pretty_unbound=false) delim types =
   match types with
@@ -75,18 +77,9 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
       "[" ^ (fmt_type ~pretty_unbound:pretty_unbound typ) ^ " x " ^ sz_s ^ "]"
   | Tuple (types) ->
       "(" ^ (fmt_join_types ~pretty_unbound:pretty_unbound ", " types) ^ ")"
-  | Variant (type_name, variants) ->
-      let variant_fmts = List.map (
-        fun (var_name, typ) ->
-          begin match typ with
-          | Nil -> Printf.sprintf "%s" var_name
-          | _ ->
-              Printf.sprintf "%s(%s)"
-                var_name
-                (fmt_type ~pretty_unbound:pretty_unbound typ)
-          end
-      ) variants in
-      let variants_fmt = fmt_join_strs " | " variant_fmts in
+  | Variant (type_name, variant_ctors) ->
+      let ctor_fmts = List.map fmt_v_ctor variant_ctors in
+      let variants_fmt = fmt_join_strs " | " ctor_fmts in
 
       Printf.sprintf "variant %s {%s}" type_name variants_fmt
 
@@ -121,6 +114,21 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
       then type_var
       else "<?unbound:" ^ type_var ^ "?>"
   | Undecided -> "<?undecided?>"
+
+and fmt_v_ctor ?(pretty_unbound=false) {name; fields} : string =
+  let fields_fmt =
+    begin match fields with
+    | [] -> ""
+    | _ ->
+        let fields_fmt =
+          List.map (
+            fun {t} -> fmt_type ~pretty_unbound:pretty_unbound t
+          ) fields
+        in
+        Printf.sprintf "(%s)" (fmt_join_strs ", " fields_fmt)
+    end
+  in
+  Printf.sprintf "%s%s" name fields_fmt
 ;;
 
 let pprint_berk_t ppf berk_type =
@@ -138,6 +146,8 @@ let fmt_var_qual {mut} =
 
 let def_var_qual = {mut = false}
 
+(* Determine the common type between two. ie, if they're not the same type, but
+one is convertible to the other, yield the common type. *)
 let rec common_type_of_lr lhs rhs =
   let _common_type_of_lr lhs rhs =
     match (lhs, rhs) with
@@ -188,14 +198,8 @@ let rec common_type_of_lr lhs rhs =
     | (Variant(lhs_name, lhs_ctor_lst), Variant(rhs_name, rhs_ctor_lst)) ->
         if lhs_name = rhs_name then
           if (List.compare_lengths lhs_ctor_lst rhs_ctor_lst) = 0 then
-            let common_ctors = List.map2 (
-                fun (lhs_ctor_name, lhs_typ) (rhs_ctor_name, rhs_typ) ->
-                  if lhs_ctor_name = rhs_ctor_name then
-                    let common_ctor_typ = common_type_of_lr lhs_typ rhs_typ in
-                    (lhs_ctor_name, common_ctor_typ)
-                  else
-                    failwith "Mismatched ctor names"
-              ) lhs_ctor_lst rhs_ctor_lst
+            let common_ctors =
+              List.map2 common_v_ctor lhs_ctor_lst rhs_ctor_lst
             in
             Some(Variant(lhs_name, common_ctors))
           else
@@ -217,6 +221,38 @@ let rec common_type_of_lr lhs rhs =
           "No common type between [[" ^ lhs_fmt ^ "]] [[" ^ rhs_fmt ^ "]]"
         )
 
+(* Helper function for determining the "common" variant ctor between two. *)
+and common_v_ctor_opt
+  {name=lhs_name; fields=lhs_fields}
+  {name=rhs_name; fields=rhs_fields} : v_ctor option
+=
+  if
+    lhs_name <> rhs_name || List.length lhs_fields <> List.length rhs_fields
+  then
+    None
+  else
+    let common_fields =
+      List.map2 (
+        fun {t=lhs_t} {t=rhs_t} ->
+          let common_t = common_type_of_lr lhs_t rhs_t in
+          {t=common_t}
+      ) lhs_fields rhs_fields
+    in
+    Some({name=lhs_name; fields=common_fields})
+
+and common_v_ctor lhs_ctor rhs_ctor : v_ctor =
+  let common_ctor_opt = common_v_ctor_opt lhs_ctor rhs_ctor in
+  begin match common_ctor_opt with
+  | Some(ctor) -> ctor
+  | None ->
+      failwith (
+        Printf.sprintf
+          "Failed to unify fields of variant ctors: [%s] vs [%s]"
+          (fmt_v_ctor lhs_ctor)
+          (fmt_v_ctor rhs_ctor)
+      )
+  end
+
 and common_type_of_lst lst =
   match lst with
   | [] -> Nil
@@ -225,6 +261,26 @@ and common_type_of_lst lst =
 ;;
 
 let rec type_convertible_to from_t to_t =
+  (* Helper function for determining if an individual variant ctor is
+  implicitly convertible to another. *)
+  let _v_ctor_convertible_to
+    {name=lhs_name; fields=lhs_fields}
+    {name=rhs_name; fields=rhs_fields} : bool
+  =
+    if
+      lhs_name <> rhs_name || List.length lhs_fields <> List.length rhs_fields
+    then
+      false
+    else
+      let agreements =
+        List.map2 (
+          fun {t=lhs_t} {t=rhs_t} ->
+            type_convertible_to lhs_t rhs_t
+        ) lhs_fields rhs_fields
+      in
+      List.fold_left (&&) true agreements
+  in
+
   match (from_t, to_t) with
   | (_, Unbound(_)) -> true
   | (Unbound(_), _) -> true
@@ -289,12 +345,7 @@ let rec type_convertible_to from_t to_t =
         if List.length lhs_ctors = List.length rhs_ctors
         then
           let agreements =
-            List.map2 (
-              fun (lhs_name, lhs_typ) (rhs_name, rhs_typ) ->
-                if lhs_name = rhs_name
-                then type_convertible_to lhs_typ rhs_typ
-                else false
-            ) lhs_ctors rhs_ctors
+            List.map2 _v_ctor_convertible_to lhs_ctors rhs_ctors
           in
           List.fold_left (&&) true agreements
         else false
@@ -394,30 +445,91 @@ let type_bitwise_to from_t to_t =
 ;;
 
 
+(* Retrieve a variant constructor by name from the given variant type. *)
+let get_v_ctor_opt v_t ctor_name : v_ctor option =
+  begin match v_t with
+  | Variant(_, v_ctors) ->
+      List.find_opt (
+        fun {name; _} -> name = ctor_name
+      ) v_ctors
+  | _ -> None
+  end
+;;
+
+
+let has_v_ctor v_t ctor_name : bool =
+  let ctor_opt = get_v_ctor_opt v_t ctor_name in
+  begin match ctor_opt with
+  | Some(_) -> true
+  | None -> false
+  end
+;;
+
+
+(* Retrieve a variant constructor by name from the given variant type. *)
+let get_v_ctor v_t ctor_name : v_ctor =
+  let ctor_opt = get_v_ctor_opt v_t ctor_name in
+  begin match ctor_opt with
+  | Some(v_ctor) -> v_ctor
+  | None ->
+      failwith (
+        Printf.sprintf "Variant type [%s] has no constructor [%s]"
+          (fmt_type v_t)
+          ctor_name
+      )
+  end
+;;
+
+
+let get_v_ctor_fields v_t ctor_name : v_ctor_field list =
+  let {fields; _} = get_v_ctor v_t ctor_name in
+  fields
+;;
+
+
+let get_v_ctor_fields_ts v_t ctor_name : berk_t list =
+  let fields = get_v_ctor_fields v_t ctor_name in
+  let ts = List.map (fun {t} -> t) fields in
+  ts
+;;
+
+
 (* Returns true if the given type is a variant such that all of its constructors
 have zero fields (ie, a C-style enum). Returns false otherwise. *)
-let is_zero_field_variant t : bool =
+let rec is_zero_field_variant t : bool =
   begin match t with
-  | Variant(_, name_to_field_t) ->
-      let field_ts =
-        List.map (fun (_, field_t) -> field_t) name_to_field_t
-      in
-      let all_nil =
-        List.fold_left (
-          fun so_far field_t ->
-            let cur =
-              begin match field_t with
-              | Nil -> true
-              | _ -> false
-              end
-            in
-            so_far && cur
-        ) true field_ts
-      in
-      all_nil
+  | Variant(_, v_ctors) ->
+      let each_ctor_empty = List.map is_zero_field_v_ctor v_ctors in
+      let all_ctors_empty = List.fold_left (&&) true each_ctor_empty in
+      all_ctors_empty
 
   | _ -> false
   end
+
+and is_zero_field_v_ctor {fields; _} =
+  match fields with
+  | [] -> true
+  | _ -> false
+;;
+
+
+(* Return true if the two variant ctors approximately match.  *)
+let v_ctors_match lhs_ctor rhs_ctor =
+  (* TODO: This is broken. This can lead to a superset type apparently matching
+  a subset type. *)
+  let common_ctor_opt = common_v_ctor_opt lhs_ctor rhs_ctor in
+  begin match common_ctor_opt with
+  | Some(_) -> true
+  | None -> false
+  end
+;;
+
+
+(* Build a bare-bones variant constructor record, based on the name and the
+possibly-empty list of raw types that constitute the constructor fields. *)
+let build_ctor_from_ts name ts =
+  let fields = List.map (fun t -> {t}) ts in
+  {name; fields}
 ;;
 
 
@@ -497,6 +609,18 @@ let is_unwrappable ptr_t =
 (* Make concrete the given type, to the extent possible, via the mappings in the
 given string-type-variable-to-type mapping. *)
 let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
+  (* Helper function for concretifying an individual variant ctor. *)
+  let _concretify_v_ctor (tvar_to_t : berk_t StrMap.t) {name; fields} : v_ctor =
+    let concrete_fields =
+      List.map (
+        fun {t} ->
+          let concrete_t = concretify_unbound_types tvar_to_t t in
+          {t=concrete_t}
+      ) fields
+    in
+    {name; fields=concrete_fields}
+  in
+
   match typ with
   | U64  | U32 | U16 | U8
   | I64  | I32 | I16 | I8
@@ -544,15 +668,8 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
 
   | Variant(v_name, v_ctors) ->
       let v_ctors_concretified =
-        List.map (
-          fun (ctor_name, ctor_typ) ->
-            let ctor_typ_concretified =
-              concretify_unbound_types tvar_to_t ctor_typ
-            in
-            (ctor_name, ctor_typ_concretified)
-        ) v_ctors
+        List.map (_concretify_v_ctor tvar_to_t) v_ctors
       in
-
       Variant(v_name, v_ctors_concretified)
 
   | Function(ret_t, args_t_lst) ->
@@ -567,6 +684,18 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
 (* Returns true if the type is entirely resolved to a concrete (instantiable)
 type, else false. *)
 let rec is_concrete_type ?(verbose=false) typ =
+  (* Helper function for determining if all fields in a variant ctor are
+  concrete. *)
+  let _is_concrete_v_ctor ({fields; _} : v_ctor) =
+    let each_field =
+      List.map (
+        fun {t} -> is_concrete_type t
+      ) fields
+    in
+    let all_fields = List.fold_left (&&) true each_field in
+    all_fields
+  in
+
   let _is_concrete_type typ = is_concrete_type ~verbose:verbose typ in
 
   let res = begin match typ with
@@ -594,11 +723,9 @@ let rec is_concrete_type ?(verbose=false) typ =
       _is_concrete_type elem_typ
 
   | Variant(_, v_ctors) ->
-      List.fold_left (&&) true (
-        List.map (
-          fun (_, typ) -> _is_concrete_type typ
-        ) v_ctors
-      )
+      let each_ctor = List.map _is_concrete_v_ctor v_ctors in
+      let all_ctors = List.fold_left (&&) true each_ctor in
+      all_ctors
 
   | Function(ret_t, args_t_lst) ->
       let ret_concrete = _is_concrete_type ret_t in
@@ -622,7 +749,31 @@ let rec is_concrete_type ?(verbose=false) typ =
 "merge" the types. This means if an element of one type is undecided, but an
 element of the other type is concrete, then the resultant type reflects the
 concrete side. *)
-let merge_types lhs_orig_t rhs_orig_t : berk_t =
+let rec merge_types lhs_orig_t rhs_orig_t : berk_t =
+  (* Helper function for merge two individual variant constructors. *)
+  let _merge_v_ctors
+    ({name=lhs_name; fields=lhs_fields} as lhs)
+    ({name=rhs_name; fields=rhs_fields} as rhs)
+  =
+    if
+      lhs_name <> rhs_name || List.length lhs_fields <> List.length rhs_fields
+    then
+      failwith (
+        Printf.sprintf "Cannot merge variant constructors: [%s] vs [%s]"
+          (fmt_v_ctor lhs)
+          (fmt_v_ctor rhs)
+      )
+    else
+      let merged_fields =
+        List.map2 (
+          fun {t=lhs_t} {t=rhs_t} ->
+            let merged_field = merge_types lhs_t rhs_t in
+            {t=merged_field}
+        ) lhs_fields rhs_fields
+      in
+      {name=lhs_name; fields=merged_fields}
+  in
+
   let rec _merge_types lhs_t rhs_t : berk_t =
     begin match (lhs_t, rhs_t) with
     | (Undecided, Undecided) ->
@@ -700,32 +851,21 @@ let merge_types lhs_orig_t rhs_orig_t : berk_t =
         Function(merged_ret_t, merged_arg_ts)
 
     | (
-        Variant(lhs_v_name, lhs_name_t_ctors),
-        Variant(rhs_v_name, rhs_name_t_ctors)
+        Variant(lhs_name, lhs_ctors),
+        Variant(rhs_name, rhs_ctors)
       ) ->
-        begin if lhs_v_name = rhs_v_name then
-          let merged_name_t_ctors =
-            List.map2 (
-              fun (lhs_name, lhs_t) (rhs_name, rhs_t) ->
-                begin if lhs_name = rhs_name then
-                  let merged_t = _merge_types lhs_t rhs_t in
-                  (lhs_name, merged_t)
-                else
-                  failwith (
-                    Printf.sprintf
-                      "Cannot merge types: [%s] vs [%s]"
-                      (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
-                  )
-                end
-            ) lhs_name_t_ctors rhs_name_t_ctors
-          in
-          Variant(lhs_v_name, merged_name_t_ctors)
-        else
+        begin if
+          lhs_name <> rhs_name ||
+          List.length lhs_ctors <> List.length rhs_ctors
+        then
           failwith (
             Printf.sprintf
               "Cannot merge types: [%s] vs [%s]"
               (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
           )
+        else
+          let merged_v_ctors = List.map2 _merge_v_ctors lhs_ctors rhs_ctors in
+          Variant(lhs_name, merged_v_ctors)
         end
 
     | _ ->
@@ -747,8 +887,20 @@ types in the other.
 
 Fails if the given types are not structurally identical, ie, matching aggregrate
 structure and component types at least one-way convertible. *)
-let map_tvars_to_types ?(init_map=StrMap.empty) lhs_typ rhs_typ =
-  let rec _map_tvars_to_types map_so_far lhs_typ rhs_typ =
+let map_tvars_to_types
+  ?(init_map=StrMap.empty) lhs_typ rhs_typ : berk_t StrMap.t
+=
+  (* Helper function for extracting the type variables referenced in variant
+  constructors. *)
+  let rec _map_tvars_to_types_in_v_ctor
+    map_so_far {fields=lhs_fields; _} {fields=rhs_fields; _}
+  =
+    List.fold_left2 (
+      fun so_far {t=lhs_t} {t=rhs_t} ->
+        _map_tvars_to_types so_far lhs_t rhs_t
+    ) map_so_far lhs_fields rhs_fields
+
+  and _map_tvars_to_types map_so_far lhs_typ rhs_typ =
     match lhs_typ, rhs_typ with
     | (Unbound(lhs_tvar), Unbound(rhs_tvar)) ->
         (* Sanity check: These mappings from type-variable to concrete type are
@@ -812,10 +964,8 @@ let map_tvars_to_types ?(init_map=StrMap.empty) lhs_typ rhs_typ =
         _map_tvars_to_types map_so_far lhs_typ rhs_typ
 
     | (Variant(_, lhs_ctors), Variant(_, rhs_ctors)) ->
-        List.fold_left2 (
-          fun so_far (_, lhs_typ) (_, rhs_typ) ->
-            _map_tvars_to_types so_far lhs_typ rhs_typ
-        ) map_so_far lhs_ctors rhs_ctors
+        List.fold_left2
+          _map_tvars_to_types_in_v_ctor map_so_far lhs_ctors rhs_ctors
 
     | _ ->
         let lhs_fmt = fmt_type lhs_typ in
@@ -831,7 +981,15 @@ let map_tvars_to_types ?(init_map=StrMap.empty) lhs_typ rhs_typ =
 
 (* Given a type, return a list of all of the string type variables. *)
 let get_tvars typ =
-  let rec _get_tvars so_far typ =
+  (* Helper function for extracting the type variables out of an individual
+  variant constructor *)
+  let rec _get_tvars_in_v_ctor so_far {fields; _} =
+    List.fold_left (
+      fun so_far {t} ->
+        _get_tvars so_far t
+    ) so_far fields
+
+  and _get_tvars so_far typ =
     match typ with
     | Unbound(tvar) -> tvar :: so_far
 
@@ -858,10 +1016,7 @@ let get_tvars typ =
         _get_tvars so_far typ
 
     | Variant(_, ctors) ->
-        List.fold_left (
-          fun so_far (_, typ) ->
-            _get_tvars so_far typ
-        ) so_far ctors
+        List.fold_left _get_tvars_in_v_ctor so_far ctors
 
     | Function(ret_t, args_t_lst) ->
         let so_far = _get_tvars so_far ret_t in
@@ -879,15 +1034,28 @@ let get_tvars typ =
 ;;
 
 (* Get the index of the given ctor name in the given list of variant ctors *)
-let get_tag_index_by_variant_ctor v_ctors ctor_name =
+let get_tag_index_by_variant_ctor v_t ctor_name =
+  let v_ctors =
+    begin match v_t with
+    | Variant(_, v_ctors) -> v_ctors
+    | _ ->
+        failwith (
+          Printf.sprintf "Unexpected non-variant type [%s] in [%s]"
+            (fmt_type v_t)
+            (__FUNCTION__)
+        )
+    end
+  in
+
   let rec _get_variant_ctor_tag_index accum v_ctors_tail =
     begin match v_ctors_tail with
     | [] -> failwith ("Failed to find " ^ ctor_name ^ " within variant")
-    | (v_ctor_name, _)::xs ->
-        if v_ctor_name = ctor_name then
+    | {name; _}::xs ->
+        begin if name = ctor_name then
           accum
         else
           _get_variant_ctor_tag_index (accum + 1) xs
+        end
     end
   in
 

@@ -41,23 +41,6 @@ let add_uniq_varname varname t_qual_pair vars =
   else
     StrMap.add varname t_qual_pair vars
 
-(* Given a variant declaration that may contain some arbitrary number of unbound
-types, a variant constructor name that exists in the given variant declaration,
-and the corresponding value type of the constructor, yield an
-as-concrete-as-possible Variant type. *)
-let variant_decl_to_variant_type {v_name; v_ctors; _} ctor_name typ =
-  let (_, ctor_typ) = List.find (fun (name, _) -> name = ctor_name) v_ctors in
-
-  let tvars_to_types = map_tvars_to_types ctor_typ typ in
-  let init_variant_t = Variant(v_name, v_ctors) in
-
-  let variant_t_concretified =
-    concretify_unbound_types tvars_to_types init_variant_t
-  in
-
-  variant_t_concretified
-;;
-
 
 (* If the given type is an unbound type (some user-defined type), then try to
 yield the more concrete type known by that name. *)
@@ -172,8 +155,7 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ValCast(typ, _, expr)
   | UnOp(typ, _, expr)
-  | TupleIndexExpr(typ, _, expr)
-  | VariantCtorExpr(typ, _, expr) ->
+  | TupleIndexExpr(typ, _, expr) ->
       (_is_concrete_type typ) &&
         (_is_concrete_expr expr)
 
@@ -202,7 +184,8 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ArrayExpr(typ, exprs)
   | TupleExpr(typ, exprs)
-  | FuncCall(typ, _, exprs) ->
+  | FuncCall(typ, _, exprs)
+  | VariantCtorExpr(typ, _, exprs) ->
       (_is_concrete_type typ) &&
         (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
 
@@ -251,7 +234,11 @@ and is_concrete_patt ?(verbose=false) patt =
   | Wild(t) -> (_is_concrete_type t)
   | VarBind(t, _) -> (_is_concrete_type t)
   | PTuple(t, _) -> (_is_concrete_type t)
-  | Ctor(t, _, patt) -> (_is_concrete_type t) && (_is_concrete_patt patt)
+  | Ctor(t, _, patts) ->
+      let is_concrete_t = _is_concrete_type t in
+      let each_concrete_patt = List.map _is_concrete_patt patts in
+      let all_concrete_patts = List.fold_left (&&) true each_concrete_patt in
+      is_concrete_t && all_concrete_patts
   | PatternAs(t, patt, _) -> (_is_concrete_type t) && (_is_concrete_patt patt)
   end
 ;;
@@ -269,38 +256,23 @@ between multiple matching variants. If a disambiguator is provided, and the
 constructor matches a particular variant, and the disambiguator eliminates that
 variant as an option, then this function will fail.
 *)
-let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor_name typ =
-  (* Given a variant declaration, return whether that variant contains the
-  target constructor (via constructor name and associated type) *)
-  let has_ctor {v_ctors; _} =
-    let matching_ctor = List.find_opt (
-        fun (candidate_name, candidate_typ) ->
-          ctor_name = candidate_name &&
-          type_convertible_to typ candidate_typ
-      ) v_ctors
-    in
-    begin match matching_ctor with
-      | None -> false
-      | Some(_) -> true
-    end
-  in
-
-  let variants = mod_ctxt.variants in
-
+let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor =
+  (* Get all variant declarations that seem to match the given constructor. *)
   let matching_variants =
     StrMap.filter (
       fun variant_name v_decl_t ->
         if disambiguator = ""
-        then has_ctor v_decl_t
-        else variant_name = disambiguator && has_ctor v_decl_t
-    ) variants
+        then v_decl_has_ctor v_decl_t ctor
+        else variant_name = disambiguator && v_decl_has_ctor v_decl_t ctor
+    ) mod_ctxt.variants
   in
 
-  let variant_typ = if StrMap.cardinal matching_variants = 1 then
+  (* If there was exactly one matching variant declaration, then generate a
+  variant _type_ that reflects that declaration. Else, fail. *)
+  begin if StrMap.cardinal matching_variants = 1 then
     (* Take the one variant-name -> variant-decl binding there is. *)
     let (_, matching_variant_t) = StrMap.choose matching_variants in
-
-    variant_decl_to_variant_type matching_variant_t ctor_name typ
+    variant_decl_to_variant_type matching_variant_t ctor
 
   else if StrMap.cardinal matching_variants = 0 then
     failwith "No matching variants"
@@ -309,9 +281,7 @@ let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor_name typ =
       "Disambiguator " ^ disambiguator ^
       " yielded multiple matching variants"
     )
-  in
-
-  variant_typ
+  end
 ;;
 
 
@@ -1224,15 +1194,15 @@ and type_check_expr
 
         TupleExpr(tuple_t, exprs_typechecked)
 
-    | VariantCtorExpr(_, ctor_name, ctor_exp) ->
-        let ctor_exp_expected_t = begin match expected_t with
-          | Undecided -> Undecided
-          | Variant(_, ctors) ->
-              let (_, ctor_exp_t) = List.find (
-                  fun (name, _) -> name = ctor_name
-                ) ctors
-              in
-              ctor_exp_t
+    | VariantCtorExpr(_, ctor_name, field_exprs) ->
+        (* Get a symmetric list of expected types for each field in the variant
+        ctor, based on the input expected type. *)
+        let ctor_expected_ts = begin match expected_t with
+          | Undecided ->
+              List.init (List.length field_exprs) (fun _ -> Undecided)
+          | Variant(_, _) ->
+              get_v_ctor_fields_ts expected_t ctor_name
+
           | _ ->
               failwith (
                 "Unexpectedly expecting non-variant type in " ^
@@ -1240,15 +1210,44 @@ and type_check_expr
               )
         end in
 
-        let ctor_exp_typechecked =
-          type_check_expr tc_ctxt ctor_exp_expected_t ctor_exp
+        let field_exprs_typechecked =
+          List.map2 (type_check_expr tc_ctxt) ctor_expected_ts field_exprs
         in
-        let ctor_exp_typ = expr_type ctor_exp_typechecked in
-        let resolved_v_t : berk_t =
-          variant_ctor_to_variant_type tc_ctxt.mod_ctxt ctor_name ctor_exp_typ
+        let field_exprs_ts = List.map expr_type field_exprs_typechecked in
+
+        (* This is a _placeholder_ constructor record, a common denominator
+        ctor object, that we can use to try to determine the intended overall
+        variant type this ctor-expr is referring to. *)
+        let approximate_ctor = build_ctor_from_ts ctor_name field_exprs_ts in
+
+        (* Assuming we were not given an input expected type, what variant type
+        would we expect this variant ctor expression to be referring to? *)
+        let inferred_v_t : berk_t =
+          variant_ctor_to_variant_type tc_ctxt.mod_ctxt approximate_ctor
         in
 
-        VariantCtorExpr(resolved_v_t, ctor_name, ctor_exp_typechecked)
+        (* Ensure that our inferred variant type is at least convertible to
+        the input expected type, if there was one, else just take what we
+        inferred. *)
+        let _ =
+          begin match expected_t with
+          | Variant(_, _) ->
+              begin if type_convertible_to inferred_v_t expected_t then
+                ()
+              else
+                failwith (
+                  Printf.sprintf
+                    "Expected type [%s] but inferred incompatible type [%s]"
+                    (fmt_type expected_t)
+                    (fmt_type inferred_v_t)
+                )
+              end
+          | _ ->
+              ()
+          end
+        in
+
+        VariantCtorExpr(inferred_v_t, ctor_name, field_exprs_typechecked)
 
     | MatchExpr(_, matched_expr, pattern_expr_pairs) ->
         let matched_expr_tc = _type_check_expr matched_expr in
@@ -1404,28 +1403,37 @@ and type_check_pattern
       | _ -> failwith "Match expression type does not match bool in pattern"
       end
 
-  | Ctor(_, ctor_name, exp_patt) ->
-      let ctor_exp_t = begin match matched_t with
-      | Variant(_, ctors) ->
-          (* TODO: This will just fail if the ctor_name does not match. We
-            should have a nicer error message here (ie, "wrong variant") *)
-          let (_, ctor_exp_t) = List.find (
-              fun (name, _) -> ctor_name = name
-            ) ctors
-          in
-          ctor_exp_t
-      | _ ->
-          failwith (
-            "Unexpectedly expecting non-variant type in " ^
-            "variant constructor match: " ^ (fmt_type matched_t)
-          )
-      end in
-
-      let (tc_ctxt, exp_patt) =
-        type_check_pattern tc_ctxt ctor_exp_t exp_patt
+  | Ctor(_, ctor_name, exp_patts) ->
+      let ctor_fields =
+        begin match matched_t with
+        | Variant(_, ctors) ->
+            (* TODO: This will just fail if the ctor_name does not match. We
+              should have a nicer error message here (ie, "wrong variant") *)
+            let {fields=ctor_fields; _} = List.find (
+                fun {name; _} -> ctor_name = name
+              ) ctors
+            in
+            ctor_fields
+        | _ ->
+            failwith (
+              "Unexpectedly expecting non-variant type in " ^
+              "variant constructor match: " ^ (fmt_type matched_t)
+            )
+        end
       in
 
-      (tc_ctxt, Ctor(matched_t, ctor_name, exp_patt))
+      let ctor_fields_ts = List.map (fun {t} -> t) ctor_fields in
+
+      let (tc_ctxt, exp_patts_tc) =
+        List.fold_left2 (
+          fun (tc_ctxt, patts_tc_so_far_rev) t patt ->
+            let (tc_ctxt, patt_tc) = type_check_pattern tc_ctxt t patt in
+
+            (tc_ctxt, patt_tc :: patts_tc_so_far_rev)
+        ) (tc_ctxt, []) ctor_fields_ts exp_patts
+      in
+
+      (tc_ctxt, Ctor(matched_t, ctor_name, exp_patts_tc))
 
   | PatternAs(_, patt, varname) ->
       let (tc_ctxt, patt_typechecked) =
@@ -1464,9 +1472,11 @@ and pattern_dominates lhs_patt rhs_patt =
         List.map2 pattern_dominates lhs_patts rhs_patts
       )
 
-  | (Ctor(_, lhs_ctor_name, lhs_patt), Ctor(_, rhs_ctor_name, rhs_patt)) ->
+  | (Ctor(_, lhs_ctor_name, lhs_patts), Ctor(_, rhs_ctor_name, rhs_patts)) ->
       if lhs_ctor_name = rhs_ctor_name then
-        pattern_dominates lhs_patt rhs_patt
+        let each_dominates = List.map2 pattern_dominates lhs_patts rhs_patts in
+        let all_dominates = List.fold_left (&&) true each_dominates in
+        all_dominates
       else
         false
 
@@ -1548,12 +1558,18 @@ and generate_value_patts t : pattern list =
   | Variant(_, ctors) ->
       let ctor_patt_chunks : pattern list list =
         List.map (
-          fun (ctor_name, ctor_t) ->
-            let ctor_value_patts = generate_value_patts ctor_t in
+          fun {name=ctor_name; fields} ->
+            let fields_ts = List.map (fun {t} -> t) fields in
+            let fields_ts_patts = List.map generate_value_patts fields_ts in
+            let fields_ts_patts_cart_prod = cartesian_product fields_ts_patts in
             let ctor_patts =
-              List.map (
-                fun value_patt -> Ctor(t, ctor_name, value_patt)
-              ) ctor_value_patts
+              begin match fields_ts_patts_cart_prod with
+              | [] -> [Ctor(t, ctor_name, [])]
+              | _ ->
+                  List.map (
+                    fun value_patt -> Ctor(t, ctor_name, value_patt)
+                  ) fields_ts_patts_cart_prod
+              end
             in
             ctor_patts
         ) ctors

@@ -256,12 +256,22 @@ let control_flow_list mir_ctxt : bb list =
     (* Yield lists of the basic blocks that the given basic block can branch
     to. *)
     let get_branches bb : bb list =
+      let find_bb bb_name bbs =
+        begin match (StrMap.find_opt bb_name bbs) with
+        | Some(bb) -> bb
+        | None ->
+            failwith (
+              Printf.sprintf "Could not find bb [%s]" bb_name
+            )
+        end
+      in
+
       let terminator = List.hd (List.rev bb.instrs) in
       begin match terminator with
-      | Br({name; _}) -> [StrMap.find name mir_ctxt.bbs]
+      | Br({name; _}) -> [find_bb name mir_ctxt.bbs]
       | CondBr(_, {name=bb_if_name; _}, {name=bb_else_name; _}) -> [
-          StrMap.find bb_if_name mir_ctxt.bbs;
-          StrMap.find bb_else_name mir_ctxt.bbs
+          find_bb bb_if_name mir_ctxt.bbs;
+          find_bb bb_else_name mir_ctxt.bbs
         ]
       | Ret(_) -> []
       | RetVoid -> []
@@ -1036,26 +1046,24 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, tup_elem_lval)
 
-      | VariantCtorExpr(variant_t, ctor_name, ctor_arg) ->
-          let v_ctors = begin match variant_t with
-          | Variant(_, v_ctors) -> v_ctors
-          | _ -> failwith "Unexpected non-variant type in variant-ctor-expr"
-          end in
-
+      | VariantCtorExpr(variant_t, ctor_name, ctor_args) ->
           (* Assign the variant tag (first field in aggregate), based on the
           specific constructor we're building. *)
-          let ctor_idx = get_tag_index_by_variant_ctor v_ctors ctor_name in
+          let ctor_idx = get_tag_index_by_variant_ctor variant_t ctor_name in
           let (mir_ctxt, bb, tag_lval) =
             ValU8(ctor_idx) |> literal_to_instr mir_ctxt bb U8
           in
 
           (* This constructor may have associated data. Assign it now. *)
-          let ctor_t = expr_type ctor_arg in
+          let ctor_args_ts = List.map expr_type ctor_args in
           let (
             mir_ctxt, bb, ({t=variant_ctor_t; _} as ctor_lval), construct_instr
           ) = begin
-            match ctor_t with
-            | Nil ->
+            match ctor_args_ts with
+            | [] ->
+                (* This variant constructor has no fields, so the internal
+                representation of the constructor is merely a "tuple" with
+                one element: the constructor-identifying tag. *)
                 let variant_ctor_t = Tuple([U8]) in
 
                 let (mir_ctxt, varname) = get_varname mir_ctxt in
@@ -1069,16 +1077,28 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                 (mir_ctxt, bb, ctor_lval, construct_instr)
 
             | _ ->
-                let variant_ctor_t = Tuple([U8; ctor_t]) in
+                (* The variant constructor contains non-zero fields, so as an
+                implementation detail we represent those fields as a tuple.
+                The first element of the tuple is the constructor tag. *)
+                let variant_ctor_t = Tuple(U8 :: ctor_args_ts) in
 
-                let (mir_ctxt, bb, ctor_elem_lval) =
-                  _expr_to_mir mir_ctxt bb ctor_arg
+                (* Generate lvals for the expression for each field in the
+                variant constructor. *)
+                let (mir_ctxt, bb, ctor_elem_lvals_rev) =
+                  List.fold_left (
+                    fun (mir_ctxt, bb, lvals_so_far_rev) ctor_arg ->
+                      let (mir_ctxt, bb, lval) =
+                        _expr_to_mir mir_ctxt bb ctor_arg
+                      in
+                      (mir_ctxt, bb, lval :: lvals_so_far_rev)
+                  ) (mir_ctxt, bb, []) ctor_args
                 in
+                let ctor_elem_lvals = List.rev ctor_elem_lvals_rev in
 
                 let (mir_ctxt, varname) = get_varname mir_ctxt in
                 let ctor_lval = {t=variant_ctor_t; kind=Tmp; lname=varname} in
                 let construct_instr =
-                  ConstructAggregate(ctor_lval, [tag_lval; ctor_elem_lval])
+                  ConstructAggregate(ctor_lval, tag_lval :: ctor_elem_lvals)
                 in
 
                 (mir_ctxt, bb, ctor_lval, construct_instr)
@@ -1543,17 +1563,10 @@ and pattern_to_mir
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | Ctor(t, ctor_name, patt) ->
-        let v_ctors = begin match t with
-        | Variant(_, v_ctors) -> v_ctors
-        | _ -> failwith "Unexpected non-variant type in variant-ctor-patt"
-        end in
-
+    | Ctor(v_t, ctor_name, ctor_patts) ->
         (* Assign the variant tag (first field in aggregate), based on the
         specific constructor we're building. *)
-        let ctor_idx_expected =
-          get_tag_index_by_variant_ctor v_ctors ctor_name
-        in
+        let ctor_idx_expected = get_tag_index_by_variant_ctor v_t ctor_name in
         let (mir_ctxt, bb_patt, tag_expected_lval) =
           ValU8(ctor_idx_expected) |> literal_to_instr mir_ctxt bb_patt U8
         in
@@ -1566,6 +1579,8 @@ and pattern_to_mir
           FromAggregate(tag_actual_lval, 0, matched_lval)
         in
 
+        (* Compare the expected tag (to match) with the extracted tag from the
+        actual variant constructor object. *)
         let (mir_ctxt, tag_match_lname) = get_varname mir_ctxt in
         let tag_match_lval = {t=U8; kind=Tmp; lname=tag_match_lname} in
         let tag_match_instr =
@@ -1576,6 +1591,8 @@ and pattern_to_mir
         let (mir_ctxt, bb_ctor_subpatt_name) = get_bbname mir_ctxt in
         let bb_ctor_subpatt = {name=bb_ctor_subpatt_name; instrs=[]} in
 
+        (* If the tag matches, we'll continue to match against the sub-patterns.
+        Else, we didn't match this pattern, so skip. *)
         let cond_br_instr = CondBr(tag_match_lval, bb_ctor_subpatt, bb_else) in
 
         let bb_patt = {
@@ -1588,27 +1605,40 @@ and pattern_to_mir
 
         let mir_ctxt = update_bb mir_ctxt bb_patt in
 
-        (* We need to extract the value out of the constructor, if there is one,
-        so we can continue the match. *)
-        let (_, ctor_val_t) =
-          List.find (fun (name, _) -> name = ctor_name) v_ctors
+        (* We need to extract the values out of the constructor, if there are
+        any, so we can continue the match. *)
+        let v_ctor_fields_ts = get_v_ctor_fields_ts v_t ctor_name in
+
+        (* Sanity check that the count of patterns we expect to match, and the
+        count of fields in the variant constructor, agree with each other. *)
+        let _ =
+          begin if List.length ctor_patts = List.length v_ctor_fields_ts then
+            ()
+          else
+            failwith "Mismatch between variant ctor fields and patterns"
+          end
         in
 
         let (mir_ctxt, bb_ctor_subpatt, is_match_lval) = begin
-          match ctor_val_t with
-          | Nil ->
-              let (mir_ctxt, nil_dummy_lname) = get_varname mir_ctxt in
-              let nil_dummy_lval = {t=Nil; kind=Tmp; lname=nil_dummy_lname} in
+          match v_ctor_fields_ts with
+          | [] ->
+              (* This variant constructor has no fields, so there's nothing else
+              to further match against, and we simply return a `true` to
+              indicate a successful match. *)
 
-              let (mir_ctxt, bb_ctor_subpatt, is_match_lval) =
-                pattern_breakdown_mir
-                  mir_ctxt bb_ctor_subpatt bb_else nil_dummy_lval patt
+              let (mir_ctxt, bb_ctor_subpatt, unconditional_match_lval) =
+                expr_to_mir mir_ctxt bb_ctor_subpatt (ValBool(true))
               in
 
-              (mir_ctxt, bb_ctor_subpatt, is_match_lval)
+              (mir_ctxt, bb_ctor_subpatt, unconditional_match_lval)
 
           | _ ->
               Printf.printf "Matched_t: [[ %s ]]\n" (fmt_type matched_t) ;
+
+              (* As an implementation detail, the accessible elements of the
+              variant constructor are represented as a tuple. *)
+              let ctor_val_t = Tuple(v_ctor_fields_ts) in
+              let ctor_tuple_patt = PTuple(ctor_val_t, ctor_patts) in
 
               let (mir_ctxt, generic_ctor_val_lname) = get_varname mir_ctxt in
 
@@ -1676,7 +1706,7 @@ and pattern_to_mir
 
               let (mir_ctxt, bb_ctor_subpatt, is_match_lval) =
                 pattern_breakdown_mir
-                  mir_ctxt bb_ctor_subpatt bb_else ctor_val_lval patt
+                  mir_ctxt bb_ctor_subpatt bb_else ctor_val_lval ctor_tuple_patt
               in
 
               (mir_ctxt, bb_ctor_subpatt, is_match_lval)
