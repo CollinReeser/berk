@@ -517,14 +517,16 @@ let () =
       }
 
       match multi_test_1 {
-      | MultiTwo(b, _) -> {
+      | MultiTwo(b, One) -> {
           printf("MultiTwo: [%d](1)\n", b);
         }
-      | _ -> {}
+      | MultiThree(_, _, _) -> {
+          printf("Should not match MultiThree!\n");
+        }
       }
 
       match (multi_test_2, multi_test_3) {
-      | (MultiThree(_, b1, _), MultiThree(_, b2, _)) -> {
+      | (MultiThree(_, b1, One), MultiThree(_, b2, _)) -> {
           printf("MultiThree: [%d](1), [%d](0)\n", b1, b2);
         }
       | _ -> {}
