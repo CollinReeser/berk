@@ -502,21 +502,30 @@ let () =
       printf("ufcs_add_test: [%d] (15?)\n", ufcs_add_test);
       printf("ufcs_math_chain: [%d] (50?)\n", ufcs_math_chain);
 
-      // Variant constructors can have multiple fields.
+      // Variant constructors can have multiple fields, and can have tuples as
+      // "single" fields.
       let some_tuple = Some((true, false));
       let multi_test_1 = MultiTwo(true, One);
-      //let multi_test_2 = MultiThree(Right, false, One);
+      let multi_test_2 = MultiThree(Right, true, One);
+      let multi_test_3 = MultiThree(Right, false, One);
 
       match some_tuple {
       | Some((a, b)) -> {
-          printf("a: [%d](1 expect); b: [%d](0 expect)\n", a, b);
+          printf("a: [%d](1); b: [%d](0)\n", a, b);
         }
       | None -> {}
       }
 
       match multi_test_1 {
       | MultiTwo(b, _) -> {
-          printf("MultiTwo: [%d]\n", b);
+          printf("MultiTwo: [%d](1)\n", b);
+        }
+      | _ -> {}
+      }
+
+      match (multi_test_2, multi_test_3) {
+      | (MultiThree(_, b1, _), MultiThree(_, b2, _)) -> {
+          printf("MultiThree: [%d](1), [%d](0)\n", b1, b2);
         }
       | _ -> {}
       }
