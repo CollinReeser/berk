@@ -428,11 +428,14 @@ let () =
       // Not having a concrete typevar at decl time is okay if the expr knows
       let some_test_3: Opt<`a> = Some(true);
       // Using an alias for the expected typevar works?
-      let some_test_4: Opt<`b> = Some(true);
+      let some_test_4: Opt<`b> = Some(false);
 
-      match (some_test_1, some_test_2, some_test_3) {
-      | (Some(b1), Some(b2), Some(b3)) -> {
-          printf("Matched `(Some(%d), Some(%d), Some(%d))`\n", b1, b2, b3);
+      match (some_test_1, some_test_2, some_test_3, some_test_4) {
+      | (Some(b1), Some(b2), Some(b3), Some(b4)) -> {
+          printf(
+            "Matched `(Some(%d), Some(%d), Some(%d), Some(%d))`\n",
+            b1, b2, b3, b4
+          );
         }
       | _ -> { printf("Incorrectly matched None?\n"); }
       }
