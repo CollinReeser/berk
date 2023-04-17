@@ -532,6 +532,36 @@ let () =
       | _ -> {}
       }
 
+      // Exercise `as` bindings in matches.
+      let quad_some = Some((true, false, true, true));
+      match quad_some {
+      | Some((quad_b1, _, _, _) as quad_tup) -> {
+          printf("as-matching: quad_b1: [%d](1)\n", quad_b1);
+
+          match quad_tup {
+          | (_, _ as quad_ex_false, _, quad_b4) as quad_tup_2 -> {
+              printf("as-matching: quad_b4: [%d](1)\n", quad_b4);
+
+              match (quad_ex_false, quad_tup_2) {
+              | (false, (_, false, quad_b3, _)) -> {
+                  printf("Expected match: quad_b3: [%d]\n", quad_b3);
+                }
+              | (true, (_, false, quad_b3, _)) -> {
+                  printf("UN-expected match 1: quad_b3: [%d]\n", quad_b3);
+                }
+              | (false, (_, true, quad_b3, _)) -> {
+                  printf("UN-expected match 2: quad_b3: [%d]\n", quad_b3);
+                }
+              | (_, (_, _, quad_b3, _)) -> {
+                  printf("UN-expected match 3: quad_b3: [%d]\n", quad_b3);
+                }
+              }
+            }
+          }
+        }
+      | None -> {}
+      }
+
       return 0;
     }
   |} in
