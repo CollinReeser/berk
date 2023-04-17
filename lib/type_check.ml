@@ -21,6 +21,16 @@ type typecheck_context = {
   mod_ctxt: module_context;
 }
 
+let fmt_variants_map variants =
+  let variant_names_to_decls = StrMap.bindings variants in
+  let variants_fmt =
+    List.map (
+      fun (_, v_decl) -> fmt_variant_decl v_decl
+    ) variant_names_to_decls
+  in
+  fmt_join_strs ", " variants_fmt
+;;
+
 let default_tc_ctxt typ = {
   vars = StrMap.empty;
   ret_t = typ;
@@ -44,7 +54,7 @@ let add_uniq_varname varname t_qual_pair vars =
 
 (* If the given type is an unbound type (some user-defined type), then try to
 yield the more concrete type known by that name. *)
-let bind_type mod_ctxt t =
+let rec bind_type mod_ctxt t =
   begin match t with
   | UnboundType(name, ts) ->
       let {v_name=v_name; v_ctors=v_ctors; v_typ_vars=v_typ_vars} as v_decl =
@@ -59,7 +69,8 @@ let bind_type mod_ctxt t =
 
       Printf.printf "Variant decl: [%s]\n%!" (fmt_variant_decl v_decl);
 
-      let variant_t = Variant(v_name, v_ctors) in
+      let bound_v_ctors = List.map (bind_v_ctor mod_ctxt) v_ctors in
+      let variant_t = Variant(v_name, bound_v_ctors) in
 
       Printf.printf "Variant type: [%s]\n%!" (fmt_type variant_t);
 
@@ -94,6 +105,16 @@ let bind_type mod_ctxt t =
 
   | _ -> t
   end
+
+and bind_v_ctor mod_ctxt {name; fields} =
+  let bound_fields =
+    List.map (
+      fun {t} ->
+        let bind_t = bind_type mod_ctxt t in
+        {t=bind_t}
+    ) fields
+  in
+  {name; fields=bound_fields}
 ;;
 
 
@@ -275,7 +296,11 @@ let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor =
     variant_decl_to_variant_type matching_variant_t ctor
 
   else if StrMap.cardinal matching_variants = 0 then
-    failwith "No matching variants"
+    failwith (
+      Printf.sprintf "No matching variants for ctor [%s] among [%s]"
+        (fmt_v_ctor ctor)
+        (fmt_variants_map mod_ctxt.variants)
+    )
   else
     failwith (
       "Disambiguator " ^ disambiguator ^
@@ -356,13 +381,20 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
         (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
-  | VariantDecl({v_name; v_ctors; v_typ_vars} as v_decl_ast) ->
+  | VariantDecl({v_name; v_ctors; v_typ_vars}) ->
       let _ = match (StrMap.find_opt v_name mod_ctxt.variants) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of variant " ^ v_name)
       in
 
-      let var_t = Variant(v_name, v_ctors) in
+      (* If a variant declaration internally refers to other variants (ie,
+      as a field of one of the constructors), then we want to resolve that
+      field to a concrete type, and use that resolved declaration going
+      forward. *)
+      let bound_v_ctors = List.map (bind_v_ctor mod_ctxt) v_ctors in
+      let bound_v_decl_ast = {v_name; v_ctors=bound_v_ctors; v_typ_vars} in
+
+      let var_t = Variant(v_name, bound_v_ctors) in
       let real_tvars = get_tvars var_t in
       let declared_tvars = List.sort compare v_typ_vars in
       let _ =
@@ -373,10 +405,10 @@ and type_check_mod_decl mod_ctxt mod_decl =
           )
       in
 
-      let variants_up = StrMap.add v_name v_decl_ast mod_ctxt.variants in
+      let variants_up = StrMap.add v_name bound_v_decl_ast mod_ctxt.variants in
       let mod_ctxt_up = {mod_ctxt with variants = variants_up} in
 
-      (mod_ctxt_up, VariantDecl(v_decl_ast))
+      (mod_ctxt_up, VariantDecl(bound_v_decl_ast))
 
 (* Given a module-typechecking context and a function-definition AST, typecheck
 the function definition and return its typechecked form. *)

@@ -1,4 +1,8 @@
 
+let sum (lst : int list) =
+  List.fold_left (+) 0 lst
+;;
+
 let replace lst n elem =
   List.mapi (fun i x -> if i = n then elem else x) lst;;
 ;;

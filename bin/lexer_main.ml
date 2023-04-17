@@ -42,6 +42,11 @@ let () =
     | No(`a)
     }
 
+    variant MultipleFields {
+    | MultiTwo(bool, Unary)
+    | MultiThree(BinaryNoFields, bool, Unary)
+    }
+
     fn is_unsigned_sub_safe(lhs: u64, rhs: u64): YesOrNo<bool> {
       if lhs >= rhs {
         return Yes(true);
@@ -493,6 +498,25 @@ let () =
       printf("ufcs_identity_chained: [%d]\n", ufcs_identity_chained);
       printf("ufcs_add_test: [%d] (15?)\n", ufcs_add_test);
       printf("ufcs_math_chain: [%d] (50?)\n", ufcs_math_chain);
+
+      // Variant constructors can have multiple fields.
+      let some_tuple = Some((true, false));
+      let multi_test_1 = MultiTwo(true, One);
+      //let multi_test_2 = MultiThree(Right, false, One);
+
+      match some_tuple {
+      | Some((a, b)) -> {
+          printf("a: [%d](1 expect); b: [%d](0 expect)\n", a, b);
+        }
+      | None -> {}
+      }
+
+      match multi_test_1 {
+      | MultiTwo(b, _) -> {
+          printf("MultiTwo: [%d]\n", b);
+        }
+      | _ -> {}
+      }
 
       return 0;
     }

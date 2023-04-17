@@ -105,7 +105,7 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
         else
           "<" ^ (fmt_join_types ~pretty_unbound:pretty_unbound ", " ts) ^ ">"
       in
-      Printf.sprintf "%s%s"
+      Printf.sprintf "%s:(unbound-type)%s"
         name
         ts_fmt
 
@@ -527,9 +527,87 @@ let v_ctors_match lhs_ctor rhs_ctor =
 
 (* Build a bare-bones variant constructor record, based on the name and the
 possibly-empty list of raw types that constitute the constructor fields. *)
-let build_ctor_from_ts name ts =
+let build_ctor_from_ts name ts : v_ctor =
   let fields = List.map (fun t -> {t}) ts in
   {name; fields}
+;;
+
+
+let get_tuple_of_ctor {fields; _} : berk_t =
+  let ts = List.map (fun {t} -> t) fields in
+  Tuple(ts)
+;;
+
+
+(* TODO: This is not the most appropriate place for this function, because
+really the backend code generator (eg, LLVM) should be the one making decisions
+about the relative sizes of types (particularly because of alignment between
+fields in aggregate types). We keep this here now while we lack a sufficient
+abstraction mechanism to punt this to the backend side. *)
+let rec sizeof_type t =
+  begin match t with
+  | Function(_, _) -> 16
+  (* FIXME: Not true yet, but will be if/when function ptrs become fat ptrs. *)
+  | F128 -> 16
+  | Ptr(_) -> 8
+  | U64 | I64 | F64 -> 8
+  | U32 | I32 | F32 -> 4
+  | U16 | I16 -> 2
+  | U8  | I8 -> 1
+  | String -> 4
+  | Bool -> 1
+  | Nil -> 0
+
+  | Tuple(ts) -> sum (List.map sizeof_type ts)
+  | Array(t, sz) -> sz * (sizeof_type t)
+  | Variant(_, ctors) ->
+      let ctor_tuples = List.map get_tuple_of_ctor ctors in
+      let ctor_tuple_sizes = List.map sizeof_type ctor_tuples in
+      let max_ctor_size = List.fold_left max 0 ctor_tuple_sizes in
+      (* Add 1 byte for the hidden variant ctor "tag". *)
+      (1 + max_ctor_size)
+
+  | ByteArray(t) -> sizeof_type t
+
+  | VarArgSentinel
+  | UnboundType(_, _)
+  | Unbound(_)
+  | Undecided ->
+      failwith (
+        Printf.sprintf "Invalid to attempt sizeof_type([%s])" (fmt_type t)
+      )
+  end
+
+
+(* Return the Tuple representation of the largest ctor in the given variant.
+
+TODO: This makes assumptions about target machine representation of these types,
+which is not valid. Really, this function should be owned by the codegen side,
+but we need a suitable abstraction layer to make that work (MIR sizeof?)
+*)
+let get_largest_ctor_tuple_of_variant v_t =
+  begin match v_t with
+  | Variant(_, ctors) ->
+      let ctor_tuples = List.map get_tuple_of_ctor ctors in
+      let largest_ctor_tuple =
+        List.fold_left (
+          fun lhs rhs ->
+            begin if sizeof_type lhs > sizeof_type rhs then
+              lhs
+            else
+              rhs
+            end
+        ) (Tuple([])) ctor_tuples
+      in
+      largest_ctor_tuple
+
+  | _ ->
+      failwith (
+        Printf.sprintf
+          "Cannot get_largest_ctor_tuple_of_variant of non-variant [%s]"
+          (fmt_type v_t)
+      )
+  end
 ;;
 
 

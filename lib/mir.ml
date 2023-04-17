@@ -1635,20 +1635,37 @@ and pattern_to_mir
           | _ ->
               Printf.printf "Matched_t: [[ %s ]]\n" (fmt_type matched_t) ;
 
-              (* As an implementation detail, the accessible elements of the
-              variant constructor are represented as a tuple. *)
-              let ctor_val_t = Tuple(v_ctor_fields_ts) in
-              let ctor_tuple_patt = PTuple(ctor_val_t, ctor_patts) in
+              (* We have in-hand the "generic" variant type, meaning what we
+              pull out of "index 1" of the variant aggregate is a byte-array
+              sized to whatever the largest constructor in the variant is. So,
+              we will pull that max-size aggregate of data out, dump it into
+              an alloca so we can bitcast the pointer to the actual/expected
+              constructor fields aggregate, load the "real" data in, and
+              continue with our match.
 
-              let (mir_ctxt, generic_ctor_val_lname) = get_varname mir_ctxt in
+              TODO: Really, this should be owned by backend codegen. Need to
+              determine a suitable mechanism of abstraction to "delay" needing
+              to know this size/type until during codegen. *)
+              let largest_ctor_tuple =
+                get_largest_ctor_tuple_of_variant v_t
+              in
+              let generic_max_ctor_val_t = ByteArray(largest_ctor_tuple) in
+
 
               (* This will be the generic [N * i8] array aggregate form of the
-              constructor type. *)
-              let generic_ctor_val_lval =
-                {t=ctor_val_t; kind=Tmp; lname=generic_ctor_val_lname}
+              largest constructor. *)
+              let (mir_ctxt, generic_max_ctor_val_lname) =
+                get_varname mir_ctxt
+              in
+              let generic_max_ctor_val_lval =
+                {
+                  t=generic_max_ctor_val_t;
+                  kind=Tmp;
+                  lname=generic_max_ctor_val_lname
+                }
               in
               let generic_ctor_val_instr =
-                FromAggregate(generic_ctor_val_lval, 1, matched_lval)
+                FromAggregate(generic_max_ctor_val_lval, 1, matched_lval)
               in
 
               (* At this point we have an [N x i8] array aggregate, but we need
@@ -1658,21 +1675,23 @@ and pattern_to_mir
               can bitcast the ptr to the alloca and then extract the data back
               out in the right type. *)
 
-              let generic_ctor_val_t = ByteArray(ctor_val_t) in
-
               let (mir_ctxt, ctor_val_alloca_lname) = get_varname mir_ctxt in
               let generic_ctor_val_alloca_lval = {
-                  t=Ptr(generic_ctor_val_t);
+                  t=Ptr(generic_max_ctor_val_t);
                   kind=Tmp;
                   lname=ctor_val_alloca_lname
               } in
               let generic_ctor_val_alloca_instr =
-                Alloca(generic_ctor_val_alloca_lval, generic_ctor_val_t)
+                Alloca(generic_ctor_val_alloca_lval, generic_max_ctor_val_t)
               in
 
               let generic_ctor_val_store_instr =
-                Store(generic_ctor_val_alloca_lval, generic_ctor_val_lval)
+                Store(generic_ctor_val_alloca_lval, generic_max_ctor_val_lval)
               in
+
+              (* As an implementation detail, the accessible elements of a
+              target variant constructor are represented as a tuple. *)
+              let ctor_val_t = Tuple(v_ctor_fields_ts) in
 
               let (mir_ctxt, ctor_val_bitcast_lname) = get_varname mir_ctxt in
               let ctor_val_bitcast_lval =
@@ -1703,6 +1722,8 @@ and pattern_to_mir
               } in
 
               let mir_ctxt = update_bb mir_ctxt bb_ctor_subpatt in
+
+              let ctor_tuple_patt = PTuple(ctor_val_t, ctor_patts) in
 
               let (mir_ctxt, bb_ctor_subpatt, is_match_lval) =
                 pattern_breakdown_mir
