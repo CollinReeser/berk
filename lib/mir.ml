@@ -2159,11 +2159,11 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
   let (mir_ctxt, cur_bb) = func_args_to_mir mir_ctxt bb_entry in
 
   (* Core generation of MIR for the function body. *)
-  let ((mir_ctxt, cur_bb), _) =
-    List.fold_left_map (
+  let (mir_ctxt, cur_bb) =
+    List.fold_left (
       fun (mir_ctxt, cur_bb) stmt ->
         let (mir_ctxt, cur_bb) = stmt_to_mir mir_ctxt cur_bb stmt in
-        ((mir_ctxt, cur_bb), ())
+        (mir_ctxt, cur_bb)
     ) (mir_ctxt, cur_bb) f_stmts
   in
 
