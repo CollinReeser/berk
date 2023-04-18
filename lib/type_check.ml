@@ -557,17 +557,15 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       (* Typecheck the chain of indexing against the named LHS variable, if
       there is any, and yield the type of the resultant target for the
       assignment (as well as the typechecked index expressions). *)
-      let rec apply_index cur_t lval_idxs_remaining lval_idxs_typechecked_rev =
-        begin match lval_idxs_remaining with
-        | [] -> (cur_t, lval_idxs_typechecked_rev)
-
-        | ALStaticIndex(i) :: rest ->
+      let apply_index cur_t lval_idx =
+        begin match lval_idx with
+        | ALStaticIndex(i) ->
             let inner_t = unwrap_aggregate_indexable cur_t i in
             let lval_idx_tc = ALStaticIndex(i) in
 
-            apply_index inner_t rest (lval_idx_tc :: lval_idxs_typechecked_rev)
+            (inner_t, lval_idx_tc)
 
-        | ALIndex(idx_exp) :: rest ->
+        | ALIndex(idx_exp) ->
             (* Typecheck the indexing expression itself. *)
             let idx_exp_tc =
               type_check_expr tc_ctxt Undecided idx_exp
@@ -584,16 +582,15 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
             let lval_idx_tc = ALIndex(idx_exp_tc) in
 
-            apply_index inner_t rest (lval_idx_tc :: lval_idxs_typechecked_rev)
+            (inner_t, lval_idx_tc)
         end
       in
 
       let (var_t, {mut}) = StrMap.find ident tc_ctxt.vars in
 
-      let (lval_t, lval_idxs_typechecked_rev) =
-        apply_index var_t lval_idxs []
+      let (lval_t, lval_idxs_typechecked) =
+        List.fold_left_map apply_index var_t lval_idxs
       in
-      let lval_idxs_typechecked = List.rev lval_idxs_typechecked_rev in
 
       let exp_typechecked = type_check_expr tc_ctxt lval_t exp in
       let exp_t = expr_type exp_typechecked in
