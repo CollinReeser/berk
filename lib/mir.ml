@@ -1087,16 +1087,15 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
                 (* Generate lvals for the expression for each field in the
                 variant constructor. *)
-                let (mir_ctxt, bb, ctor_elem_lvals_rev) =
-                  List.fold_left (
-                    fun (mir_ctxt, bb, lvals_so_far_rev) ctor_arg ->
+                let ((mir_ctxt, bb), ctor_elem_lvals) =
+                  List.fold_left_map (
+                    fun (mir_ctxt, bb) ctor_arg ->
                       let (mir_ctxt, bb, lval) =
                         _expr_to_mir mir_ctxt bb ctor_arg
                       in
-                      (mir_ctxt, bb, lval :: lvals_so_far_rev)
-                  ) (mir_ctxt, bb, []) ctor_args
+                      ((mir_ctxt, bb), lval)
+                  ) (mir_ctxt, bb) ctor_args
                 in
-                let ctor_elem_lvals = List.rev ctor_elem_lvals_rev in
 
                 let (mir_ctxt, varname) = get_varname mir_ctxt in
                 let ctor_lval = {t=variant_ctor_t; kind=Tmp; lname=varname} in
