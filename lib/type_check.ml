@@ -1456,16 +1456,9 @@ and type_check_pattern
 
       let ctor_fields_ts = List.map (fun {t} -> t) ctor_fields in
 
-      let (tc_ctxt, exp_patts_tc_rev) =
-        List.fold_left2 (
-          fun (tc_ctxt, patts_tc_so_far_rev) t patt ->
-            let (tc_ctxt, patt_tc) = type_check_pattern tc_ctxt t patt in
-
-            (tc_ctxt, patt_tc :: patts_tc_so_far_rev)
-        ) (tc_ctxt, []) ctor_fields_ts exp_patts
+      let (tc_ctxt, exp_patts_tc) =
+        fold_left_map2 type_check_pattern tc_ctxt ctor_fields_ts exp_patts
       in
-
-      let exp_patts_tc = List.rev exp_patts_tc_rev in
 
       (tc_ctxt, Ctor(matched_t, ctor_name, exp_patts_tc))
 

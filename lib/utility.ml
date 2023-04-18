@@ -18,6 +18,24 @@ let take lst n =
   _take [] lst n
 ;;
 
+(* Like List.fold_left_map, but takes two input lists. *)
+let fold_left_map2 f acc lhs rhs =
+  let rec _fold_left_map2 acc lhs_rest rhs_rest results_rev =
+    begin match (lhs_rest, rhs_rest) with
+    | ([], []) -> (acc, results_rev)
+    | ([], _)
+    | (_, []) -> failwith "fold_left_map2: Mismatched lists!"
+    | (x::lhs_rest', y::rhs_rest') ->
+        let (acc', result) = f acc x y in
+        _fold_left_map2 acc' lhs_rest' rhs_rest' (result::results_rev)
+    end
+  in
+
+  let (acc', results_rev) = _fold_left_map2 acc lhs rhs [] in
+  let results = List.rev results_rev in
+  (acc', results)
+;;
+
 let list_to_2_tuples lst =
   let rec every_pair so_far elem rest =
     begin match rest with

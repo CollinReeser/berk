@@ -24,6 +24,12 @@ let test_cartesian_product expected given () =
     ~expected:expected
     ~actual:(cartesian_product given)
 
+let test_fold_left_map2 expected f acc lhs rhs () =
+  Alcotest.(check' (pair int (list int)))
+    ~msg:"fold_left_map2"
+    ~expected:expected
+    ~actual:(fold_left_map2 f acc lhs rhs)
+
 let () =
   let open Alcotest in
   run "Utility" [
@@ -92,6 +98,17 @@ let () =
             [1; 4; 5]; [1; 4; 6]; [1; 4; 7]; [1; 3; 5]; [1; 3; 6]; [1; 3; 7]
           ]
           [[1; 2]; [3; 4]; [5; 6; 7]]
+      );
+    ];
+    "fold_left_map2", [
+      test_case "fold_left_map2" `Quick (
+        let f acc lhs rhs =
+          let acc' = acc + lhs + rhs in
+          (acc', lhs + rhs)
+        in
+        test_fold_left_map2
+          (35, [3; 5; 7; 9; 11])
+          f 0 [1; 2; 3; 4; 5] [2; 3; 4; 5; 6]
       );
     ];
   ]
