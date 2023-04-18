@@ -266,6 +266,9 @@ let control_flow_list mir_ctxt : bb list =
         end
       in
 
+      (* The last instruction in any basic block must be a terminator, either
+      returning out from the function, or branching to one or more other basic
+      blocks. *)
       let terminator = List.hd (List.rev bb.instrs) in
       begin match terminator with
       | Br({name; _}) -> [find_bb name mir_ctxt.bbs]
