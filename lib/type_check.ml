@@ -1416,16 +1416,9 @@ and type_check_pattern
   | PTuple(_, patts) ->
       begin match matched_t with
       | Tuple(ts) ->
-          let (tc_ctxt, patts_tc_rev) =
-            List.fold_left2 (
-              fun (tc_ctxt, patts_tc_so_far_rev) t patt ->
-                let (tc_ctxt, patt_tc) = type_check_pattern tc_ctxt t patt in
-
-                (tc_ctxt, patt_tc :: patts_tc_so_far_rev)
-            ) (tc_ctxt, []) ts patts
+          let (tc_ctxt, patts_tc) =
+            fold_left_map2 type_check_pattern tc_ctxt ts patts
           in
-
-          let patts_tc = List.rev patts_tc_rev in
 
           (tc_ctxt, PTuple(matched_t, patts_tc))
 
