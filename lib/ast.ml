@@ -137,6 +137,30 @@ and stmt =
   | ReturnStmt of expr
 ;;
 
+type variant_decl_t = {
+  v_name: string;
+  v_ctors: v_ctor list;
+  v_typ_vars: string list;
+}
+
+type f_param = (ident_t * var_qual * berk_t)
+
+and func_decl_t = {
+  f_name: string;
+  f_params: f_param list;
+  f_ret_t: berk_t;
+}
+
+and func_def_t = {
+  f_decl: func_decl_t;
+  f_stmts: stmt list;
+}
+
+type module_decl =
+  | FuncExternDecl of func_decl_t
+  | FuncDef of func_def_t
+  | VariantDecl of variant_decl_t
+
 let expr_type exp =
   match exp with
   | ValNil -> Nil
@@ -559,6 +583,119 @@ let pprint_expr ppf exp =
   Format.fprintf ppf "%s" (fmt_expr ~print_typ:true exp)
 ;;
 
+let rec fmt_func_decl ?(print_typ = false) ?(extern = false) f_decl : string =
+  let maybe_extern =
+    if extern
+      then "extern "
+      else ""
+  in
+  Printf.sprintf "%s%s;\n"
+    maybe_extern
+    (fmt_func_signature ~print_typ:print_typ f_decl)
+
+and fmt_func_signature
+  ?(print_typ = false) {f_name; f_params; f_ret_t;} : string
+=
+  let ret_t_s = begin match f_ret_t with
+    | Nil
+    | Undecided ->
+        if print_typ
+        then Printf.sprintf ": %s" (fmt_type f_ret_t)
+        else ""
+    | _ -> Printf.sprintf ": %s" (fmt_type f_ret_t)
+  end in
+
+  Printf.sprintf "fn %s(%s)%s"
+    f_name
+    (fmt_join_func_params "," f_params)
+    ret_t_s
+
+and fmt_func_param (p_name, p_qual, p_type) : string =
+  Printf.sprintf "%s%s: %s"
+    (fmt_var_qual p_qual)
+    p_name
+    (fmt_type p_type)
+
+and fmt_join_func_params delim params : string =
+  match params with
+  | [] -> ""
+  | [x] -> fmt_func_param x
+  | x::xs ->
+      Printf.sprintf "%s%s %s"
+        (fmt_func_param x)
+        delim
+        (fmt_join_func_params delim xs)
+
+let fmt_func_ast ?(print_typ = false) {f_decl; f_stmts;} : string =
+  let formatted_stmts =
+    List.fold_left (^) "" (
+      List.map (fmt_stmt ~print_typ:print_typ "  ") f_stmts
+    )
+  in
+
+  Printf.sprintf "%s {\n%s}\n"
+    (fmt_func_signature ~print_typ:print_typ f_decl)
+    formatted_stmts
+;;
+
+let fmt_variant_fields ?(pretty_unbound=false) fields : string =
+  begin match fields with
+  | [] -> ""
+  | _ ->
+      let each_field_fmt =
+        List.map (
+          fun {t} ->
+            fmt_type ~pretty_unbound:pretty_unbound t
+        ) fields
+      in
+      Printf.sprintf "(%s)" (fmt_join_strs ", " each_field_fmt)
+  end
+;;
+
+let fmt_variant_ctor ?(pretty_unbound=false) {name; fields} : string =
+  Printf.sprintf " | %s%s\n"
+    name
+    (fmt_variant_fields ~pretty_unbound:pretty_unbound fields)
+;;
+
+let fmt_variant_decl
+  ?(pretty_unbound=false) {v_name; v_ctors; v_typ_vars} : string
+=
+  let formatted_type_vars = begin
+    match v_typ_vars with
+    | [] -> ""
+    | xs ->
+        Printf.sprintf "<%s>"
+          (fmt_join_strs ", " xs)
+  end in
+
+  let formatted_ctors =
+    List.fold_left (^) "" (
+      List.map (fmt_variant_ctor ~pretty_unbound:pretty_unbound) v_ctors
+    )
+  in
+
+  Printf.sprintf "%s %s {\n%s}\n"
+    v_name
+    formatted_type_vars
+    formatted_ctors
+;;
+
+let fmt_mod_decl
+  ?(pretty_unbound=false) ?(print_typ = false) mod_decl : string
+=
+  begin match mod_decl with
+  | FuncExternDecl(f_decl) ->
+      Printf.sprintf "%s"(fmt_func_decl ~print_typ:true ~extern:true f_decl)
+
+  | FuncDef(f_ast) ->
+      Printf.sprintf "%s"(fmt_func_ast ~print_typ:print_typ f_ast)
+
+  | VariantDecl(v_ast) ->
+      Printf.sprintf "%s"(fmt_variant_decl ~pretty_unbound:pretty_unbound v_ast)
+  end
+;;
+
 
 (* Get a "default value" expr for the given type. *)
 let rec default_expr_for_t t =
@@ -934,143 +1071,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
 
     | (Ptr(_), _) -> failwith "Unimplemented"
     | (ByteArray(_), _) -> failwith "Unimplemented"
-;;
-
-type variant_decl_t = {
-  v_name: string;
-  v_ctors: v_ctor list;
-  v_typ_vars: string list;
-}
-
-type f_param = (ident_t * var_qual * berk_t)
-
-and func_decl_t = {
-  f_name: string;
-  f_params: f_param list;
-  f_ret_t: berk_t;
-}
-
-and func_def_t = {
-  f_decl: func_decl_t;
-  f_stmts: stmt list;
-}
-
-type module_decl =
-  | FuncExternDecl of func_decl_t
-  | FuncDef of func_def_t
-  | VariantDecl of variant_decl_t
-
-let rec fmt_func_decl ?(print_typ = false) ?(extern = false) f_decl : string =
-  let maybe_extern =
-    if extern
-      then "extern "
-      else ""
-  in
-  Printf.sprintf "%s%s;\n"
-    maybe_extern
-    (fmt_func_signature ~print_typ:print_typ f_decl)
-
-and fmt_func_signature
-  ?(print_typ = false) {f_name; f_params; f_ret_t;} : string
-=
-  let ret_t_s = begin match f_ret_t with
-    | Nil
-    | Undecided ->
-        if print_typ
-        then Printf.sprintf ": %s" (fmt_type f_ret_t)
-        else ""
-    | _ -> Printf.sprintf ": %s" (fmt_type f_ret_t)
-  end in
-
-  Printf.sprintf "fn %s(%s)%s"
-    f_name
-    (fmt_join_func_params "," f_params)
-    ret_t_s
-
-and fmt_func_param (p_name, p_qual, p_type) : string =
-  Printf.sprintf "%s%s: %s"
-    (fmt_var_qual p_qual)
-    p_name
-    (fmt_type p_type)
-
-and fmt_join_func_params delim params : string =
-  match params with
-  | [] -> ""
-  | [x] -> fmt_func_param x
-  | x::xs ->
-      Printf.sprintf "%s%s %s"
-        (fmt_func_param x)
-        delim
-        (fmt_join_func_params delim xs)
-
-let fmt_func_ast ?(print_typ = false) {f_decl; f_stmts;} : string =
-  let formatted_stmts =
-    List.fold_left (^) "" (
-      List.map (fmt_stmt ~print_typ:print_typ "  ") f_stmts
-    )
-  in
-
-  Printf.sprintf "%s {\n%s}\n"
-    (fmt_func_signature ~print_typ:print_typ f_decl)
-    formatted_stmts
-;;
-
-let fmt_variant_fields ?(pretty_unbound=false) fields : string =
-  begin match fields with
-  | [] -> ""
-  | _ ->
-      let each_field_fmt =
-        List.map (
-          fun {t} ->
-            fmt_type ~pretty_unbound:pretty_unbound t
-        ) fields
-      in
-      Printf.sprintf "(%s)" (fmt_join_strs ", " each_field_fmt)
-  end
-;;
-
-let fmt_variant_ctor ?(pretty_unbound=false) {name; fields} : string =
-  Printf.sprintf " | %s%s\n"
-    name
-    (fmt_variant_fields ~pretty_unbound:pretty_unbound fields)
-;;
-
-let fmt_variant_decl
-  ?(pretty_unbound=false) {v_name; v_ctors; v_typ_vars} : string
-=
-  let formatted_type_vars = begin
-    match v_typ_vars with
-    | [] -> ""
-    | xs ->
-        Printf.sprintf "<%s>"
-          (fmt_join_strs ", " xs)
-  end in
-
-  let formatted_ctors =
-    List.fold_left (^) "" (
-      List.map (fmt_variant_ctor ~pretty_unbound:pretty_unbound) v_ctors
-    )
-  in
-
-  Printf.sprintf "%s %s {\n%s}\n"
-    v_name
-    formatted_type_vars
-    formatted_ctors
-;;
-
-let fmt_mod_decl
-  ?(pretty_unbound=false) ?(print_typ = false) mod_decl : string
-=
-  begin match mod_decl with
-  | FuncExternDecl(f_decl) ->
-      Printf.sprintf "%s"(fmt_func_decl ~print_typ:true ~extern:true f_decl)
-
-  | FuncDef(f_ast) ->
-      Printf.sprintf "%s"(fmt_func_ast ~print_typ:print_typ f_ast)
-
-  | VariantDecl(v_ast) ->
-      Printf.sprintf "%s"(fmt_variant_decl ~pretty_unbound:pretty_unbound v_ast)
-  end
 ;;
 
 
