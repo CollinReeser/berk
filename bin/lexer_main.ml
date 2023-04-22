@@ -581,6 +581,13 @@ let () =
   declarations in reverse order. *)
   let mod_decls = List.rev mod_decls in
 
+  let _ =
+    List.iter (
+      fun decl ->
+        Printf.printf "%s\n" (dump_module_decl_ast decl)
+    ) mod_decls
+  in
+
   (* Typechecking. *)
   let mod_decls_tc = type_check_mod_decls mod_decls in
 

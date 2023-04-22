@@ -161,36 +161,6 @@ type module_decl =
   | FuncDef of func_def_t
   | VariantDecl of variant_decl_t
 
-let expr_type exp =
-  match exp with
-  | ValNil -> Nil
-  | ValF128(_) -> F128
-  | ValF64(_)  -> F64
-  | ValF32(_)  -> F32
-  | ValBool(_) -> Bool
-  | ValStr(_) -> String
-  | ValInt(typ, _) -> typ
-  | ValVar(typ, _) -> typ
-  | ValFunc(typ, _) -> typ
-  | ValName(typ, _) -> typ
-  | ValRawArray(typ) -> typ
-  | ValCast(typ, _, _) -> typ
-  | UnOp(typ, _, _) -> typ
-  | BinOp(typ, _, _, _) -> typ
-  | BlockExpr(typ, _, _) -> typ
-  | IfThenElseExpr(typ, _, _, _) -> typ
-  | WhileExpr(typ, _, _, _) -> typ
-  | FuncCall(typ, _, _) -> typ
-  | UfcsCall(typ, _, _, _) -> typ
-  | ExprInvoke(typ, _, _) -> typ
-  | ArrayExpr(typ, _) -> typ
-  | IndexExpr(typ, _, _) -> typ
-  | TupleIndexExpr(typ, _, _) -> typ
-  | TupleExpr(typ, _) -> typ
-  | VariantCtorExpr(typ, _, _) -> typ
-  | MatchExpr(typ, _, _) -> typ
-;;
-
 let fmt_cast_op op =
   match op with
   | Truncate -> "trunc"
@@ -218,6 +188,409 @@ let fmt_bin_op op =
   | Ge -> ">="
   | LOr -> "||"
   | LAnd -> "&&"
+;;
+
+let rec dump_expr_ast ?(ind="") expr =
+  let open Printf in
+  begin match expr with
+  | ValNil -> sprintf "ValNil"
+  | ValF128(s) -> sprintf "ValF128(%s)" s
+  | ValF64(f) -> sprintf "ValF64(%f)" f
+  | ValF32(f) -> sprintf "ValF32(%f)" f
+  | ValBool(b) -> sprintf "ValBool(%b)" b
+  | ValStr(s) -> sprintf "ValStr(%s)" s
+  | ValInt(t, i) -> sprintf "ValInt(%s, %d)" (fmt_type t) i
+  | ValVar(t, v) -> sprintf "ValVar(%s, %s)" (fmt_type t) v
+  | ValFunc(t, v) -> sprintf "ValFunc(%s, %s)" (fmt_type t) v
+  | ValName(t, v) -> sprintf "ValName(%s, %s)" (fmt_type t) v
+  | ValRawArray(t) -> sprintf "ValRawArray(%s)" (fmt_type t)
+  | ValCast(t, op, e) ->
+      let ind_next = ind ^ " " in
+      sprintf "ValCast(%s, %s,\n%s%s\n%s)"
+        (fmt_type t)
+        (fmt_cast_op op)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | UnOp(t, op, e) ->
+      let ind_next = ind ^ " " in
+      sprintf "UnOp(%s, %s,\n%s%s\n%s)"
+        (fmt_type t)
+        (fmt_un_op op)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | BinOp(t, op, e_lhs, e_rhs) ->
+      let ind_next = ind ^ " " in
+      sprintf "BinOp(%s, %s,\n%s%s,\n%s%s\n%s)"
+        (fmt_type t)
+        (fmt_bin_op op)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_lhs)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_rhs)
+        ind
+  | BlockExpr(t, ss, e) ->
+      let ind_next = ind ^ " " in
+      let dumped_ss = List.map (dump_stmt_ast ~ind:ind_next) ss in
+      let dumped_ss' = List.map (sprintf "%s%s" ind_next) dumped_ss in
+      let dumped_ss'' = fmt_join_strs ",\n" dumped_ss' in
+      sprintf "BlockExpr(%s,\n%s,\n%s%s\n%s)"
+        (fmt_type t)
+        dumped_ss''
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | IfThenElseExpr(t, e_cond, e_then, e_else) ->
+      let ind_next = ind ^ " " in
+      sprintf "IfThenElseExpr(%s,\n%s%s,\n%s%s,\n%s%s\n%s)"
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_cond)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_then)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_else)
+        ind
+  | WhileExpr(t, init_ss, e_cond, then_ss) ->
+      let ind_next = ind ^ " " in
+      let dumped_init_ss = List.map (dump_stmt_ast ~ind:ind_next) init_ss in
+      let dumped_init_ss' = List.map (sprintf "%s%s" ind) dumped_init_ss in
+      let dumped_init_ss'' = fmt_join_strs ",\n" dumped_init_ss' in
+      let dumped_then_ss = List.map (dump_stmt_ast ~ind:ind_next) then_ss in
+      let dumped_then_ss' = List.map (sprintf "%s%s" ind) dumped_then_ss in
+      let dumped_then_ss'' = fmt_join_strs ",\n" dumped_then_ss' in
+      sprintf "WhileExpr(%s,\n%s,\n%s%s,\n%s\n%s)"
+        (fmt_type t)
+        dumped_init_ss''
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_cond)
+        dumped_then_ss''
+        ind
+  | FuncCall(t, name, e_args) ->
+      let ind_next = ind ^ " " in
+      let dumped_e_args =
+        begin if List.length e_args > 0 then
+          let dumped_e_args = List.map (dump_expr_ast ~ind:ind_next) e_args in
+          let dumped_e_args' =
+            List.map (sprintf "%s%s" ind_next) dumped_e_args
+          in
+          let dumped_e_args'' = fmt_join_strs ";\n" dumped_e_args' in
+          sprintf "[\n%s\n%s]" dumped_e_args'' ind
+        else
+          "[]"
+        end
+      in
+      sprintf "FuncCall(%s, %s, %s)"
+        (fmt_type t)
+        name
+        dumped_e_args
+  | UfcsCall(t, e, name, e_args) ->
+      let ind_next = ind ^ " " in
+      let dumped_e_args =
+        begin if List.length e_args > 0 then
+          let dumped_e_args = List.map (dump_expr_ast ~ind:ind_next) e_args in
+          let dumped_e_args' =
+            List.map (sprintf "%s%s" ind_next) dumped_e_args
+          in
+          let dumped_e_args'' = fmt_join_strs ";\n" dumped_e_args' in
+          sprintf "[\n%s\n%s]" dumped_e_args'' ind
+        else
+          "[]"
+        end
+      in
+      sprintf "UfcsCall(%s,\n%s%s, %s, %s)"
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        name
+        dumped_e_args
+  | ExprInvoke(t, e, e_args) ->
+      let ind_next = ind ^ " " in
+      let dumped_e_args =
+        begin if List.length e_args > 0 then
+          let dumped_e_args = List.map (dump_expr_ast ~ind:ind_next) e_args in
+          let dumped_e_args' =
+            List.map (sprintf "%s%s" ind_next) dumped_e_args
+          in
+          let dumped_e_args'' = fmt_join_strs ";\n" dumped_e_args' in
+          sprintf "[\n%s\n%s]" dumped_e_args'' ind
+        else
+          "[]"
+        end
+      in
+      sprintf "ExprInvoke(%s,\n%s%s, %s)"
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        dumped_e_args
+  | ArrayExpr(t, e_elems) ->
+      let ind_next = ind ^ " " in
+      let dumped_e_elems = List.map (dump_expr_ast ~ind:ind_next) e_elems in
+      let dumped_e_elems' = List.map (sprintf "%s%s" ind) dumped_e_elems in
+      let dumped_e_elems'' = fmt_join_strs ",\n" dumped_e_elems' in
+      sprintf "ArrayExpr(%s,\n%s\n%s)"
+        (fmt_type t)
+        dumped_e_elems''
+        ind
+  | IndexExpr(t, e, e_idx) ->
+      let ind_next = ind ^ " " in
+      sprintf "IndexExpr(%s,\n%s%s,\n%s%s\n%s)"
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_idx)
+        ind
+  | TupleIndexExpr(t, i, e) ->
+      let ind_next = ind ^ " " in
+      sprintf "TupleIndexExpr(%s, %d,\n%s%s\n%s)"
+        (fmt_type t)
+        i
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | TupleExpr(t, e_elems) ->
+      let ind_next = ind ^ " " in
+      let dumped_e_elems = List.map (dump_expr_ast ~ind:ind_next) e_elems in
+      let dumped_e_elems' = List.map (sprintf "%s%s" ind) dumped_e_elems in
+      let dumped_e_elems'' = fmt_join_strs ",\n" dumped_e_elems' in
+      sprintf "TupleExpr(%s,\n%s\n%s)"
+        (fmt_type t)
+        dumped_e_elems''
+        ind
+  | VariantCtorExpr(t, name, e_fields) ->
+      let ind_next = ind ^ " " in
+      let dumped_e_fields = List.map (dump_expr_ast ~ind:ind_next) e_fields in
+      let dumped_e_fields' = List.map (sprintf "%s%s" ind) dumped_e_fields in
+      let dumped_e_fields'' = fmt_join_strs ",\n" dumped_e_fields' in
+      sprintf "VariantCtorExpr(%s, %s, \n%s,\n%s)"
+        (fmt_type t)
+        name
+        dumped_e_fields''
+        ind
+  | MatchExpr(t, e_cond, patts_to_exps) ->
+      let ind_next = ind ^ " " in
+      patts_to_exps |> ignore;
+      let dumped_patts_to_exps = "" in
+      sprintf "MatchExpr(%s,\n%s%s,\n%s\n%s)"
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e_cond)
+        dumped_patts_to_exps
+        ind
+  end
+
+and dump_assign_idx_lval_ast ?(ind="") assign_idx_lval =
+  let open Printf in
+  begin match assign_idx_lval with
+  | ALStaticIndex(i) ->
+      sprintf "ALStaticIndex(%d)" i
+  | ALIndex(e) ->
+      let ind_next = ind ^ " " in
+      sprintf "ALIndex(\n%s%s\n%s)"
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  end
+
+and dump_stmt_ast ?(ind="") stmt =
+  let open Printf in
+  begin match stmt with
+  | DeclStmt(name, qual, t, e) ->
+      let ind_next = ind ^ " " in
+      sprintf "DeclStmt(%s, %s, %s,\n%s%s\n%s)"
+        name
+        (dump_var_qual_ast qual)
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | DeclDefStmt(name_qual_t_ls) ->
+      let ind_next = ind ^ " " in
+      let dumped_name_qual_t_ls =
+        List.map (
+          fun (name, qual, t) ->
+            sprintf "%s(%s, %s, %s\n%s)"
+              ind_next
+              name
+              (dump_var_qual_ast qual)
+              (fmt_type t)
+              ind
+        ) name_qual_t_ls
+      in
+      let dumped_names_quals_ts = fmt_join_strs ",\n" dumped_name_qual_t_ls in
+      sprintf "DeclDefStmt(\n%s\n%s)"
+        dumped_names_quals_ts
+        ind
+  | DeclDeconStmt(name_qual_ls, t, e) ->
+      let ind_next = ind ^ " " in
+      let dumped_name_qual_ls =
+        List.map (
+          fun (name, qual) ->
+            sprintf "%s(%s, %s\n%s)"
+              ind_next
+              name
+              (dump_var_qual_ast qual)
+              ind
+        ) name_qual_ls
+      in
+      let dumped_names_quals = fmt_join_strs ",\n" dumped_name_qual_ls in
+      sprintf "DeclDeconStmt(\n%s, %s,\n%s%s\n%s)"
+        dumped_names_quals
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | AssignStmt(name, idxs, e) ->
+      let ind_next = ind ^ " " in
+      let dumped_idxs_ls =
+        List.map (dump_assign_idx_lval_ast ~ind:ind_next) idxs
+      in
+      let dumped_idxs = fmt_join_strs ",\n" dumped_idxs_ls in
+      sprintf "AssignStmt(%s,\n%s,\n%s%s\n%s)"
+        name
+        dumped_idxs
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | ExprStmt(e) ->
+      let ind_next = ind ^ " " in
+      sprintf "ExprStmt(\n%s%s\n%s)"
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | ReturnStmt(e) ->
+      let ind_next = ind ^ " " in
+      sprintf "ReturnStmt(\n%s%s\n%s)"
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  end
+
+and dump_f_param_ast (name, qual, t) =
+  Printf.sprintf "f_param(%s, %s, %s)"
+    name
+    (dump_var_qual_ast qual)
+    (fmt_type t)
+
+and dump_func_decl_t_ast ?(ind="") {f_name; f_params; f_ret_t} =
+  let open Printf in
+  let ind_next = ind ^ " " in
+  let ind_next' = ind_next ^ " " in
+  let dumped_f_params =
+    begin if List.length f_params > 0 then
+      let dumped_f_param_ls =
+        List.map (
+          fun f_param ->
+            let dumped_f_param = dump_f_param_ast f_param in
+            sprintf "%s%s"
+              ind_next'
+              dumped_f_param
+        ) f_params in
+      let dumped_f_params = fmt_join_strs ";\n" dumped_f_param_ls in
+      sprintf "[\n%s\n%s]"
+        dumped_f_params
+        ind_next
+    else
+      "[]"
+    end
+  in
+  sprintf "func_decl_t{f_name=%s; f_params=%s; f_ret_t=%s}"
+    f_name
+    dumped_f_params
+    (fmt_type f_ret_t)
+
+and dump_func_def_t_ast ?(ind="") {f_decl; f_stmts} =
+  let open Printf in
+  let ind_next = ind ^ " " in
+  let ind_next' = ind_next ^ " " in
+  let dumped_f_stmts =
+    begin if List.length f_stmts > 0 then
+      let dumped_f_stmts_ls =
+        List.map (
+          fun f_stmt ->
+            let dumped_f_stmt = dump_stmt_ast ~ind:ind_next' f_stmt in
+            sprintf "%s%s"
+              ind_next'
+              dumped_f_stmt
+        ) f_stmts in
+      let dumped_f_stmts = fmt_join_strs ";\n" dumped_f_stmts_ls in
+      sprintf "[\n%s\n%s]"
+        dumped_f_stmts
+        ind_next
+    else
+      "[]"
+    end
+  in
+  sprintf "func_def_t{f_decl=%s; f_stmts=%s}"
+    (dump_func_decl_t_ast f_decl)
+    dumped_f_stmts
+
+and dump_v_ctor_field {t} =
+  Printf.sprintf "v_ctor_field{t=%s}"
+    (fmt_type t)
+
+and dump_v_ctor_ast {name; fields} =
+  let dumped_field_ls = List.map dump_v_ctor_field fields in
+  let dumped_fields = fmt_join_strs "; " dumped_field_ls in
+  Printf.sprintf "v_ctor{name=%s; fields=[%s]}"
+    name
+    dumped_fields
+
+and dump_variant_decl_t ?(ind="") {v_name; v_ctors; v_typ_vars} =
+  let open Printf in
+  let ind_next = ind ^ " " in
+  let ind_next' = ind_next ^ " " in
+  let dumped_v_ctors =
+    begin if List.length v_ctors > 0 then
+      let dumped_v_ctor_ls =
+        List.map (
+          fun v_ctor ->
+            let dumped_v_ctor = dump_v_ctor_ast v_ctor in
+            sprintf "%s%s"
+              ind_next'
+              dumped_v_ctor
+        ) v_ctors
+      in
+      let dumped_v_ctors = fmt_join_strs ";\n" dumped_v_ctor_ls in
+      sprintf "[\n%s\n%s]"
+        dumped_v_ctors
+        ind_next
+    else
+      "[]"
+    end
+  in
+  let dumped_v_typ_vars = fmt_join_strs "; " v_typ_vars in
+  sprintf "variant_decl_t{v_name=%s; v_ctors=%s; v_typ_vars=[%s]}"
+    v_name
+    dumped_v_ctors
+    dumped_v_typ_vars
+
+and dump_module_decl_ast ?(ind="") module_decl =
+  let open Printf in
+  begin match module_decl with
+  | FuncExternDecl(f_decl) ->
+      let ind_next = ind ^ " " in
+      sprintf "FuncExternDecl(\n%s%s%s\n)"
+        ind_next
+        (dump_func_decl_t_ast f_decl)
+        ind
+  | FuncDef(f_def) ->
+      let ind_next = ind ^ " " in
+      sprintf "FuncDef(\n%s%s%s\n)"
+        ind_next
+        (dump_func_def_t_ast f_def)
+        ind
+  | VariantDecl(v_decl) ->
+      let ind_next = ind ^ " " in
+      sprintf "VariantDecl(\n%s%s%s\n)"
+        ind_next
+        (dump_variant_decl_t v_decl)
+        ind
+  end
+;;
+
 
 let rec fmt_join_exprs ?(ind = "")?(print_typ = false) delim exprs : string =
   match exprs with
@@ -437,6 +810,34 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
         pattern_exprs_fmt
         ind
 
+and expr_type exp =
+  match exp with
+  | ValNil -> Nil
+  | ValF128(_) -> F128
+  | ValF64(_)  -> F64
+  | ValF32(_)  -> F32
+  | ValBool(_) -> Bool
+  | ValStr(_) -> String
+  | ValInt(typ, _) -> typ
+  | ValVar(typ, _) -> typ
+  | ValFunc(typ, _) -> typ
+  | ValName(typ, _) -> typ
+  | ValRawArray(typ) -> typ
+  | ValCast(typ, _, _) -> typ
+  | UnOp(typ, _, _) -> typ
+  | BinOp(typ, _, _, _) -> typ
+  | BlockExpr(typ, _, _) -> typ
+  | IfThenElseExpr(typ, _, _, _) -> typ
+  | WhileExpr(typ, _, _, _) -> typ
+  | FuncCall(typ, _, _) -> typ
+  | UfcsCall(typ, _, _, _) -> typ
+  | ExprInvoke(typ, _, _) -> typ
+  | ArrayExpr(typ, _) -> typ
+  | IndexExpr(typ, _, _) -> typ
+  | TupleIndexExpr(typ, _, _) -> typ
+  | TupleExpr(typ, _) -> typ
+  | VariantCtorExpr(typ, _, _) -> typ
+  | MatchExpr(typ, _, _) -> typ
 
 and fmt_pattern ?(print_typ=false) init_ind pattern =
   let open Printf in

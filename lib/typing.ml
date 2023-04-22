@@ -143,6 +143,9 @@ let fmt_var_qual {mut} =
   if mut then "mut " else ""
 ;;
 
+let dump_var_qual_ast {mut} =
+  Printf.sprintf "var_qual{mut=%b}" mut
+;;
 
 let def_var_qual = {mut = false}
 
