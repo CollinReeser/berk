@@ -1631,7 +1631,7 @@ and check_patt_usefulness_exhaustion lhs_patts t =
   | (useless, []) ->
       let useless_fmt =
         fmt_join_strs "\n" (
-          List.map (fmt_pattern ~print_typ:false "") useless
+          List.map (fmt_pattern ~print_typ:false) useless
         )
       in
       Printf.printf "Useless LHS pattern(s):\n%s\n%!" useless_fmt ;
@@ -1640,7 +1640,7 @@ and check_patt_usefulness_exhaustion lhs_patts t =
   | ([], unmatched) ->
       let unmatched_fmt =
         fmt_join_strs "\n" (
-          List.map (fmt_pattern ~print_typ:false "") unmatched
+          List.map (fmt_pattern ~print_typ:false) unmatched
         )
       in
       Printf.printf "Unmatched pattern value(s):\n%s\n%!" unmatched_fmt ;

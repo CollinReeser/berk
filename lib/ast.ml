@@ -802,7 +802,7 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
           List.map (
             fun (pattern, exp) ->
               let pattern_fmt =
-                fmt_pattern ~print_typ:print_typ (ind) pattern
+                fmt_pattern ~print_typ:print_typ ~init_ind:ind pattern
               in
               let exp_fmt =
                 fmt_expr
@@ -848,7 +848,7 @@ and expr_type exp =
   | VariantCtorExpr(typ, _, _) -> typ
   | MatchExpr(typ, _, _) -> typ
 
-and fmt_pattern ?(print_typ=false) init_ind pattern =
+and fmt_pattern ?(print_typ=false) ?(init_ind="") pattern =
   let open Printf in
 
   let _maybe_fmt_type t =
@@ -892,7 +892,7 @@ and fmt_pattern ?(print_typ=false) init_ind pattern =
   sprintf "%s| %s" init_ind pattern_fmt
 
 and pprint_pattern ppf patt =
-  Format.fprintf ppf "%s" (fmt_pattern ~print_typ:true "" patt)
+  Format.fprintf ppf "%s" (fmt_pattern ~print_typ:true patt)
 
 and fmt_join_idents_quals delim idents_quals : string =
   match idents_quals with
