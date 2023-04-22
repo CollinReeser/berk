@@ -9,6 +9,7 @@ type token =
 | KWFn of position
 | KWMut of position
 | KWLet of position
+| KWIgnore of position
 | KWReturn of position
 | KWIf of position
 | KWElse of position
@@ -116,6 +117,7 @@ let fmt_token tok =
   | KWFn(p)        -> Printf.sprintf "fn     (kw)    : %s"   (fmt_pos p)
   | KWMut(p)       -> Printf.sprintf "mut    (kw)    : %s"   (fmt_pos p)
   | KWLet(p)       -> Printf.sprintf "let    (kw)    : %s"   (fmt_pos p)
+  | KWIgnore(p)    -> Printf.sprintf "ignore (kw)    : %s"   (fmt_pos p)
   | KWReturn(p)    -> Printf.sprintf "return (kw)    : %s"   (fmt_pos p)
   | KWIf(p)        -> Printf.sprintf "if     (kw)    : %s"   (fmt_pos p)
   | KWElse(p)      -> Printf.sprintf "else   (kw)    : %s"   (fmt_pos p)
@@ -256,6 +258,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "let" ->
         let tok = KWLet(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "ignore" ->
+        let tok = KWIgnore(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "return" ->
         let tok = KWReturn(get_pos buf) in

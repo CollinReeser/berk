@@ -126,7 +126,7 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
   let _is_concrete_type typ  = is_concrete_type ~verbose:verbose typ in
 
   let res = begin match stmt with
-  | ExprStmt(expr)
+  | ExprStmt(_, expr)
   | ReturnStmt(expr)
   | AssignStmt(_, _, expr) ->
       _is_concrete_expr expr
@@ -611,7 +611,35 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
           Printf.sprintf "Expr for assignment to [%s] does not typecheck" ident
         )
 
-  | ExprStmt(exp) -> (tc_ctxt, ExprStmt(type_check_expr tc_ctxt Undecided exp))
+  | ExprStmt(({ignore} as es_mod), exp) ->
+      let exp_typechecked = type_check_expr tc_ctxt Undecided exp in
+      let exp_t = expr_type exp_typechecked in
+      let _ =
+        begin match exp_t with
+        | Nil ->
+            begin if ignore then
+              failwith (
+                Printf.sprintf
+                  "Remove redundant `ignore` on nil expression [%s]."
+                  (fmt_expr exp_typechecked)
+              )
+            else
+              ()
+            end
+        | _ ->
+            begin if ignore then
+              ()
+            else
+              failwith (
+                Printf.sprintf
+                  "Must use expression [%s], of type [%s]. (`ignore`?)"
+                  (fmt_expr exp_typechecked)
+                  (fmt_type exp_t)
+              )
+            end
+        end
+      in
+      (tc_ctxt, ExprStmt(es_mod, exp_typechecked))
 
   | ReturnStmt(exp) ->
       let exp_typechecked = type_check_expr tc_ctxt tc_ctxt.ret_t exp in

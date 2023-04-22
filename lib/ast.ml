@@ -117,6 +117,14 @@ and assign_idx_lval =
   (* An index into a static or dynamic array. *)
   | ALIndex of expr
 
+and expr_stmt_mod = {
+  (* Whether or not it's permitted to ignore the result of the associated
+  expression. If the expression yields non-nil, then `ignore` must be assigned
+  in order to permit the operation. If the expression yields nil, then this is
+  implied _and_ must not be explicitly stated. *)
+  ignore: bool
+}
+
 and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
   (* A `let` stmt that only declares variables, taking the default value for
@@ -133,7 +141,7 @@ and stmt =
   variable, where the idx list is empty, or could be arbitrarily-deep indexing
   to the _real_ target of assignment, starting at that named variable. *)
   | AssignStmt of ident_t * assign_idx_lval list * expr
-  | ExprStmt of expr
+  | ExprStmt of expr_stmt_mod * expr
   | ReturnStmt of expr
 ;;
 
@@ -454,9 +462,10 @@ and dump_stmt_ast ?(ind="") stmt =
         ind_next
         (dump_expr_ast ~ind:ind_next e)
         ind
-  | ExprStmt(e) ->
+  | ExprStmt({ignore}, e) ->
       let ind_next = ind ^ " " in
-      sprintf "ExprStmt(\n%s%s\n%s)"
+      sprintf "ExprStmt(expr_stmt_mod{ignore=%b},\n%s%s\n%s)"
+        ignore
         ind_next
         (dump_expr_ast ~ind:ind_next e)
         ind
@@ -969,8 +978,13 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         (fmt_assign_lval_idxs ~print_typ:print_typ lval_idxs)
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
-  | ExprStmt (ex) ->
-      Printf.sprintf "%s%s;\n"
+  | ExprStmt ({ignore}, ex) ->
+      let fmt_ignore =
+        if ignore then "ignore "
+        else ""
+      in
+      Printf.sprintf "%s%s%s;\n"
+        fmt_ignore
         ind
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
@@ -1611,9 +1625,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         let exp_rewritten = _rewrite_exp unique_varnames exp in
         (unique_varnames, AssignStmt(varname, lval_idxs, exp_rewritten))
 
-    | ExprStmt(exp) ->
+    | ExprStmt(es_mod, exp) ->
         let exp_rewritten = _rewrite_exp unique_varnames exp in
-        (unique_varnames, ExprStmt(exp_rewritten))
+        (unique_varnames, ExprStmt(es_mod, exp_rewritten))
 
     | ReturnStmt(exp) ->
         let exp_rewritten = _rewrite_exp unique_varnames exp in

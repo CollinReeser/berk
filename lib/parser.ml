@@ -595,10 +595,10 @@ and parse_stmt ?(ind="") tokens : (token list * stmt) option =
     is optional. *)
     | (
         (
-          ExprStmt(BlockExpr(_, _, _))
-        | ExprStmt(IfThenElseExpr(_, _, _, _))
-        | ExprStmt(WhileExpr(_, _, _, _))
-        | ExprStmt(MatchExpr(_, _, _))
+          ExprStmt(_, BlockExpr(_, _, _))
+        | ExprStmt(_, IfThenElseExpr(_, _, _, _))
+        | ExprStmt(_, WhileExpr(_, _, _, _))
+        | ExprStmt(_, MatchExpr(_, _, _))
         ),
         (
           (Semicolon(_) :: rest)
@@ -852,8 +852,15 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
 and parse_expr_stmt ?(ind="") tokens : (token list * stmt) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
-  let (rest, exp) = parse_expr ~ind:ind_next tokens in
-  (rest, ExprStmt(exp))
+  let (rest, es_mods) =
+    begin match tokens with
+    | KWIgnore(_) :: rest -> (rest, {ignore=true})
+    | _ -> (tokens, {ignore=false})
+    end
+  in
+
+  let (rest, exp) = parse_expr ~ind:ind_next rest in
+  (rest, ExprStmt(es_mods, exp))
 
 
 and parse_expr ?(ind="") tokens : (token list * expr) =

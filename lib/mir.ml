@@ -522,6 +522,7 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
             flattened_arr_t, ValRawArray(flattened_arr_t)
           );
           ExprStmt(
+            {ignore=false},
             WhileExpr(
               Nil, [DeclStmt(idx_varname, {mut=true}, U64, ValInt(U64, 0))],
               BinOp(
@@ -1795,7 +1796,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
   =
 
     match stmt with
-    | ExprStmt(exp) ->
+    | ExprStmt(_, exp) ->
         let (mir_ctxt, bb, _) = expr_to_mir mir_ctxt bb exp in
 
         (mir_ctxt, bb)
