@@ -169,35 +169,6 @@ type module_decl =
   | FuncDef of func_def_t
   | VariantDecl of variant_decl_t
 
-let fmt_cast_op op =
-  match op with
-  | Truncate -> "trunc"
-  | Bitwise -> "bitwise"
-  | Extend -> "extend"
-;;
-
-let fmt_un_op op =
-  match op with
-  | LNot -> "!"
-;;
-
-let fmt_bin_op op =
-  match op with
-  | Add -> "+"
-  | Sub -> "-"
-  | Mul -> "*"
-  | Div -> "/"
-  | Mod -> "%%"
-  | Eq -> "=="
-  | Ne -> "!="
-  | Lt -> "<"
-  | Le -> "<="
-  | Gt -> ">"
-  | Ge -> ">="
-  | LOr -> "||"
-  | LAnd -> "&&"
-;;
-
 let rec dump_expr_ast ?(ind="") expr =
   let open Printf in
   begin match expr with

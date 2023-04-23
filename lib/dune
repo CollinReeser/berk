@@ -1,6 +1,5 @@
 (library
  (name berk)
- (modules_without_implementation ir)
  (libraries
     sedlex
     ctypes.foreign

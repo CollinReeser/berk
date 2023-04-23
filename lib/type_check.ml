@@ -1,5 +1,6 @@
 open Ast
 open Typing
+open Ir
 open Utility
 
 module StrMap = Map.Make(String)
