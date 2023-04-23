@@ -51,6 +51,10 @@ type rexpr =
 
   | RMatchExpr of berk_t * rexpr * (rpattern * rexpr) list
 
+  (* TODO: This can almost certainly be simplified into being in terms of
+  a series of init stmts, a bare loop construct (that we could re-use elsewhere
+  as well, eg `for-loop` constructs), and an initial check at the beginning
+  of the loop for whether or not to break to the end. *)
   | RWhileExpr of berk_t * rstmt list * rexpr * rstmt list
 
 and rpattern =
@@ -81,6 +85,19 @@ and rstmt =
   (* A convenience container for when a stmt needs to be rewritten using
   multiple rstmt. *)
   | RStmts of rstmt list
+
+and rf_param = (ident_t * berk_t)
+
+and rfunc_decl_t = {
+  rf_name: string;
+  rf_params: rf_param list;
+  rf_ret_t: berk_t;
+}
+
+and rfunc_def_t = {
+  rf_decl: rfunc_decl_t;
+  rf_stmts: rstmt list;
+}
 ;;
 
 let rexpr_type exp =
@@ -309,3 +326,379 @@ and stmt_to_rstmt stmt : rstmt =
       in
       RStmts(init_rstmt :: decon_rstmts)
   end
+
+and f_param_to_rf_param (name, _, t) = (name, t)
+
+and func_decl_t_to_rfunc_decl_t {f_name; f_params; f_ret_t} =
+  let rf_params = List.map f_param_to_rf_param f_params in
+  {rf_name=f_name; rf_params=rf_params; rf_ret_t=f_ret_t}
+
+and func_def_t_to_rfunc_def_t {f_decl; f_stmts} =
+  let rf_decl = func_decl_t_to_rfunc_decl_t f_decl in
+  let rf_stmts = List.map stmt_to_rstmt f_stmts in
+  {rf_decl=rf_decl; rf_stmts=rf_stmts}
+;;
+
+let rec fmt_rexpr ?(init_ind=false) ?(ind="") ?(print_typ = false) re : string =
+  let init_ind = if init_ind then ind else "" in
+  let (typ_s, typ_s_rev) =
+    if print_typ
+    then
+      let typ_formatted = rexpr_type re |> fmt_type in
+      (Printf.sprintf ":%s" typ_formatted, Printf.sprintf "%s:" typ_formatted)
+    else ("", "")
+  in
+  begin match re with
+  | RValNil -> Printf.sprintf "%sRValNil()%s" init_ind typ_s
+
+  | RValF128(str) -> Printf.sprintf "%sRValF128(%s)%s" init_ind str typ_s
+
+  | RValF64(value) -> Printf.sprintf "%sRValF64(%f)%s" init_ind value typ_s
+  | RValF32(value) -> Printf.sprintf "%sRValF32(%f)%s" init_ind value typ_s
+
+  | RValBool(value) -> Printf.sprintf "%sRValBool(%B)%s" init_ind value typ_s
+
+  | RValStr(str) ->
+      (* The string we have here is the raw parsed string, so `\n` is still
+      "\n". Nevertheless sprintf will try to helpfully replace the escape code
+      with the actual newline, so we escape it deliberately before printing. *)
+      Printf.sprintf "%sRValStr(\"%s\")%s" init_ind (String.escaped str) typ_s
+
+  | RValInt(_, value) ->
+      Printf.sprintf "%sRValInt(%d)%s" init_ind value typ_s
+
+  | RValVar(_, id) -> Printf.sprintf "%sRValVar(%s)%s" init_ind id typ_s
+
+  | RValFunc(_, func_name) ->
+      Printf.sprintf "%sfn<%s%s>" init_ind func_name typ_s
+
+  | RValRawArray(t) ->
+      Printf.sprintf "%s<uninitialized of %s>%s"
+        init_ind (fmt_type t) typ_s
+
+  | RValCast(target_t, op, exp) ->
+      let op_fmt = fmt_cast_op op in
+      Printf.sprintf "%scast_%s<%s>(%s)%s"
+        init_ind
+        op_fmt
+        (fmt_type target_t)
+        (fmt_rexpr ~print_typ:print_typ exp)
+        typ_s
+
+  | RUnOp (_, op, exp) ->
+      Printf.sprintf "%s(%s %s)%s"
+        init_ind
+        (fmt_un_op op)
+        (fmt_rexpr ~print_typ:print_typ exp)
+        typ_s
+
+  | RBinOp (_, op, lh, rh) ->
+      Printf.sprintf "%s(%s %s %s)%s"
+        init_ind
+        (fmt_rexpr ~print_typ:print_typ lh)
+        (fmt_bin_op op)
+        (fmt_rexpr ~print_typ:print_typ rh)
+        typ_s
+
+  | RBlockExpr (_, stmt, exp) ->
+      let formatted_stmt = fmt_rstmt ~print_typ:print_typ (ind ^ "  ") stmt in
+      Printf.sprintf "%sRBlockExpr(%s{\n%s%s\n%s})"
+        init_ind
+        typ_s_rev
+        formatted_stmt
+        (fmt_rexpr ~init_ind:true ~ind:(ind ^ "  ") ~print_typ:print_typ exp)
+        ind
+
+  | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
+      let formatted_init_stmts = begin
+        let (open_brace, close_brace, ind) =
+          if List.length init_stmts = 0
+          then ("", "", "")
+          else ("{\n", Printf.sprintf "%s} in " ind, ind ^ "  ")
+        in
+        let formatted_stmts =
+          List.fold_left (^) "" (
+            List.map (fmt_rstmt ~print_typ:print_typ (ind)) init_stmts
+          )
+        in
+        Printf.sprintf "%s%s%s" open_brace formatted_stmts close_brace
+      end in
+
+      let formatted_then_stmts =
+        List.fold_left (^) "" (
+          List.map (fmt_rstmt ~print_typ:print_typ (ind ^ "  ")) then_stmts
+        )
+      in
+
+      Printf.sprintf "%s%swhile %s%s {\n%s%s}"
+        init_ind
+        typ_s_rev
+        formatted_init_stmts
+        (fmt_rexpr ~print_typ:print_typ while_cond)
+        formatted_then_stmts
+        ind
+
+  | RExprInvoke(_, exp, exprs) ->
+      Printf.sprintf "%s%sRExprInvoke(%s(%s))"
+        init_ind
+        typ_s_rev
+        (fmt_rexpr ~print_typ:print_typ exp)
+        (fmt_join_rexprs ~ind:ind ~print_typ:print_typ ", " exprs)
+
+  | RArrayExpr(_, exprs) ->
+      Printf.sprintf "%s[%s]%s"
+        init_ind
+        (fmt_join_rexprs ~ind:ind ~print_typ:print_typ ", " exprs)
+        typ_s
+
+  | RTupleIndexExpr(_, idx, arr) ->
+      Printf.sprintf "%s%s.%d:%s"
+        init_ind
+        (fmt_rexpr ~print_typ:print_typ arr)
+        idx
+        typ_s
+
+  | RIndexExpr(_, idx, arr) ->
+      Printf.sprintf "%s%s[%s]:%s"
+        init_ind
+        (fmt_rexpr ~print_typ:print_typ arr)
+        (fmt_rexpr ~print_typ:print_typ idx)
+        typ_s
+
+  | RTupleExpr(_, exprs) ->
+      Printf.sprintf "%s(%s)%s"
+        init_ind
+        (fmt_join_rexprs ~ind:ind ~print_typ:print_typ ", " exprs)
+        typ_s
+
+  | RVariantCtorExpr(_, ctor_name, exprs) ->
+      let exprs_fmt =
+        begin match exprs with
+        | [] -> ""
+        | _ ->
+            let exprs_fmt = fmt_join_rexprs ", " exprs in
+            Printf.sprintf "(%s)" exprs_fmt
+        end
+      in
+
+      Printf.sprintf "%s%s%s%s"
+        init_ind
+        ctor_name
+        exprs_fmt
+        typ_s
+
+  | RMatchExpr(_, matched_exp, pattern_exp_pairs) ->
+      let pattern_exprs_fmt =
+        List.fold_left (^) "" (
+          List.map (
+            fun (pattern, exp) ->
+              let pattern_fmt =
+                fmt_rpattern ~print_typ:print_typ ~init_ind:ind pattern
+              in
+              let exp_fmt =
+                fmt_rexpr
+                  ~init_ind:false ~ind:(ind ^ "  ") ~print_typ:print_typ exp
+              in
+              Printf.sprintf "%s -> %s\n" pattern_fmt exp_fmt
+          ) pattern_exp_pairs
+        )
+      in
+      Printf.sprintf "%s%smatch %s {\n%s%s}"
+        init_ind
+        typ_s_rev
+        (fmt_rexpr ~print_typ:print_typ matched_exp)
+        pattern_exprs_fmt
+        ind
+  end
+
+and fmt_join_rexprs ?(ind = "") ?(print_typ = false) delim exprs : string =
+  match exprs with
+  | [] -> ""
+  | [x] -> fmt_rexpr ~ind:ind ~print_typ:print_typ x
+  | x::xs ->
+      (fmt_rexpr ~ind:ind ~print_typ:print_typ x) ^ delim ^
+      (fmt_join_rexprs ~ind:ind ~print_typ:print_typ delim xs)
+
+and fmt_rpattern ?(print_typ=false) ?(init_ind="") rpatt =
+  let open Printf in
+
+  let _maybe_fmt_type t =
+    if print_typ then
+      sprintf ":%s" (fmt_type t)
+    else
+      ""
+  in
+
+  let rec _fmt_rpattern rpatt =
+    begin match rpatt with
+    | RPNil ->
+        sprintf "<nil>"
+    | RWild(t) ->
+        sprintf "_%s" (_maybe_fmt_type t)
+    | RVarBind(t, var_name) ->
+        sprintf "%s%s" var_name (_maybe_fmt_type t)
+    | RPBool(b) ->
+        sprintf "%b%s" b (_maybe_fmt_type Bool)
+    | RPTuple(t, patterns) ->
+        let patterns_fmt = List.map _fmt_rpattern patterns in
+        sprintf "(%s)%s" (fmt_join_strs ", " patterns_fmt) (_maybe_fmt_type t)
+    | RCtor(t, ctor_name, patterns) ->
+        let patterns_fmt =
+          begin match patterns with
+          | [] -> ""
+          | _ ->
+              let patterns_fmt = List.map _fmt_rpattern patterns in
+              sprintf "(%s)%s"
+                (fmt_join_strs ", " patterns_fmt)
+                (_maybe_fmt_type t)
+          end
+        in
+        sprintf "%s%s%s" ctor_name patterns_fmt (_maybe_fmt_type t)
+    | RPatternAs(t, pattern, var_name) ->
+        sprintf "%s%s as %s" (_fmt_rpattern pattern) (_maybe_fmt_type t) var_name
+    end
+  in
+  let rpattern_fmt = _fmt_rpattern rpatt in
+
+  sprintf "%s| %s" init_ind rpattern_fmt
+
+and fmt_join_idents_quals delim idents_quals : string =
+  match idents_quals with
+  | [] -> ""
+  | [(ident, qual)] -> Printf.sprintf "%s%s" (fmt_var_qual qual) ident
+  | (ident, qual)::xs ->
+      Printf.sprintf "%s%s%s%s"
+        (fmt_var_qual qual)
+        ident
+        delim
+        (fmt_join_idents_quals delim xs)
+
+and fmt_join_idents_types
+  delim (idents_types : (ident_t * berk_t) list) : string =
+  match idents_types with
+  | [] -> ""
+
+  | [(ident, t)] ->
+      Printf.sprintf "%s: %s" ident (fmt_type t)
+
+  | (ident, t)::xs ->
+      Printf.sprintf "%s: %s%s%s"
+        ident
+        (fmt_type t)
+        delim
+        (fmt_join_idents_types delim xs)
+
+and fmt_rassign_lval_idxs ?(print_typ = false) lval_idxs =
+  let rec _fmt_rassign_lval_idxs lval_idxs_rem fmt_so_far =
+    begin match lval_idxs_rem with
+    | [] -> fmt_so_far
+    | idx :: rest ->
+        let fmt = fmt_rassign_lval_idx ~print_typ:print_typ idx in
+        _fmt_rassign_lval_idxs rest (fmt_so_far ^ fmt)
+    end
+  in
+  _fmt_rassign_lval_idxs lval_idxs ""
+
+and fmt_rassign_lval_idx ?(print_typ = false) lval_idx =
+  begin match lval_idx with
+  | RALStaticIndex(i) ->
+      Printf.sprintf ".%d" i
+
+  | RALIndex(exp) ->
+      Printf.sprintf "[%s]" (fmt_rexpr ~print_typ:print_typ exp)
+  end
+
+and fmt_rstmt ?(print_typ = false) ind rstmt =
+  begin match rstmt with
+  | RDeclStmt (ident, btype, ex) ->
+      let typ_s = match btype with
+        | Undecided -> ""
+        | x -> fmt_type x |> Printf.sprintf ": %s"
+      in
+      Printf.sprintf "%slet %s%s = %s;\n"
+        ind
+        ident
+        typ_s
+        (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
+
+  | RDeclDefStmt (idents_ts) ->
+      Printf.sprintf "%slet %s;\n"
+        ind
+        (fmt_join_idents_types ", " idents_ts)
+
+  | RAssignStmt (ident, lval_idxs, ex) ->
+      Printf.sprintf "%s%s%s = %s;\n"
+        ind
+        ident
+        (fmt_rassign_lval_idxs ~print_typ:print_typ lval_idxs)
+        (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
+
+  | RExprStmt (ex) ->
+      Printf.sprintf "%s%s;\n"
+        ind
+        (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
+
+  | RReturnStmt (ex) ->
+      Printf.sprintf "%sreturn %s;\n"
+        ind
+        (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
+
+  | RStmts(stmts) ->
+      let formatted_stmts = List.map (fmt_rstmt ind) stmts in
+      Printf.sprintf "%s"
+        (fmt_join_strs "" formatted_stmts)
+  end
+
+let rec fmt_rfunc_decl_t ?(print_typ = false) ?(extern = false) f_decl : string =
+  let maybe_extern =
+    if extern
+      then "extern "
+      else ""
+  in
+  Printf.sprintf "%s%s;\n"
+    maybe_extern
+    (fmt_rfunc_decl_t_signature ~print_typ:print_typ f_decl)
+
+and fmt_rfunc_decl_t_signature
+  ?(print_typ = false) {rf_name; rf_params; rf_ret_t} : string
+=
+  let ret_t_s = begin match rf_ret_t with
+    | Nil
+    | Undecided ->
+        if print_typ
+        then Printf.sprintf ": %s" (fmt_type rf_ret_t)
+        else ""
+    | _ -> Printf.sprintf ": %s" (fmt_type rf_ret_t)
+  end in
+
+  Printf.sprintf "fn %s(%s)%s"
+    rf_name
+    (fmt_join_func_params "," rf_params)
+    ret_t_s
+
+and fmt_rf_param (p_name, p_type) : string =
+  Printf.sprintf "%s: %s"
+    p_name
+    (fmt_type p_type)
+
+and fmt_join_func_params delim params : string =
+  match params with
+  | [] -> ""
+  | [x] -> fmt_rf_param x
+  | x::xs ->
+      Printf.sprintf "%s%s %s"
+        (fmt_rf_param x)
+        delim
+        (fmt_join_func_params delim xs)
+
+and fmt_rfunc_def_t ?(print_typ = false) {rf_decl; rf_stmts;} : string =
+  let formatted_stmts =
+    List.fold_left (^) "" (
+      List.map (fmt_rstmt ~print_typ:print_typ "  ") rf_stmts
+    )
+  in
+
+  Printf.sprintf "%s {\n%s}\n"
+    (fmt_rfunc_decl_t_signature ~print_typ:print_typ rf_decl)
+    formatted_stmts
+;;

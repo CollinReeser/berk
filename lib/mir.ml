@@ -1,4 +1,3 @@
-open Ast
 open Rast
 open Ir
 open Typing
@@ -88,7 +87,7 @@ and bb = {
 
 type mir_ctxt = {
   f_name: string;
-  f_params: (ident_t * berk_t) list;
+  f_params: (string * berk_t) list;
   f_ret_t: berk_t;
   name_gen: int;
   lvars: lval StrMap.t;
@@ -1959,11 +1958,11 @@ let func_args_to_mir (mir_ctxt : mir_ctxt) (bb : bb) =
   (mir_ctxt, next_bb)
 
 
-let func_to_mir ({f_decl = {f_name; f_params; f_ret_t}; f_stmts} : func_def_t) =
+let rfunc_to_mir {rf_decl={rf_name; rf_params; rf_ret_t}; rf_stmts} =
   let mir_ctxt = {
-    f_name = f_name;
-    f_params = (List.map (fun (param_name, _, t) -> (param_name, t)) f_params);
-    f_ret_t = f_ret_t;
+    f_name = rf_name;
+    f_params = rf_params;
+    f_ret_t = rf_ret_t;
     name_gen = 0;
     lvars = StrMap.empty;
     bbs = StrMap.empty
@@ -1975,30 +1974,26 @@ let func_to_mir ({f_decl = {f_name; f_params; f_ret_t}; f_stmts} : func_def_t) =
   lvars. *)
   let (mir_ctxt, cur_bb) = func_args_to_mir mir_ctxt bb_entry in
 
-  (* TODO: Really, the RAST should have an equivalent for `func_def_t`, so that
-  we can avoid importing `Ast` at all in this file. *)
-  let f_rstmts = List.map stmt_to_rstmt f_stmts in
-
   (* Core generation of MIR for the function body. *)
   let (mir_ctxt, cur_bb) =
     List.fold_left (
       fun (mir_ctxt, cur_bb) stmt ->
         let (mir_ctxt, cur_bb) = rstmt_to_mir mir_ctxt cur_bb stmt in
         (mir_ctxt, cur_bb)
-    ) (mir_ctxt, cur_bb) f_rstmts
+    ) (mir_ctxt, cur_bb) rf_stmts
   in
 
   (* Inject a trailing return stmt if it's missing and the function is void.
   Else, if the trailing return statement is missing and the function is
   non-void, fail. Really, this should have been caught earlier! *)
   let mir_ctxt = begin
-    match (List.rev f_rstmts) with
+    match (List.rev rf_stmts) with
     | RReturnStmt(_) :: _ ->
         mir_ctxt
 
     | []
     | _ :: _ ->
-        if f_ret_t = Nil then
+        if rf_ret_t = Nil then
           let (mir_ctxt, _) =
             rstmt_to_mir mir_ctxt cur_bb (RReturnStmt(RValNil))
           in
@@ -2006,7 +2001,7 @@ let func_to_mir ({f_decl = {f_name; f_params; f_ret_t}; f_stmts} : func_def_t) =
         else
           failwith (
             Printf.sprintf "No trailing return-stmt but non-nil function [%s]"
-              f_name
+              rf_name
           )
   end in
 
@@ -2015,11 +2010,11 @@ let func_to_mir ({f_decl = {f_name; f_params; f_ret_t}; f_stmts} : func_def_t) =
   mir_ctxt
 
 
-let func_decl_to_mir ({f_name; f_params; f_ret_t} : func_decl_t) =
+let rfunc_decl_to_mir {rf_name; rf_params; rf_ret_t} =
   let mir_ctxt = {
-    f_name = f_name;
-    f_params = (List.map (fun (param_name, _, t) -> (param_name, t)) f_params);
-    f_ret_t = f_ret_t;
+    f_name = rf_name;
+    f_params = rf_params;
+    f_ret_t = rf_ret_t;
     name_gen = 0;
     lvars = StrMap.empty;
     bbs = StrMap.empty

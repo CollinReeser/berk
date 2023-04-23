@@ -1,4 +1,5 @@
 open Berk.Ast
+open Berk.Rast
 open Berk.Codegen_mir
 open Berk.Lexer
 open Berk.Llvm_utility
@@ -351,6 +352,7 @@ let () =
 
       let decl_test_1 = 3;
       let mut decl_test_2: (bool, u32) = (true, 15 + 7);
+      // TODO: Disallow shadowing?
       let (decl_many_1, decl_many_2) = (1, 2);
       let (
         decl_many_1,
@@ -653,10 +655,18 @@ let () =
           | VariantDecl(_) -> None
 
           | FuncExternDecl(func_decl) ->
-              let mir_ctxt = func_decl_to_mir func_decl in
+              let rfunc_decl = func_decl_t_to_rfunc_decl_t func_decl in
+
+              Printf.printf "RAST:\n%s\n" (fmt_rfunc_decl_t rfunc_decl) ;
+
+              let mir_ctxt = rfunc_decl_to_mir rfunc_decl in
               Some(mir_ctxt)
-          | FuncDef(f_ast) ->
-              let mir_ctxt = func_to_mir f_ast in
+          | FuncDef(func_def) ->
+              let rfunc_def = func_def_t_to_rfunc_def_t func_def in
+
+              Printf.printf "RAST:\n%s\n" (fmt_rfunc_def_t rfunc_def) ;
+
+              let mir_ctxt = rfunc_to_mir rfunc_def in
               Some(mir_ctxt)
         end
     ) mod_decls_tc_rewritten
