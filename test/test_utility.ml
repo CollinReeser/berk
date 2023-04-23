@@ -30,6 +30,12 @@ let test_fold_left_map2 expected f acc lhs rhs () =
     ~expected:expected
     ~actual:(fold_left_map2 f acc lhs rhs)
 
+let test_map2i expected f lhs rhs () =
+  Alcotest.(check' (list string))
+    ~msg:"map2i"
+    ~expected:expected
+    ~actual:(map2i f lhs rhs)
+
 let () =
   let open Alcotest in
   run "Utility" [
@@ -109,6 +115,16 @@ let () =
         test_fold_left_map2
           (35, [3; 5; 7; 9; 11])
           f 0 [1; 2; 3; 4; 5] [2; 3; 4; 5; 6]
+      );
+    ];
+    "map2i", [
+      test_case "map2i" `Quick (
+        let f i lhs rhs =
+          Printf.sprintf "%d_%s_%s" i lhs rhs
+        in
+        test_map2i
+          ["0_a_x"; "1_b_y"; "2_c_z"]
+          f ["a"; "b"; "c"] ["x"; "y"; "z"]
       );
     ];
   ]

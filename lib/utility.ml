@@ -36,6 +36,24 @@ let fold_left_map2 f acc lhs rhs =
   (acc', results)
 ;;
 
+let map2i (f : int -> 'a -> 'b -> 'c) (lhs : 'a list) (rhs : 'b list) =
+  let rec _map2i so_far_rev i lhs rhs =
+    begin match (lhs, rhs) with
+    | ([], []) -> so_far_rev
+
+    | ([], _)
+    | (_, []) -> failwith "map2i invoked on unequal lists"
+
+    | (l::lhs_rest, r::rhs_rest) ->
+        let elem = f i l r in
+        _map2i (elem::so_far_rev) (i + 1) lhs_rest rhs_rest
+    end
+  in
+
+  let elems_rev = _map2i [] 0 lhs rhs in
+  List.rev elems_rev
+;;
+
 let list_to_2_tuples lst =
   let rec every_pair so_far elem rest =
     begin match rest with
