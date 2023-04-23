@@ -1,4 +1,5 @@
 open Ast
+open Rast
 open Ir
 open Typing
 open Utility
@@ -424,7 +425,7 @@ let literal_to_instr mir_ctxt bb t ctor =
 
 
 (* Get a "default value" expr for the given type. *)
-let rec default_expr_for_t mir_ctxt t : (mir_ctxt * expr) =
+let rec default_expr_for_t mir_ctxt t : (mir_ctxt * rexpr) =
   begin match t with
   | Undecided
   | Unbound(_)
@@ -440,23 +441,23 @@ let rec default_expr_for_t mir_ctxt t : (mir_ctxt * expr) =
           (fmt_type t)
       )
 
-  | Nil  -> (mir_ctxt, ValNil)
+  | Nil  -> (mir_ctxt, RValNil)
 
-  | Bool -> (mir_ctxt, ValBool(false))
+  | Bool -> (mir_ctxt, RValBool(false))
 
-  | U64  -> (mir_ctxt, ValInt(U64, 0))
-  | U32  -> (mir_ctxt, ValInt(U32, 0))
-  | U16  -> (mir_ctxt, ValInt(U16, 0))
-  | U8   -> (mir_ctxt, ValInt(U8,  0))
-  | I64  -> (mir_ctxt, ValInt(I64, 0))
-  | I32  -> (mir_ctxt, ValInt(I32, 0))
-  | I16  -> (mir_ctxt, ValInt(I16, 0))
-  | I8   -> (mir_ctxt, ValInt(I8,  0))
-  | F32  -> (mir_ctxt, ValF32 (0.0))
-  | F64  -> (mir_ctxt, ValF64 (0.0))
-  | F128 -> (mir_ctxt, ValF128("0.0"))
+  | U64  -> (mir_ctxt, RValInt(U64, 0))
+  | U32  -> (mir_ctxt, RValInt(U32, 0))
+  | U16  -> (mir_ctxt, RValInt(U16, 0))
+  | U8   -> (mir_ctxt, RValInt(U8,  0))
+  | I64  -> (mir_ctxt, RValInt(I64, 0))
+  | I32  -> (mir_ctxt, RValInt(I32, 0))
+  | I16  -> (mir_ctxt, RValInt(I16, 0))
+  | I8   -> (mir_ctxt, RValInt(I8,  0))
+  | F32  -> (mir_ctxt, RValF32 (0.0))
+  | F64  -> (mir_ctxt, RValF64 (0.0))
+  | F128 -> (mir_ctxt, RValF128("0.0"))
 
-  | String -> (mir_ctxt, ValStr(""))
+  | String -> (mir_ctxt, RValStr(""))
 
   | Tuple(tuple_ts) ->
       let (mir_ctxt, default_ts_exprs) =
@@ -464,7 +465,7 @@ let rec default_expr_for_t mir_ctxt t : (mir_ctxt * expr) =
           fun mir_ctxt tuple_t -> default_expr_for_t mir_ctxt tuple_t
         ) mir_ctxt tuple_ts
       in
-      (mir_ctxt, TupleExpr(t, default_ts_exprs))
+      (mir_ctxt, RTupleExpr(t, default_ts_exprs))
 
   | Array(_, _) ->
       failwith (
@@ -517,31 +518,29 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         let arr_init_stmts = [
           (* Pretend this is indeed a one-dimensional "flattened" array of
           whatever the input array type was. *)
-          DeclStmt(
-            arr_varname, {mut=true},
-            flattened_arr_t, ValRawArray(flattened_arr_t)
+          RDeclStmt(
+            arr_varname, flattened_arr_t, RValRawArray(flattened_arr_t)
           );
-          ExprStmt(
-            {ignore=false},
-            WhileExpr(
-              Nil, [DeclStmt(idx_varname, {mut=true}, U64, ValInt(U64, 0))],
-              BinOp(
+          RExprStmt(
+            RWhileExpr(
+              Nil, [RDeclStmt(idx_varname, U64, RValInt(U64, 0))],
+              RBinOp(
                 Bool, Lt,
-                ValVar(U64, idx_varname), ValInt(U64, total_arr_sz)
+                RValVar(U64, idx_varname), RValInt(U64, total_arr_sz)
               ),
               [
                 (* Initialize this index of the array. *)
-                AssignStmt(
-                  arr_varname, [ALIndex(ValVar(U64, idx_varname))],
-                  (
-                    Stdlib.snd
-                      (default_expr_for_t mir_ctxt base_elem_t)
-                  )
+                RAssignStmt(
+                  arr_varname, [RALIndex(RValVar(U64, idx_varname))],
+                  begin
+                    let (_, exp) = default_expr_for_t mir_ctxt base_elem_t in
+                    exp
+                  end
                 );
                 (* Increment the indexing variable. *)
-                AssignStmt(
+                RAssignStmt(
                   idx_varname, [],
-                  BinOp(U64, Add, ValVar(U64, idx_varname), ValInt(U64, 1))
+                  RBinOp(U64, Add, RValVar(U64, idx_varname), RValInt(U64, 1))
                 );
               ]
             )
@@ -553,14 +552,14 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         let (mir_ctxt, bb) =
           List.fold_left (
             fun (mir_ctxt, cur_bb) stmt ->
-              let (mir_ctxt, cur_bb) = stmt_to_mir mir_ctxt cur_bb stmt in
+              let (mir_ctxt, cur_bb) = rstmt_to_mir mir_ctxt cur_bb stmt in
               (mir_ctxt, cur_bb)
           ) (mir_ctxt, bb) arr_init_stmts
         in
 
         (* Yield the lval to the initialized array. *)
         let (mir_ctxt, bb, ({t=array_lval_t; _} as array_lval)) =
-          expr_to_mir mir_ctxt bb (ValVar(t, arr_varname))
+          rexpr_to_mir mir_ctxt bb (RValVar(t, arr_varname))
         in
 
         (* If the type of the yielded lval is different than the input array
@@ -595,7 +594,7 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
     needs the special initialization logic above. *)
 
     | _ ->
-        expr_to_mir mir_ctxt bb (
+        rexpr_to_mir mir_ctxt bb (
           Stdlib.snd
             (default_expr_for_t mir_ctxt t)
         )
@@ -606,43 +605,40 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
   (mir_ctxt, bb, lval)
 
 
-and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
-  let rec _expr_to_mir
-    (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) : (mir_ctxt * bb * lval)
+and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
+  let rec _rexpr_to_mir
+    (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) : (mir_ctxt * bb * lval)
   =
     let (mir_ctxt, bb, instr) = begin match exp with
-      | ValNil -> ValNil |> literal_to_instr mir_ctxt bb Nil
+      | RValNil -> ValNil |> literal_to_instr mir_ctxt bb Nil
 
-      | ValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb Bool
+      | RValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb Bool
 
-      | ValInt(U8,  x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb U8
-      | ValInt(U16, x) -> ValU16(x) |> literal_to_instr mir_ctxt bb U16
-      | ValInt(U32, x) -> ValU32(x) |> literal_to_instr mir_ctxt bb U32
-      | ValInt(U64, x) -> ValU64(x) |> literal_to_instr mir_ctxt bb U64
-      | ValInt(I8,  x) -> ValI8(x)  |> literal_to_instr mir_ctxt bb I8
-      | ValInt(I16, x) -> ValI16(x) |> literal_to_instr mir_ctxt bb I16
-      | ValInt(I32, x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
-      | ValInt(I64, x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
+      | RValInt(U8,  x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb U8
+      | RValInt(U16, x) -> ValU16(x) |> literal_to_instr mir_ctxt bb U16
+      | RValInt(U32, x) -> ValU32(x) |> literal_to_instr mir_ctxt bb U32
+      | RValInt(U64, x) -> ValU64(x) |> literal_to_instr mir_ctxt bb U64
+      | RValInt(I8,  x) -> ValI8(x)  |> literal_to_instr mir_ctxt bb I8
+      | RValInt(I16, x) -> ValI16(x) |> literal_to_instr mir_ctxt bb I16
+      | RValInt(I32, x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
+      | RValInt(I64, x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
 
-      | ValInt(t, x) ->
+      | RValInt(t, x) ->
           failwith (
             Printf.sprintf "Nonsense type [%s] for int [%d] converting to MIR."
               (fmt_type t) x
           )
 
-      | ValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb F32
-      | ValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb F64
-      | ValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb F128
+      | RValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb F32
+      | RValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb F64
+      | RValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb F128
 
-      | ValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb String
+      | RValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb String
 
-      | ValName(_, _) ->
-          failwith "Cannot codegen ValName(): Should have been resolved"
-
-      | ValFunc(func_t, func_name) ->
+      | RValFunc(func_t, func_name) ->
           ValFunc(func_name) |> literal_to_instr mir_ctxt bb func_t
 
-      | ValVar(_, varname) ->
+      | RValVar(_, varname) ->
           (* For variable access in MIR, we assume the variable is nested inside
           an alloca that must be loaded from. *)
           let ptr_lval = try
@@ -662,7 +658,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, load_lval)
 
-      | ValRawArray(t) ->
+      | RValRawArray(t) ->
           (* Generate a raw, uninitialized stack-allocated static array. *)
           let (mir_ctxt, alloca_arr_varname) = get_varname mir_ctxt in
           let alloca_arr_lval = {t=Ptr(t); kind=Tmp; lname=alloca_arr_varname} in
@@ -671,8 +667,8 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, alloca_arr_lval)
 
-      | ValCast(t, op, exp) ->
-          let (mir_ctxt, bb, exp_lval) = _expr_to_mir mir_ctxt bb exp in
+      | RValCast(t, op, exp) ->
+          let (mir_ctxt, bb, exp_lval) = _rexpr_to_mir mir_ctxt bb exp in
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
           let target_lval = {t=t; kind=Tmp; lname=varname} in
@@ -682,54 +678,13 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, target_lval)
 
-      | UfcsCall(_, _, func_name, _) ->
-          failwith (
-            Printf.sprintf
-              "Expected UFCS invocation ([%s]) to be rewritten into func call"
-              func_name
-          )
-
-      | FuncCall(t, func_name, exprs) ->
-          let ((mir_ctxt, bb), arg_values) =
-            List.fold_left_map (
-              fun (mir_ctxt, bb) exp ->
-                let (mir_ctxt, bb, arg_val) = _expr_to_mir mir_ctxt bb exp in
-                ((mir_ctxt, bb), arg_val)
-            ) (mir_ctxt, bb) exprs
-          in
-
-          let (mir_ctxt, varname) = get_varname mir_ctxt in
-          let func_t = Function(t, (List.map expr_type exprs)) in
-          let func_lval = {t=func_t; kind=Tmp; lname=varname} in
-          let func_instr = Assign(func_lval, Constant(ValFunc(func_name))) in
-
-          let (mir_ctxt, bb, lval, call_instr) = begin match t with
-            | Nil ->
-                let (mir_ctxt, bb, nil_lval) =
-                  _expr_to_mir mir_ctxt bb ValNil
-                in
-                let instr = CallVoid(func_lval, arg_values) in
-
-                (mir_ctxt, bb, nil_lval, instr)
-            | _ ->
-                let (mir_ctxt, varname) = get_varname mir_ctxt in
-                let res_lval = {t=t; kind=Tmp; lname=varname} in
-                let instr = Call(res_lval, func_lval, arg_values) in
-
-                (mir_ctxt, bb, res_lval, instr)
-          end in
-
-          let bb = {bb with instrs=bb.instrs @ [func_instr; call_instr]} in
-
-          (mir_ctxt, bb, lval)
-
-      | ExprInvoke(t, func_expr, arg_exprs) ->
-          let (mir_ctxt, bb, func_lval) = _expr_to_mir mir_ctxt bb func_expr in
+      | RExprInvoke(t, func_expr, arg_exprs) ->
+          let (mir_ctxt, bb, func_lval) = _rexpr_to_mir mir_ctxt bb func_expr in
 
           let ((mir_ctxt, bb), arg_values) =
             List.fold_left_map (
               fun (mir_ctxt, bb) exp ->
-                let (mir_ctxt, bb, arg_val) = _expr_to_mir mir_ctxt bb exp in
+                let (mir_ctxt, bb, arg_val) = _rexpr_to_mir mir_ctxt bb exp in
                 ((mir_ctxt, bb), arg_val)
             ) (mir_ctxt, bb) arg_exprs
           in
@@ -737,7 +692,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           let (mir_ctxt, bb, lval, call_instr) = begin match t with
             | Nil ->
                 let (mir_ctxt, bb, nil_lval) =
-                  _expr_to_mir mir_ctxt bb ValNil
+                  _rexpr_to_mir mir_ctxt bb RValNil
                 in
                 let instr = CallVoid(func_lval, arg_values) in
 
@@ -754,22 +709,17 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, lval)
 
-      | BlockExpr(_, stmts, exp) ->
-          let (mir_ctxt, bb) =
-            List.fold_left (
-              fun (mir_ctxt, bb) stmt -> stmt_to_mir mir_ctxt bb stmt
-            ) (mir_ctxt, bb) stmts
-          in
-
-          let (mir_ctxt, bb, lval) = _expr_to_mir mir_ctxt bb exp in
+      | RBlockExpr(_, stmt, exp) ->
+          let (mir_ctxt, bb) = rstmt_to_mir mir_ctxt bb stmt in
+          let (mir_ctxt, bb, lval) = _rexpr_to_mir mir_ctxt bb exp in
 
           (mir_ctxt, bb, lval)
 
-      | TupleExpr(t, exprs) ->
+      | RTupleExpr(t, exprs) ->
           let ((mir_ctxt, bb), tuple_values) =
             List.fold_left_map (
               fun (mir_ctxt, bb) exp ->
-                let (mir_ctxt, bb, tuple_val) = _expr_to_mir mir_ctxt bb exp in
+                let (mir_ctxt, bb, tuple_val) = _rexpr_to_mir mir_ctxt bb exp in
                 ((mir_ctxt, bb), tuple_val)
             ) (mir_ctxt, bb) exprs
           in
@@ -797,11 +747,11 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
       first/middle/last name, would not make as much sense represented as a
       3-element array.
       *)
-      | ArrayExpr(t, exprs) ->
+      | RArrayExpr(t, exprs) ->
           let ((mir_ctxt, bb), arr_values) =
             List.fold_left_map (
               fun (mir_ctxt, bb) exp ->
-                let (mir_ctxt, bb, arr_val) = _expr_to_mir mir_ctxt bb exp in
+                let (mir_ctxt, bb, arr_val) = _rexpr_to_mir mir_ctxt bb exp in
                 ((mir_ctxt, bb), arr_val)
             ) (mir_ctxt, bb) exprs
           in
@@ -814,8 +764,8 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, lval)
 
-      | UnOp(t, op, exp) ->
-          let (mir_ctxt, bb, exp_lval) = _expr_to_mir mir_ctxt bb exp in
+      | RUnOp(t, op, exp) ->
+          let (mir_ctxt, bb, exp_lval) = _rexpr_to_mir mir_ctxt bb exp in
 
           let (mir_ctxt, varname) = get_varname mir_ctxt in
           let result_lval = {t=t; kind=Tmp; lname=varname} in
@@ -826,7 +776,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           (mir_ctxt, bb, result_lval)
 
       (* Short-circuiting logical comparison (eg, `&&`, `||`) *)
-      | BinOp(t, ((LOr | LAnd) as op), lhs, rhs) ->
+      | RBinOp(t, ((LOr | LAnd) as op), lhs, rhs) ->
           let (mir_ctxt, done_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, eval_rhs_bb_name) = get_bbname mir_ctxt in
           let done_bb = {name=done_bb_name; instrs=[]} in
@@ -834,7 +784,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (* Depending on how this value resolve, we may be able to short
           circuit and don't need to evaluate the RHS. *)
-          let (mir_ctxt, bb, lhs_lval) = _expr_to_mir mir_ctxt bb lhs in
+          let (mir_ctxt, bb, lhs_lval) = _rexpr_to_mir mir_ctxt bb lhs in
 
           (* Where to store the result of the logical-or operation. *)
           let (mir_ctxt, result_alloca_name) = get_varname mir_ctxt in
@@ -866,7 +816,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (* Evaluate the RHS in the dedicated, skippable bb. *)
           let (mir_ctxt, eval_rhs_bb, rhs_lval) =
-            _expr_to_mir mir_ctxt eval_rhs_bb rhs
+            _rexpr_to_mir mir_ctxt eval_rhs_bb rhs
           in
 
           (* Store the RHS value, then jump to the result block. *)
@@ -892,13 +842,13 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           (mir_ctxt, done_bb, result_lval)
 
 
-      | BinOp(t, op, lhs, rhs) ->
-          let (mir_ctxt, bb, lhs_lval) = _expr_to_mir mir_ctxt bb lhs in
-          let (mir_ctxt, bb, rhs_lval) = _expr_to_mir mir_ctxt bb rhs in
+      | RBinOp(t, op, lhs, rhs) ->
+          let (mir_ctxt, bb, lhs_lval) = _rexpr_to_mir mir_ctxt bb lhs in
+          let (mir_ctxt, bb, rhs_lval) = _rexpr_to_mir mir_ctxt bb rhs in
 
           let instructions = [] in
-          let lhs_t = expr_type lhs in
-          let rhs_t = expr_type rhs in
+          let lhs_t = rexpr_type lhs in
+          let rhs_t = rexpr_type rhs in
           let common_t = common_type_of_lr lhs_t rhs_t in
 
           let (mir_ctxt, instructions, lhs_lval) =
@@ -934,108 +884,9 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, lval)
 
-      | IfThenElseExpr(t, cond_expr, then_expr, else_expr) ->
-          let core_if_then_else_gen mir_ctxt bb maybe_do_store =
-            let (mir_ctxt, then_bb_name) = get_bbname mir_ctxt in
-            let (mir_ctxt, else_bb_name) = get_bbname mir_ctxt in
-            let (mir_ctxt, end_bb_name) = get_bbname mir_ctxt in
-            let then_bb = {name=then_bb_name; instrs=[]} in
-            let else_bb = {name=else_bb_name; instrs=[]} in
-            let end_bb = {name=end_bb_name; instrs=[]} in
-
-            let (mir_ctxt, bb, cond_lval) =
-              _expr_to_mir mir_ctxt bb cond_expr
-            in
-
-            (* NOTE: We need to put the branch to then/else _here_, as opposed
-            to the end, as the then_bb and else_bb we get back from evaluating
-            those blocks might be some arbitrary other block (if there's further
-            control flow in the then or else branches). We need to branch to the
-            _start_ of whatever arbitrary control flow then/else might have. *)
-            let cond_br = CondBr(cond_lval, then_bb, else_bb) in
-            let bb = {bb with instrs = bb.instrs @ [cond_br]} in
-
-            let (mir_ctxt, then_bb, then_instr) =
-              _expr_to_mir mir_ctxt then_bb then_expr
-            in
-            let (mir_ctxt, else_bb, else_instr) =
-              _expr_to_mir mir_ctxt else_bb else_expr
-            in
-
-            let then_bb =
-              {
-                then_bb with instrs =
-                  (then_bb.instrs @ (maybe_do_store then_instr)) @ [Br(end_bb)]
-              }
-            in
-            let else_bb =
-              {
-                else_bb with instrs =
-                  (else_bb.instrs @ (maybe_do_store else_instr)) @ [Br(end_bb)]
-              }
-            in
-
-            (mir_ctxt, (bb, then_bb, else_bb, end_bb))
-          in
-
-          let (mir_ctxt, (bb, then_bb, else_bb, end_bb), if_res_lval) =
-            begin match t with
-            | Nil ->
-              let no_store _ = [] in
-
-              let (mir_ctxt, (bb, then_bb, else_bb, end_bb)) =
-                core_if_then_else_gen mir_ctxt bb no_store
-              in
-
-              let (mir_ctxt, end_bb, nil_lval) =
-                _expr_to_mir mir_ctxt end_bb ValNil
-              in
-
-              (mir_ctxt, (bb, then_bb, else_bb, end_bb), nil_lval)
-
-            | _ ->
-              let (mir_ctxt, if_alloca_name) = get_varname mir_ctxt in
-              let if_alloca_lval =
-                {t=Ptr(t); kind=Tmp; lname=if_alloca_name}
-              in
-              let alloca_instr = Alloca(if_alloca_lval, t) in
-              let bb = {bb with instrs = bb.instrs @ [alloca_instr]} in
-
-              let do_store if_branch_lval =
-                [Store(if_alloca_lval, if_branch_lval)]
-              in
-
-              let (mir_ctxt, (bb, then_bb, else_bb, end_bb)) =
-                core_if_then_else_gen mir_ctxt bb do_store
-              in
-
-              let (mir_ctxt, if_res_varname) = get_varname mir_ctxt in
-              let if_res_lval = {t=t; kind=Tmp; lname=if_res_varname} in
-              let if_res_instr =
-                Load(if_res_lval, if_alloca_lval)
-              in
-              let end_bb =
-                {end_bb with instrs = end_bb.instrs @ [if_res_instr]}
-              in
-
-              (mir_ctxt, (bb, then_bb, else_bb, end_bb), if_res_lval)
-
-            end
-          in
-
-          (* Update the MIR context with our updated versions of the basic
-          blocks. *)
-          let (mir_ctxt, _) =
-            List.fold_left_map (
-              fun mir_ctxt bb -> (update_bb mir_ctxt bb, ())
-            ) mir_ctxt [bb; then_bb; else_bb; end_bb]
-          in
-
-          (mir_ctxt, end_bb, if_res_lval)
-
-      | TupleIndexExpr(_, idx, tuple_exp) ->
+      | RTupleIndexExpr(_, idx, tuple_exp) ->
           let (mir_ctxt, bb, ({t=tup_t; _} as tup_lval)) =
-            _expr_to_mir mir_ctxt bb tuple_exp
+            _rexpr_to_mir mir_ctxt bb tuple_exp
           in
 
           let elem_t = unwrap_aggregate_indexable tup_t idx in
@@ -1050,7 +901,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, tup_elem_lval)
 
-      | VariantCtorExpr(variant_t, ctor_name, ctor_args) ->
+      | RVariantCtorExpr(variant_t, ctor_name, ctor_args) ->
           (* Assign the variant tag (first field in aggregate), based on the
           specific constructor we're building. *)
           let ctor_idx = get_tag_index_by_variant_ctor variant_t ctor_name in
@@ -1059,7 +910,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           in
 
           (* This constructor may have associated data. Assign it now. *)
-          let ctor_args_ts = List.map expr_type ctor_args in
+          let ctor_args_ts = List.map rexpr_type ctor_args in
           let (
             mir_ctxt, bb, ({t=variant_ctor_t; _} as ctor_lval), construct_instr
           ) = begin
@@ -1092,7 +943,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                   List.fold_left_map (
                     fun (mir_ctxt, bb) ctor_arg ->
                       let (mir_ctxt, bb, lval) =
-                        _expr_to_mir mir_ctxt bb ctor_arg
+                        _rexpr_to_mir mir_ctxt bb ctor_arg
                       in
                       ((mir_ctxt, bb), lval)
                   ) (mir_ctxt, bb) ctor_args
@@ -1171,9 +1022,9 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb, tmp_load_variant_lval)
 
-      | MatchExpr(t, matched_exp, patts_to_exps) ->
+      | RMatchExpr(t, matched_exp, patts_to_exps) ->
           let (mir_ctxt, bb, matched_lval) =
-            _expr_to_mir mir_ctxt bb matched_exp
+            _rexpr_to_mir mir_ctxt bb matched_exp
           in
 
           (* Allocate a "first" and "last" block. The first block will be used
@@ -1198,7 +1049,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
             begin match t with
               | Nil ->
                   let (mir_ctxt, bb, nil_lval) =
-                    _expr_to_mir mir_ctxt bb ValNil
+                    _rexpr_to_mir mir_ctxt bb RValNil
                   in
 
                   let mir_ctxt = update_bb mir_ctxt bb in
@@ -1250,7 +1101,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
                   (* TODO: Teach this to make attempting to branch to the
                   "else", which should be impossible, instead cause a halt. *)
-                  let mir_ctxt = pattern_to_mir
+                  let mir_ctxt = rpattern_to_mir
                     mir_ctxt
                     bb_patt
                     bb_end
@@ -1268,7 +1119,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
                   let (mir_ctxt, bb_else_name) = get_bbname mir_ctxt in
                   let bb_else = {name=bb_else_name; instrs=[]} in
 
-                  let mir_ctxt = pattern_to_mir
+                  let mir_ctxt = rpattern_to_mir
                     mir_ctxt
                     bb_patt
                     bb_else
@@ -1294,7 +1145,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, bb_end, match_res_lval)
 
-      | WhileExpr(Nil, init_stmts, cond_expr, then_stmts) ->
+      | RWhileExpr(Nil, init_stmts, cond_expr, then_stmts) ->
           let (mir_ctxt, init_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, cond_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, then_bb_name) = get_bbname mir_ctxt in
@@ -1311,7 +1162,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           let (mir_ctxt, init_bb) =
             List.fold_left (
-              fun (mir_ctxt, init_bb) stmt -> stmt_to_mir mir_ctxt init_bb stmt
+              fun (mir_ctxt, init_bb) stmt -> rstmt_to_mir mir_ctxt init_bb stmt
             ) (mir_ctxt, init_bb) init_stmts
           in
 
@@ -1325,7 +1176,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           the body of the while, or to the end of the while. *)
 
           let (mir_ctxt, cond_bb, cond_lval) =
-            _expr_to_mir mir_ctxt cond_bb cond_expr
+            _rexpr_to_mir mir_ctxt cond_bb cond_expr
           in
 
           let cond_br = CondBr(cond_lval, then_bb, end_bb) in
@@ -1335,7 +1186,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           let (mir_ctxt, then_bb) =
             List.fold_left (
-              fun (mir_ctxt, then_bb) stmt -> stmt_to_mir mir_ctxt then_bb stmt
+              fun (mir_ctxt, then_bb) stmt -> rstmt_to_mir mir_ctxt then_bb stmt
             ) (mir_ctxt, then_bb) then_stmts
           in
 
@@ -1350,7 +1201,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
           TODO: Eventually, it will be possible to yield non-nil values from
           while loops, with syntax/semantics updates. *)
           let (mir_ctxt, end_bb, nil_lval) =
-            _expr_to_mir mir_ctxt end_bb ValNil
+            _rexpr_to_mir mir_ctxt end_bb RValNil
           in
 
           (* Update the MIR context with our updated versions of the basic
@@ -1363,18 +1214,18 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
 
           (mir_ctxt, end_bb, nil_lval)
 
-      | WhileExpr(_, _, _, _) ->
+      | RWhileExpr(_, _, _, _) ->
           failwith "Unimplemented: while-expr yielding non-nil"
 
-      | IndexExpr(_, idx_expr, idxable_expr) ->
+      | RIndexExpr(_, idx_expr, idxable_expr) ->
           (* This is an assignment into some dynamic index of an array. The
           index value itself might be a constant, but it could also be an
           arbitrary expression. This can violate bounds-checking, unlike the
           other two types of assignments. *)
           let (mir_ctxt, bb, ({t=pointer_t; _} as idxable_lval)) =
-            expr_to_mir mir_ctxt bb idxable_expr
+            rexpr_to_mir mir_ctxt bb idxable_expr
           in
-          let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_expr in
+          let (mir_ctxt, bb, idx_lval) = rexpr_to_mir mir_ctxt bb idx_expr in
 
           (* The indexable value is itself a pointer (else we can't index at
           all). Then, we'll either yield the element itself, or a pointer to the
@@ -1434,7 +1285,7 @@ and expr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Ast.expr) =
     (mir_ctxt, bb, instr)
   in
 
-  _expr_to_mir mir_ctxt bb exp
+  _rexpr_to_mir mir_ctxt bb exp
 
 
 (* bb_patt is the pre-created block to (start with) being populated with the
@@ -1452,28 +1303,28 @@ bb_else that is known only to the caller.
 
 TODO: This will probably need to become smarter if we want to re-use this for
 things like `if let`, `while let`, and `for let`. *)
-and pattern_to_mir
+and rpattern_to_mir
   mir_ctxt bb_patt bb_else bb_end matched_lval patt exp do_maybe_store
 =
   let rec pattern_breakdown_mir mir_ctxt bb_patt bb_else matched_lval patt =
     let {t=matched_t; _} = matched_lval in
     begin match patt with
-    | Wild(_) | PNil ->
+    | RWild(_) | RPNil ->
         let (mir_ctxt, bb_patt, unconditional_match_lval) =
-          expr_to_mir mir_ctxt bb_patt (ValBool(true))
+          rexpr_to_mir mir_ctxt bb_patt (RValBool(true))
         in
         (mir_ctxt, bb_patt, unconditional_match_lval)
 
-    | VarBind(_, ident) ->
+    | RVarBind(_, ident) ->
         let (mir_ctxt, bb_patt) =
           assign_rhs_to_decl mir_ctxt bb_patt ident matched_lval matched_t
         in
         let (mir_ctxt, bb_patt, unconditional_match_lval) =
-          expr_to_mir mir_ctxt bb_patt (ValBool(true))
+          rexpr_to_mir mir_ctxt bb_patt (RValBool(true))
         in
         (mir_ctxt, bb_patt, unconditional_match_lval)
 
-    | PatternAs(_, patt, ident) ->
+    | RPatternAs(_, patt, ident) ->
         let (mir_ctxt, bb_patt) =
           assign_rhs_to_decl mir_ctxt bb_patt ident matched_lval matched_t
         in
@@ -1484,9 +1335,9 @@ and pattern_to_mir
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | PBool(b) ->
+    | RPBool(b) ->
         let (mir_ctxt, bb_patt, b_lval) =
-          expr_to_mir mir_ctxt bb_patt (ValBool(b))
+          rexpr_to_mir mir_ctxt bb_patt (RValBool(b))
         in
 
         let (mir_ctxt, bool_patt_lname) = get_varname mir_ctxt in
@@ -1497,7 +1348,7 @@ and pattern_to_mir
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | PTuple(t, patts) ->
+    | RPTuple(t, patts) ->
         (* Extract the types out so we can deconstruct the tuple. *)
         let tuple_elem_ts = begin match t with
           | Tuple(ts) -> ts
@@ -1536,7 +1387,7 @@ and pattern_to_mir
         the tuple pattern, we begin with an "unconditionally true" success
         lval (which will get optimized out in LLVM). *)
         let (mir_ctxt, bb_patt, unconditional_match_lval) =
-          expr_to_mir mir_ctxt bb_patt (ValBool(true))
+          rexpr_to_mir mir_ctxt bb_patt (RValBool(true))
         in
 
         let (mir_ctxt, bb_patt, is_match_lval) =
@@ -1566,7 +1417,7 @@ and pattern_to_mir
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | Ctor(v_t, ctor_name, ctor_patts) ->
+    | RCtor(v_t, ctor_name, ctor_patts) ->
         (* Assign the variant tag (first field in aggregate), based on the
         specific constructor we're building. *)
         let ctor_idx_expected = get_tag_index_by_variant_ctor v_t ctor_name in
@@ -1630,7 +1481,7 @@ and pattern_to_mir
               indicate a successful match. *)
 
               let (mir_ctxt, bb_ctor_subpatt, unconditional_match_lval) =
-                expr_to_mir mir_ctxt bb_ctor_subpatt (ValBool(true))
+                rexpr_to_mir mir_ctxt bb_ctor_subpatt (RValBool(true))
               in
 
               (mir_ctxt, bb_ctor_subpatt, unconditional_match_lval)
@@ -1726,7 +1577,7 @@ and pattern_to_mir
 
               let mir_ctxt = update_bb mir_ctxt bb_ctor_subpatt in
 
-              let ctor_tuple_patt = PTuple(ctor_val_t, ctor_patts) in
+              let ctor_tuple_patt = RPTuple(ctor_val_t, ctor_patts) in
 
               let (mir_ctxt, bb_ctor_subpatt, is_match_lval) =
                 pattern_breakdown_mir
@@ -1752,7 +1603,7 @@ and pattern_to_mir
     let cond_br = CondBr(is_match_lval, bb_then, bb_else) in
     let bb_patt = {bb_patt with instrs = bb_patt.instrs @ [cond_br]} in
 
-    let (mir_ctxt, bb_then, then_lval) = expr_to_mir mir_ctxt bb_then exp in
+    let (mir_ctxt, bb_then, then_lval) = rexpr_to_mir mir_ctxt bb_then exp in
 
     let maybe_store = do_maybe_store then_lval in
 
@@ -1790,20 +1641,20 @@ and assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval expected_t =
   (mir_ctxt, bb)
 
 
-and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
-  let _stmt_to_mir
-    (mir_ctxt: mir_ctxt) (bb: bb) (stmt: Ast.stmt) : (mir_ctxt * bb)
+and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
+  let _rstmt_to_mir
+    (mir_ctxt: mir_ctxt) (bb: bb) (stmt: Rast.rstmt) : (mir_ctxt * bb)
   =
 
     match stmt with
-    | ExprStmt(_, exp) ->
-        let (mir_ctxt, bb, _) = expr_to_mir mir_ctxt bb exp in
+    | RExprStmt(exp) ->
+        let (mir_ctxt, bb, _) = rexpr_to_mir mir_ctxt bb exp in
 
         (mir_ctxt, bb)
 
-    | DeclStmt(lhs_name, _, _, exp) ->
+    | RDeclStmt(lhs_name, _, exp) ->
         let (mir_ctxt, bb, ({t=lval_t; _} as rhs_lval)) =
-          expr_to_mir mir_ctxt bb exp
+          rexpr_to_mir mir_ctxt bb exp
         in
 
         (* This call does all the work of doing an alloca, storing the RHS
@@ -1821,13 +1672,13 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | DeclDefStmt(idents_quals_ts) ->
+    | RDeclDefStmt(idents_ts) ->
         (* For each of the N varname/type declarations, generate default values
         for each based on their types, assign those values into new allocas,
         and remember those allocas by the names of the declared variables. *)
         let (mir_ctxt, bb) =
           List.fold_left (
-            fun (mir_ctxt, bb) (lhs_name, _, t) ->
+            fun (mir_ctxt, bb) (lhs_name, t) ->
               (* Generate default value. *)
               let (mir_ctxt, bb, ({t=lval_t; _} as lval)) =
                 type_to_default_lval mir_ctxt bb t
@@ -1842,17 +1693,17 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
               let mir_ctxt = update_bb mir_ctxt bb in
 
               (mir_ctxt, bb)
-          ) (mir_ctxt, bb) idents_quals_ts
+          ) (mir_ctxt, bb) idents_ts
         in
 
         (mir_ctxt, bb)
 
-    | AssignStmt(lhs_name, [], exp) ->
+    | RAssignStmt(lhs_name, [], exp) ->
         (* This is an assignment to a pre-existing lvalue var, so we just need
         to find the lval for this var, and then we can directly store the RHS
         into that existing lval. *)
 
-        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
+        let (mir_ctxt, bb, rhs_lval) = rexpr_to_mir mir_ctxt bb exp in
 
         let lhs_alloca_lval = StrMap.find lhs_name mir_ctxt.lvars in
         let store_instr = Store(lhs_alloca_lval, rhs_lval) in
@@ -1862,7 +1713,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-    | AssignStmt(lhs_name, lval_idxs, exp) ->
+    | RAssignStmt(lhs_name, lval_idxs, exp) ->
         (* Generate MIR for iteratively indexing into the contents of the named
         variable, eventually yielding an lval that can be stored into with the
         RHS expression result. *)
@@ -1873,8 +1724,8 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
           | [] -> (mir_ctxt, bb, cur_lhs_lval)
 
 
-          | ALIndex(idx_exp) :: rest ->
-              let (mir_ctxt, bb, idx_lval) = expr_to_mir mir_ctxt bb idx_exp in
+          | RALIndex(idx_exp) :: rest ->
+              let (mir_ctxt, bb, idx_lval) = rexpr_to_mir mir_ctxt bb idx_exp in
 
               let deref_t = unwrap_ptr idxable_t in
               let elem_t = unwrap_indexable deref_t in
@@ -1900,7 +1751,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
               gen_indexing_mir mir_ctxt bb ptr_to_next_elem_lval rest
 
-          | ALStaticIndex(i) :: rest ->
+          | RALStaticIndex(i) :: rest ->
               (* FIXME: Really, this should be "ALTupleIndex", and this
               unwrapping function should be named accordingly. *)
               let deref_t = unwrap_ptr idxable_t in
@@ -1998,7 +1849,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
         in
 
         (* Generate the MIR for the expression itself. *)
-        let (mir_ctxt, bb, rhs_lval) = expr_to_mir mir_ctxt bb exp in
+        let (mir_ctxt, bb, rhs_lval) = rexpr_to_mir mir_ctxt bb exp in
 
         (* Finally, store the element into the calculated index. *)
         let store_instr = Store(to_store_lval, rhs_lval) in
@@ -2008,54 +1859,8 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
         (mir_ctxt, bb)
 
-
-    | DeclDeconStmt(ident_quals, t, exp) ->
-        let (mir_ctxt, bb, aggregate_lval) = expr_to_mir mir_ctxt bb exp in
-
-        let idents = List.map (fun (ident, _) -> ident) ident_quals in
-
-        let aggregate_types = begin match t with
-          | Tuple(ts) -> ts
-          | Array(_, _) -> failwith "Unimplemented: DeclDeconStmt of static arr"
-          | _ -> failwith "Typecheck failure deconstructing aggr in MIR"
-        end in
-
-        let (mir_ctxt, elem_lvals) =
-          List.fold_left_map (
-            fun mir_ctxt elem_t ->
-              let (mir_ctxt, varname) = get_varname mir_ctxt in
-              let elem_lval = {lname=varname; t=elem_t; kind=Tmp} in
-
-              (mir_ctxt, elem_lval)
-          ) mir_ctxt aggregate_types
-        in
-
-        let extract_instrs =
-          List.mapi (
-            fun i lval ->
-              let decon_instr = FromAggregate(lval, i, aggregate_lval) in
-
-              decon_instr
-          ) elem_lvals
-        in
-
-        let bb = {bb with instrs = bb.instrs @ extract_instrs} in
-
-        let idents_lvals_ts = combine3 idents elem_lvals aggregate_types in
-
-        let (mir_ctxt, bb) =
-          List.fold_left (
-            fun (mir_ctxt, bb) (lhs_name, rhs_lval, elem_t) ->
-              assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval elem_t
-          ) (mir_ctxt, bb) idents_lvals_ts
-        in
-
-        let mir_ctxt = update_bb mir_ctxt bb in
-
-        (mir_ctxt, bb)
-
-    | ReturnStmt(exp) ->
-        let t = expr_type exp in
+    | RReturnStmt(exp) ->
+        let t = rexpr_type exp in
 
         begin match t with
         | Nil ->
@@ -2065,7 +1870,7 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
             (mir_ctxt, bb)
 
         | _ ->
-            let (mir_ctxt, bb, ret_lval) = expr_to_mir mir_ctxt bb exp in
+            let (mir_ctxt, bb, ret_lval) = rexpr_to_mir mir_ctxt bb exp in
 
             let ret_instr = Ret(ret_lval) in
 
@@ -2074,9 +1879,20 @@ and stmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Ast.stmt) =
 
             (mir_ctxt, bb)
         end
+
+    | RStmts(rstmts) ->
+        let (mir_ctxt, bb) =
+          List.fold_left (
+            fun (mir_ctxt, bb) rstmt ->
+              let (mir_ctxt, bb) = rstmt_to_mir mir_ctxt bb rstmt in
+              (mir_ctxt, bb)
+          ) (mir_ctxt, bb) rstmts
+        in
+
+        (mir_ctxt, bb)
   in
 
-  _stmt_to_mir mir_ctxt bb stmt
+  _rstmt_to_mir mir_ctxt bb stmt
 
 
 (* Perform "clean-up" passes on the basic block, to eg eliminate dead code. *)
@@ -2143,7 +1959,7 @@ let func_args_to_mir (mir_ctxt : mir_ctxt) (bb : bb) =
   (mir_ctxt, next_bb)
 
 
-let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
+let func_to_mir ({f_decl = {f_name; f_params; f_ret_t}; f_stmts} : func_def_t) =
   let mir_ctxt = {
     f_name = f_name;
     f_params = (List.map (fun (param_name, _, t) -> (param_name, t)) f_params);
@@ -2159,28 +1975,32 @@ let func_to_mir {f_decl = {f_name; f_params; f_ret_t}; f_stmts} =
   lvars. *)
   let (mir_ctxt, cur_bb) = func_args_to_mir mir_ctxt bb_entry in
 
+  (* TODO: Really, the RAST should have an equivalent for `func_def_t`, so that
+  we can avoid importing `Ast` at all in this file. *)
+  let f_rstmts = List.map stmt_to_rstmt f_stmts in
+
   (* Core generation of MIR for the function body. *)
   let (mir_ctxt, cur_bb) =
     List.fold_left (
       fun (mir_ctxt, cur_bb) stmt ->
-        let (mir_ctxt, cur_bb) = stmt_to_mir mir_ctxt cur_bb stmt in
+        let (mir_ctxt, cur_bb) = rstmt_to_mir mir_ctxt cur_bb stmt in
         (mir_ctxt, cur_bb)
-    ) (mir_ctxt, cur_bb) f_stmts
+    ) (mir_ctxt, cur_bb) f_rstmts
   in
 
   (* Inject a trailing return stmt if it's missing and the function is void.
   Else, if the trailing return statement is missing and the function is
   non-void, fail. Really, this should have been caught earlier! *)
   let mir_ctxt = begin
-    match (List.rev f_stmts) with
-    | ReturnStmt(_) :: _ ->
+    match (List.rev f_rstmts) with
+    | RReturnStmt(_) :: _ ->
         mir_ctxt
 
     | []
     | _ :: _ ->
         if f_ret_t = Nil then
           let (mir_ctxt, _) =
-            stmt_to_mir mir_ctxt cur_bb (ReturnStmt(ValNil))
+            rstmt_to_mir mir_ctxt cur_bb (RReturnStmt(RValNil))
           in
           mir_ctxt
         else

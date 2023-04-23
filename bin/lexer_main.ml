@@ -578,6 +578,22 @@ let () =
       | None -> {}
       }
 
+      let layer_one = {
+        let layer_two = {
+          let layer_three = {
+            let layer_four = 4;
+
+            layer_four + 5
+          };
+
+          layer_three + 6
+        };
+
+        layer_two + 7
+      };
+
+      ignore printf("layer_one: [%d](22)\n", layer_one);
+
       return 0;
     }
   |} in

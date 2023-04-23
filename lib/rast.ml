@@ -83,6 +83,33 @@ and rstmt =
   | RStmts of rstmt list
 ;;
 
+let rexpr_type exp =
+  begin match exp with
+  | RValNil -> Nil
+  | RValF128(_) -> F128
+  | RValF64(_)  -> F64
+  | RValF32(_)  -> F32
+  | RValBool(_) -> Bool
+  | RValStr(_) -> String
+  | RValInt(typ, _) -> typ
+  | RValVar(typ, _) -> typ
+  | RValFunc(typ, _) -> typ
+  | RValRawArray(typ) -> typ
+  | RValCast(typ, _, _) -> typ
+  | RUnOp(typ, _, _) -> typ
+  | RBinOp(typ, _, _, _) -> typ
+  | RBlockExpr(typ, _, _) -> typ
+  | RWhileExpr(typ, _, _, _) -> typ
+  | RExprInvoke(typ, _, _) -> typ
+  | RArrayExpr(typ, _) -> typ
+  | RIndexExpr(typ, _, _) -> typ
+  | RTupleIndexExpr(typ, _, _) -> typ
+  | RTupleExpr(typ, _) -> typ
+  | RVariantCtorExpr(typ, _, _) -> typ
+  | RMatchExpr(typ, _, _) -> typ
+  end
+;;
+
 let rec expr_to_rexpr expr : rexpr =
   begin match expr with
   | ValName(_, name) ->
