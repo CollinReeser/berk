@@ -123,19 +123,19 @@ let () =
       return val;
     }
 
-    fn ufcs_identity(v: u32): u32 {
+    fn ufcs_identity(v: i32): i32 {
       return v;
     }
 
-    fn ufcs_add(v1: u32, v2: u32): u32 {
+    fn ufcs_add(v1: i32, v2: i32): i32 {
       return v1 + v2;
     }
 
-    fn ufcs_mult(v1: u32, v2: u32): u32 {
+    fn ufcs_mult(v1: i32, v2: i32): i32 {
       return v1 * v2;
     }
 
-    fn ufcs_sub_add(v1: u32, v2: u32, v3: u32): u32 {
+    fn ufcs_sub_add(v1: i32, v2: i32, v3: i32): i32 {
       let v4 = v2 - v3;
       return v1 + v4;
     }
@@ -595,6 +595,18 @@ let () =
       };
 
       ignore printf("layer_one: [%d](22)\n", layer_one);
+
+      // UFCS can be used in some more complex situations.
+      let yes_or_no = No(true);
+      let fancy_ufcs =
+        match yes_or_no {
+        | Yes(true) -> 5
+        | Yes(false) -> 10
+        | No(true) -> 15
+        | No(false) -> 20
+        }
+        .ufcs_add(10);
+      ignore printf("fancy_ufcs: [%d](25)\n", fancy_ufcs);
 
       return 0;
     }
