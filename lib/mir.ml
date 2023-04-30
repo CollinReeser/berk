@@ -1361,16 +1361,70 @@ and rpattern_to_mir
 
         let (mir_ctxt, int_patt_lname) = get_varname mir_ctxt in
         let is_match_lval = {t=Bool; kind=Tmp; lname=int_patt_lname} in
-        let instr = BinOp(is_match_lval, Eq, i_lval, matched_lval) in
+        let instr = BinOp(is_match_lval, Eq, matched_lval, i_lval) in
 
         let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [instr]} in
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | RPIntFrom(_, _)
-    | RPIntUntil(_, _)
-    | RPIntRange(_, _, _) ->
-        failwith "Unimplemented: Complex int match semantics"
+    | RPIntRange(t, i, j) ->
+        let (mir_ctxt, bb_patt, i_lval) =
+          rexpr_to_mir mir_ctxt bb_patt (RValInt(t, i))
+        in
+        let (mir_ctxt, bb_patt, j_lval) =
+          rexpr_to_mir mir_ctxt bb_patt (RValInt(t, j))
+        in
+
+        (* Is the matched value >= the lower bound? *)
+        let (mir_ctxt, ge_i_lname) = get_varname mir_ctxt in
+        let ge_i_lval = {t=Bool; kind=Tmp; lname=ge_i_lname} in
+        let ge_i_instr = BinOp(ge_i_lval, Ge, matched_lval, i_lval) in
+
+        (* Is the matched value < the upper bound? *)
+        let (mir_ctxt, lt_j_lname) = get_varname mir_ctxt in
+        let lt_j_lval = {t=Bool; kind=Tmp; lname=lt_j_lname} in
+        let lt_j_instr = BinOp(lt_j_lval, Lt, matched_lval, j_lval) in
+
+        (* Did the matched value satisfy both bounds? *)
+        let (mir_ctxt, ge_and_lt_lname) = get_varname mir_ctxt in
+        let ge_and_lt_lval = {t=Bool; kind=Tmp; lname=ge_and_lt_lname} in
+        let ge_and_lt_instr = BinOp(ge_and_lt_lval, Eq, ge_i_lval, lt_j_lval) in
+
+        let bb_patt = {
+          bb_patt with instrs=bb_patt.instrs @ [
+            ge_i_instr; lt_j_instr; ge_and_lt_instr
+          ]
+        } in
+
+        (mir_ctxt, bb_patt, ge_and_lt_lval)
+
+    | RPIntFrom(t, i) ->
+        let (mir_ctxt, bb_patt, i_lval) =
+          rexpr_to_mir mir_ctxt bb_patt (RValInt(t, i))
+        in
+
+        (* Is the matched value >= the lower bound? *)
+        let (mir_ctxt, ge_i_lname) = get_varname mir_ctxt in
+        let ge_i_lval = {t=Bool; kind=Tmp; lname=ge_i_lname} in
+        let ge_i_instr = BinOp(ge_i_lval, Ge, matched_lval, i_lval) in
+
+        let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [ge_i_instr]} in
+
+        (mir_ctxt, bb_patt, ge_i_lval)
+
+    | RPIntUntil(t, j) ->
+        let (mir_ctxt, bb_patt, j_lval) =
+          rexpr_to_mir mir_ctxt bb_patt (RValInt(t, j))
+        in
+
+        (* Is the matched value < the upper bound? *)
+        let (mir_ctxt, lt_j_lname) = get_varname mir_ctxt in
+        let lt_j_lval = {t=Bool; kind=Tmp; lname=lt_j_lname} in
+        let lt_j_instr = BinOp(lt_j_lval, Lt, matched_lval, j_lval) in
+
+        let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [lt_j_instr ]} in
+
+        (mir_ctxt, bb_patt, lt_j_lval)
 
     | RPTuple(t, patts) ->
         (* Extract the types out so we can deconstruct the tuple. *)

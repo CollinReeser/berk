@@ -664,6 +664,40 @@ let () =
         }
       }
 
+      // Can match various integer ranges.
+      let my_int_match_ranges = 17;
+      match my_int_match_ranges {
+      | 2 .. 5 as a -> {
+          ignore printf("Incorrect match: 2..5: [%d]\n", a);
+        }
+      | 12 .. 16 as b -> {
+          ignore printf("Incorrect match: 12..16: [%d]\n", b);
+        }
+      | 16 .. 20 as c -> {
+          ignore printf("Correct match! 16..20: [%d]\n", c);
+        }
+      | q -> {
+          ignore printf("Incorrect match: [%d]\n", q);
+        }
+      }
+
+      // Can match various integer ranges.
+      let my_int_match_low_high = 17;
+      match my_int_match_low_high {
+      | .. 5 as a -> {
+          ignore printf("Incorrect match: ..5: [%d]\n", a);
+        }
+      | 8 .. 12 as b -> {
+          ignore printf("Incorrect match! 8..12: [%d]\n", b);
+        }
+      | 15 .. as c -> {
+          ignore printf("Correct match: 15..: [%d]\n", c);
+        }
+      //| q -> {
+      //    ignore printf("Incorrect match: [%d]\n", q);
+      //  }
+      }
+
       return 0;
     }
   |} in

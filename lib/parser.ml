@@ -1475,6 +1475,18 @@ and parse_match_expr ?(ind="") tokens : (token list * expr) =
         let pattern = PBool(false) in
         _parse_pattern_as rest pattern
 
+    | Integer(_, i) :: DotDot(_) :: Integer(_, j) :: rest ->
+        let pattern = PInt(Undecided, IRangeFromUntil(i, j)) in
+        _parse_pattern_as rest pattern
+
+    | Integer(_, i) :: DotDot(_) :: rest ->
+        let pattern = PInt(Undecided, IRangeAllFrom(i)) in
+        _parse_pattern_as rest pattern
+
+    | DotDot(_) :: Integer(_, i) :: rest ->
+        let pattern = PInt(Undecided, IRangeAllUntil(i)) in
+        _parse_pattern_as rest pattern
+
     | Integer(_, i) :: rest ->
         let pattern = PInt(Undecided, IRangeLiteral(i)) in
         _parse_pattern_as rest pattern

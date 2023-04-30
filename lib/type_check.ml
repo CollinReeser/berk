@@ -1632,7 +1632,7 @@ and int_range_dominates lhs_range rhs_range : (bool * int_range list) =
         end
 
     | (IRangeFromUntil(i, j), IRangeLiteral(k)) ->
-        begin if j >= i then
+        begin if i >= j then
           failwith (
             Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
           )
@@ -1643,7 +1643,7 @@ and int_range_dominates lhs_range rhs_range : (bool * int_range list) =
         end
 
     | (IRangeFromUntil(i, j), IRangeAll) ->
-        begin if j >= i then
+        begin if i >= j then
           failwith (
             Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
           )
@@ -1652,7 +1652,7 @@ and int_range_dominates lhs_range rhs_range : (bool * int_range list) =
         end
 
     | (IRangeFromUntil(i, j), IRangeAllFrom(k)) ->
-        begin if j >= i then
+        begin if i >= j then
           failwith (
             Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
           )
@@ -1666,7 +1666,7 @@ and int_range_dominates lhs_range rhs_range : (bool * int_range list) =
         end
 
     | (IRangeFromUntil(i, j), IRangeAllUntil(k)) ->
-        begin if j >= i then
+        begin if i >= j then
           failwith (
             Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
           )
@@ -1680,7 +1680,7 @@ and int_range_dominates lhs_range rhs_range : (bool * int_range list) =
         end
 
     | (IRangeFromUntil(i, j), IRangeFromUntil(k, m)) ->
-        begin if j >= i then
+        begin if i >= j then
           failwith (
             Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
           )
