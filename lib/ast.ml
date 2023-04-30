@@ -79,6 +79,18 @@ and expr =
   pairs of patterns and their resultant expressions *)
   | MatchExpr of berk_t * expr * (pattern * expr) list
 
+and int_range =
+  (* A specific integer. *)
+  | IRangeLiteral of int
+  (* From inclusive .. Until exclusive *)
+  | IRangeFromUntil of int * int
+  (* From inclusive .. *)
+  | IRangeAllFrom of int
+  (* .. Until exclusive *)
+  | IRangeAllUntil of int
+  (* Represents the range of all integers. *)
+  | IRangeAll
+
 and pattern =
   (* ie: _ -> ... *)
   | Wild of berk_t
@@ -101,11 +113,10 @@ and pattern =
   | DeconArray of berk_t * pattern list
   (* ie: (North | West) -> ... *)
   | Or of berk_t * pattern list
-  (* ie: 5 -> ... *)
-  | IntLiteral of berk_t * int
   (* ie: 1.23 -> ... *)
   | FloatLiteral of berk_t * string
   *)
+  | PInt of berk_t * int_range
   (* ie: <pattern> as x -> ... *)
   | PatternAs of berk_t * pattern * ident_t
 
@@ -839,6 +850,16 @@ and fmt_pattern ?(print_typ=false) ?(init_ind="") pattern =
         sprintf "%s%s" var_name (_maybe_fmt_type t)
     | PBool(b) ->
         sprintf "%b%s" b (_maybe_fmt_type Bool)
+    | PInt(_, IRangeLiteral(i)) ->
+        sprintf "(%d)" i
+    | PInt(_, IRangeAllFrom(i)) ->
+        sprintf "(%d..)" i
+    | PInt(_, IRangeAllUntil(i)) ->
+        sprintf "(..%d)" i
+    | PInt(_, IRangeFromUntil(i, j)) ->
+        sprintf "(%d..%d)" i j
+    | PInt(_, IRangeAll) ->
+        sprintf "(..)"
     | PTuple(t, patterns) ->
         let patterns_fmt = List.map _fmt_pattern patterns in
         sprintf "(%s)%s" (fmt_join_strs ", " patterns_fmt) (_maybe_fmt_type t)
@@ -1723,7 +1744,8 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     begin match patt with
     | PNil
     | Wild(_)
-    | PBool(_) ->
+    | PBool(_)
+    | PInt(_) ->
         (unique_varnames, patt)
 
     | VarBind(t, varname) ->

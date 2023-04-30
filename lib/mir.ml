@@ -963,6 +963,11 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
           generic byte array. This dance will be optimized away by the code
           generator. *)
 
+          (* FIXME: This is wrong, because it messes up alignment.
+          Instead, the original alloca needs to be in terms of the type-erased
+          datastructure, and then bitcasts are used to refer to type-specific
+          pointers to the "field data". *)
+
           let (mir_ctxt, tmp_alloca_varname) = get_varname mir_ctxt in
           let tmp_alloca_lval =
             {t=Ptr(variant_ctor_t); kind=Tmp; lname = tmp_alloca_varname}
@@ -1346,6 +1351,24 @@ and rpattern_to_mir
         let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [instr]} in
 
         (mir_ctxt, bb_patt, is_match_lval)
+
+    | RPIntLit(t, i) ->
+        let (mir_ctxt, bb_patt, i_lval) =
+          rexpr_to_mir mir_ctxt bb_patt (RValInt(t, i))
+        in
+
+        let (mir_ctxt, int_patt_lname) = get_varname mir_ctxt in
+        let is_match_lval = {t=Bool; kind=Tmp; lname=int_patt_lname} in
+        let instr = BinOp(is_match_lval, Eq, i_lval, matched_lval) in
+
+        let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [instr]} in
+
+        (mir_ctxt, bb_patt, is_match_lval)
+
+    | RPIntFrom(_, _)
+    | RPIntUntil(_, _)
+    | RPIntRange(_, _, _) ->
+        failwith "Unimplemented: Complex int match semantics"
 
     | RPTuple(t, patts) ->
         (* Extract the types out so we can deconstruct the tuple. *)

@@ -54,6 +54,29 @@ let map2i (f : int -> 'a -> 'b -> 'c) (lhs : 'a list) (rhs : 'b list) =
   List.rev elems_rev
 ;;
 
+(* Split a list into a 2-tuple: (elems-before-i, elems-after-i)
+where the i'th element is skipped. *)
+let partition_i i ls : ('a list * 'b list) =
+  let rec _partition_i idx ls_rest ls_lhs_rev ls_rhs_rev =
+    begin match ls_rest with
+    | [] -> (ls_lhs_rev, ls_rhs_rev)
+
+    | cur :: ls_rest ->
+        begin if idx < i then
+          _partition_i (idx + 1) ls_rest (cur :: ls_lhs_rev) ls_rhs_rev
+        else if idx > i then
+          _partition_i (idx + 1) ls_rest ls_lhs_rev (cur :: ls_rhs_rev)
+        else
+          _partition_i (idx + 1) ls_rest ls_lhs_rev ls_rhs_rev
+        end
+    end
+  in
+  let (ls_lhs_rev, ls_rhs_rev) = _partition_i 0 ls [] [] in
+  let ls_lhs = List.rev ls_lhs_rev in
+  let ls_rhs = List.rev ls_rhs_rev in
+  (ls_lhs, ls_rhs)
+;;
+
 let list_to_2_tuples lst =
   let rec every_pair so_far elem rest =
     begin match rest with

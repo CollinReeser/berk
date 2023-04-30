@@ -62,6 +62,10 @@ and rpattern =
   | RVarBind of berk_t * string
   | RPNil
   | RPBool of bool
+  | RPIntLit of berk_t * int
+  | RPIntFrom of berk_t * int
+  | RPIntUntil of berk_t * int
+  | RPIntRange of berk_t * int * int
   | RPTuple of berk_t * rpattern list
   | RCtor of berk_t * string * rpattern list
   | RPatternAs of berk_t * rpattern * string
@@ -251,6 +255,16 @@ and pattern_to_rpattern patt : rpattern =
   | VarBind(t, name) -> RVarBind(t, name)
 
   | PBool(b) -> RPBool(b)
+
+  | PInt(t, IRangeLiteral(i)) -> RPIntLit(t, i)
+
+  | PInt(t, IRangeAllFrom(i)) -> RPIntFrom(t, i)
+
+  | PInt(t, IRangeAllUntil(i)) -> RPIntUntil(t, i)
+
+  | PInt(t, IRangeFromUntil(i, j)) -> RPIntRange(t, i, j)
+
+  | PInt(_, IRangeAll) -> failwith "IRangeAll should not survive typecheck"
 
   | PTuple(t, patts) ->
       let rpatts = List.map pattern_to_rpattern patts in
@@ -539,6 +553,14 @@ and fmt_rpattern ?(print_typ=false) ?(init_ind="") rpatt =
         sprintf "%s%s" var_name (_maybe_fmt_type t)
     | RPBool(b) ->
         sprintf "%b%s" b (_maybe_fmt_type Bool)
+    | RPIntLit(_, i) ->
+        sprintf "(%d)" i
+    | RPIntFrom(_, i) ->
+        sprintf "(%d..)" i
+    | RPIntUntil(_, i) ->
+        sprintf "(..%d)" i
+    | RPIntRange(_, i, j) ->
+        sprintf "(%d..%d)" i j
     | RPTuple(t, patterns) ->
         let patterns_fmt = List.map _fmt_rpattern patterns in
         sprintf "(%s)%s" (fmt_join_strs ", " patterns_fmt) (_maybe_fmt_type t)

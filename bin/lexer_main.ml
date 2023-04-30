@@ -608,6 +608,64 @@ let () =
         .ufcs_add(10);
       ignore printf("fancy_ufcs: [%d](25)\n", fancy_ufcs);
 
+      // Can match against integer literals.
+      let my_int_match = 5;
+      match my_int_match {
+      | 4 -> {
+          ignore printf("Incorrect match <4>. [%d]\n", my_int_match);
+        }
+      | 5 -> {
+          ignore printf("Correct match! [%d]\n", my_int_match);
+        }
+      | 8 -> {
+          ignore printf("Incorrect match <8>. [%d]\n", my_int_match);
+        }
+      | _ -> {
+          ignore printf("Incorrect match <_>. [%d]\n", my_int_match);
+        }
+      }
+
+      // Can match against integers inside other constructs.
+      let my_int_tuple_match = (4, 6);
+      match my_int_tuple_match {
+      | (3, 7) -> {
+          ignore printf("Incorrect match <3, 7>.\n");
+        }
+      | (4, 8) -> {
+          ignore printf("Incorrect match <4, 8>.\n");
+        }
+      | (2, 6) -> {
+          ignore printf("Incorrect match <2, 6>.\n");
+        }
+      | (4 as a, 6 as b) -> {
+          ignore printf("Correct match!! <4, 6>. [%d] [%d]\n", a, b);
+        }
+      | (a, b) -> {
+          ignore printf("Incorrect match <_, _>. [%d] [%d]\n", a, b);
+        }
+      }
+
+      // FIXME: Alignment issues during codegen when creating variant
+      // constructors with multi-byte fields means this miscompiles!
+      let my_int_opt_match = Some(17);
+      match my_int_opt_match {
+      | Some(16) -> {
+          ignore printf("Incorrect match <16>.\n");
+        }
+      | Some(17 as a) -> {
+          ignore printf("Correct match!! <17>. [%d]\n", a);
+        }
+      | Some(18) -> {
+          ignore printf("Incorrect match <16>.\n");
+        }
+      | Some(_ as a) -> {
+          ignore printf("Incorrect match <_> (17). [%d]\n", a);
+        }
+      | None -> {
+          ignore printf("Incorrect match <None> (17).\n");
+        }
+      }
+
       return 0;
     }
   |} in

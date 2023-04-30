@@ -5,7 +5,7 @@ open Berk.Typing
 let pattern_tst = Alcotest.testable pprint_pattern (=)
 
 let test_pattern_dominates expect lhs rhs () =
-  Alcotest.(check' bool)
+  Alcotest.(check' (pair bool pass))
     ~msg:"pattern_dominates"
     ~expected:expect
     ~actual:(pattern_dominates lhs rhs)
@@ -59,47 +59,47 @@ let gen_tuple_patt lhs rhs =
 
 let pattern_domination = let open Alcotest in [
   (test_case "bool_sanity" `Quick (
-    test_pattern_dominates true (PBool(true)) (PBool(true))));
+    test_pattern_dominates (true, []) (PBool(true)) (PBool(true))));
   (test_case "bool_sanity" `Quick (
-    test_pattern_dominates true (PBool(false)) (PBool(false))));
+    test_pattern_dominates (true, []) (PBool(false)) (PBool(false))));
   (test_case "bool_rev" `Quick (
-    test_pattern_dominates false (PBool(true)) (PBool(false))));
+    test_pattern_dominates (false, []) (PBool(true)) (PBool(false))));
   (test_case "bool_rev" `Quick (
-    test_pattern_dominates false (PBool(false)) (PBool(true))));
+    test_pattern_dominates (false, []) (PBool(false)) (PBool(true))));
   (test_case "bool_wild" `Quick (
-    test_pattern_dominates true (Wild(Undecided)) (PBool(false))));
+    test_pattern_dominates (true, []) (Wild(Undecided)) (PBool(false))));
   (test_case "bool_var" `Quick (
-    test_pattern_dominates true (VarBind(Undecided, "x")) (PBool(false))));
+    test_pattern_dominates (true, []) (VarBind(Undecided, "x")) (PBool(false))));
   (test_case "ctor_wild" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       Wild(Undecided)
     ) (
       Ctor(variant_option_bool, "Some", [Wild(Undecided)])
     )
   ));
   (test_case "ctor_var" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       VarBind(Undecided, "x")
     ) (
       Ctor(variant_option_bool, "Some", [Wild(Undecided)])
     )
   ));
   (test_case "ctor_full_match" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       Ctor(variant_option_bool, "Some", [PBool(true)])
     ) (
       Ctor(variant_option_bool, "Some", [PBool(true)])
     )
   ));
   (test_case "ctor_full_non_match" `Quick (
-    test_pattern_dominates false (
+    test_pattern_dominates (false, []) (
       Ctor(variant_option_bool, "Some", [PBool(true)])
     ) (
       Ctor(variant_option_bool, "Some", [PBool(false)])
     )
   ));
   (test_case "nested_variant_superset" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       Wild(variant_left_right)
     ) (
       Ctor(
@@ -110,7 +110,7 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "nested_variant_superset" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       Ctor(variant_left_right, "Left", [Wild(variant_option_bool)])
     ) (
       Ctor(
@@ -121,7 +121,7 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "nested_variant_superset" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       Ctor(
         variant_left_right, "Left", [
           Ctor(variant_option_bool, "Some", [Wild(Bool)])
@@ -136,7 +136,7 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "nested_variant_superset" `Quick (
-    test_pattern_dominates false (
+    test_pattern_dominates (false, []) (
       Ctor(variant_left_right, "Right", [Wild(variant_option_bool)])
     ) (
       Ctor(
@@ -147,21 +147,21 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "tuple_sanity" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       Wild(tuple_t)
     ) (
       PTuple(tuple_t, gen_tuple_patt None (Left(None)))
     )
   ));
   (test_case "tuple_sanity_match" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       PTuple(tuple_t, gen_tuple_patt None (Left(None)))
     ) (
       PTuple(tuple_t, gen_tuple_patt None (Left(None)))
     )
   ));
   (test_case "tuple_partial" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       PTuple(tuple_t, [
         Ctor(variant_option_bool, "None", []);
         Wild(variant_left_right)
@@ -171,7 +171,7 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "tuple_partial" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       PTuple(tuple_t, [
         Wild(variant_option_bool);
         Ctor(variant_left_right, "Left", [Wild(variant_option_bool)])
@@ -181,7 +181,7 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "tuple_nested_match_failure" `Quick (
-    test_pattern_dominates false (
+    test_pattern_dominates (false, []) (
       PTuple(tuple_t, [
         Wild(variant_option_bool);
         Ctor(
@@ -195,7 +195,7 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "tuple_nested_match_failure" `Quick (
-    test_pattern_dominates false (
+    test_pattern_dominates (false, []) (
       PTuple(tuple_t, [
         Wild(variant_option_bool);
         Ctor(
@@ -209,7 +209,7 @@ let pattern_domination = let open Alcotest in [
     )
   ));
   (test_case "tuple_nested_match_sanity" `Quick (
-    test_pattern_dominates true (
+    test_pattern_dominates (true, []) (
       PTuple(tuple_t, [
         Wild(variant_option_bool);
         Ctor(

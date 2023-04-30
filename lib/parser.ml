@@ -1475,6 +1475,10 @@ and parse_match_expr ?(ind="") tokens : (token list * expr) =
         let pattern = PBool(false) in
         _parse_pattern_as rest pattern
 
+    | Integer(_, i) :: rest ->
+        let pattern = PInt(Undecided, IRangeLiteral(i)) in
+        _parse_pattern_as rest pattern
+
     (* Tuple pattern. *)
     | LParen(_) :: rest ->
         let (rest, first_pattern) = _parse_pattern rest in

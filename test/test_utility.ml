@@ -36,6 +36,12 @@ let test_map2i expected f lhs rhs () =
     ~expected:expected
     ~actual:(map2i f lhs rhs)
 
+let test_partition_i expected i ls () =
+  Alcotest.(check' (pair (list int) (list int)))
+    ~msg:"partition_i"
+    ~expected:expected
+    ~actual:(partition_i i ls)
+
 let () =
   let open Alcotest in
   run "Utility" [
@@ -125,6 +131,38 @@ let () =
         test_map2i
           ["0_a_x"; "1_b_y"; "2_c_z"]
           f ["a"; "b"; "c"] ["x"; "y"; "z"]
+      );
+    ];
+    "partition_i", [
+      test_case "partition_i" `Quick (
+        test_partition_i
+          ([], [])
+          0 []
+      );
+      test_case "partition_i" `Quick (
+        test_partition_i
+          ([], [])
+          3 []
+      );
+      test_case "partition_i" `Quick (
+        test_partition_i
+          ([1], [3])
+          1 [1; 2; 3]
+      );
+      test_case "partition_i" `Quick (
+        test_partition_i
+          ([], [2; 3])
+          0 [1; 2; 3]
+      );
+      test_case "partition_i" `Quick (
+        test_partition_i
+          ([1; 2], [])
+          2 [1; 2; 3]
+      );
+      test_case "partition_i" `Quick (
+        test_partition_i
+          ([1; 2; 3], [])
+          3 [1; 2; 3]
       );
     ];
   ]

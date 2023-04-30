@@ -253,6 +253,7 @@ and is_concrete_patt ?(verbose=false) patt =
   begin match patt with
   | PNil -> true
   | PBool(_) -> true
+  | PInt(_) -> true
   | Wild(t) -> (_is_concrete_type t)
   | VarBind(t, _) -> (_is_concrete_type t)
   | PTuple(t, _) -> (_is_concrete_type t)
@@ -1442,6 +1443,33 @@ and type_check_pattern
       | _ -> failwith "Match expression type does not match bool in pattern"
       end
 
+  | PInt(_, range) ->
+      begin match matched_t with
+      | I8 | I16 | I32 | I64 ->
+          (tc_ctxt, PInt(matched_t, range))
+
+      | U8 | U16 | U32 | U64 ->
+          begin match range with
+          | IRangeAll ->
+              (tc_ctxt, PInt(matched_t, range))
+
+          | IRangeAllFrom(i)
+          | IRangeAllUntil(i)
+          | IRangeFromUntil(i, _)
+          | IRangeLiteral(i) ->
+              if i >= 0 then
+                (tc_ctxt, PInt(matched_t, range))
+              else
+                failwith (
+                  Printf.sprintf
+                    "Cannot match negative int pattern against type [%s]"
+                    (fmt_type matched_t)
+                )
+          end
+
+      | _ -> failwith "Match expression type does not match int in pattern"
+      end
+
   | PTuple(_, patts) ->
       begin match matched_t with
       | Tuple(ts) ->
@@ -1496,35 +1524,312 @@ and type_check_pattern
 
   (tc_ctxt, patt)
 
-(* Does the LHS pattern dominate the RHS pattern? *)
-and pattern_dominates lhs_patt rhs_patt =
+and int_range_dominates lhs_range rhs_range : (bool * int_range list) =
+  let (dominates, new_ranges) =
+    begin match (lhs_range, rhs_range) with
+    | (IRangeLiteral(i), IRangeLiteral(j)) ->
+        if i = j then (true, []) else (false, [])
+
+    | (IRangeLiteral(i), IRangeAll) ->
+        (true, [IRangeAllUntil(i); IRangeAllFrom(i + 1)])
+
+    | (IRangeLiteral(i), IRangeAllFrom(j)) ->
+        begin if i = j then
+          (true, [IRangeAllFrom(i + 1)])
+        else if i > j then
+          (true, [IRangeFromUntil(j, i); IRangeAllFrom(i + 1)])
+        else
+          (false, [])
+        end
+
+    | (IRangeLiteral(i), IRangeAllUntil(j)) ->
+        begin if i = j then
+          (* "until" is exclusive *)
+          (false, [])
+        else if i = j - 1 then
+          (true, [IRangeAllUntil(i)])
+        else if i < j - 1 then
+          (true, [IRangeAllUntil(i); IRangeFromUntil(i + 1, j)])
+        else
+          (false, [])
+        end
+
+    | (IRangeLiteral(i), IRangeFromUntil(j, k)) ->
+        begin if j >= k then
+          failwith (
+            Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" j k
+          )
+        (* "until" is exclusive *)
+        else if i = k then
+          (false, [])
+        else if i = k - 1 then
+          (true, [IRangeFromUntil(j, i)])
+        else if i = j then
+          (true, [IRangeFromUntil(i + 1, k)])
+        else if i > j && i < k then
+          (true, [IRangeFromUntil(j, i); IRangeFromUntil(i + 1, k)])
+        else
+          let _ = assert (i < j || i >= k) in
+          (false, [])
+        end
+
+    | (IRangeAllFrom(i), IRangeLiteral(j)) ->
+        if i <= j then (true, []) else (false, [])
+
+    | (IRangeAllFrom(i), IRangeAll) ->
+        (true, [IRangeAllUntil(i)])
+
+    | (IRangeAllFrom(i), IRangeAllFrom(j)) ->
+        begin if i <= j then
+          (true, [])
+        else
+          (true, [IRangeFromUntil(j, i)])
+        end
+
+    | (IRangeAllFrom(i), IRangeAllUntil(j)) ->
+        begin if i >= j then
+          (false, [])
+        else
+          (true, [IRangeAllUntil(i - 1)])
+        end
+
+    | (IRangeAllFrom(i), IRangeFromUntil(j, k)) ->
+        begin if i <= j then
+          (true, [])
+        else if i >= k then
+          (false, [])
+        else
+          (true, [IRangeFromUntil(j, i - 1)])
+        end
+
+    | (IRangeAllUntil(i), IRangeLiteral(j)) ->
+        if i > j then (true, []) else (false, [])
+
+    | (IRangeAllUntil(i), IRangeAll) ->
+        (true, [IRangeAllFrom(i)])
+
+    | (IRangeAllUntil(i), IRangeAllFrom(j)) ->
+        begin if i <= j then
+          (false, [])
+        else
+          (true, [IRangeAllFrom(i)])
+        end
+
+    | (IRangeAllUntil(i), IRangeAllUntil(j)) ->
+        begin if i >= j then
+          (true, [])
+        else
+          (true, [IRangeFromUntil(i, j)])
+        end
+
+    | (IRangeAllUntil(i), IRangeFromUntil(j, k)) ->
+        begin if i >= k then
+          (true, [])
+        else if i <= j then
+          (false, [])
+        else
+          (true, [IRangeFromUntil(i, k)])
+        end
+
+    | (IRangeFromUntil(i, j), IRangeLiteral(k)) ->
+        begin if j >= i then
+          failwith (
+            Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
+          )
+        else if k >= i && k < j then
+          (true, [])
+        else
+          (false, [])
+        end
+
+    | (IRangeFromUntil(i, j), IRangeAll) ->
+        begin if j >= i then
+          failwith (
+            Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
+          )
+        else
+          (true, [IRangeAllUntil(i); IRangeAllFrom(j)])
+        end
+
+    | (IRangeFromUntil(i, j), IRangeAllFrom(k)) ->
+        begin if j >= i then
+          failwith (
+            Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
+          )
+        else if j <= k then
+          (false, [])
+        else if i <= k then
+          (true, [IRangeAllFrom(j)])
+        else
+          let _ = assert (i > k && j > k) in
+          (true, [IRangeFromUntil(k, i); IRangeAllFrom(j)])
+        end
+
+    | (IRangeFromUntil(i, j), IRangeAllUntil(k)) ->
+        begin if j >= i then
+          failwith (
+            Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
+          )
+        else if i >= k then
+          (false, [])
+        else if j >= k then
+          (true, [IRangeAllUntil(i)])
+        else
+          let _ = assert (i < k && j < k) in
+          (true, [IRangeAllUntil(i); IRangeFromUntil(j, k)])
+        end
+
+    | (IRangeFromUntil(i, j), IRangeFromUntil(k, m)) ->
+        begin if j >= i then
+          failwith (
+            Printf.sprintf "Cannot have IRangeFromUntil(%d, %d)" i j
+          )
+        else if i >= m || j <= k then
+          (false, [])
+        else if i <= k && j >= m then
+          (true, [])
+        else if i <= k && j < m then
+          (true, [IRangeFromUntil(j, m)])
+        else if i > k && j >= m then
+          (true, [IRangeFromUntil(k, i)])
+        else
+          let _ = assert (i > k && j < m) in
+          (true, [IRangeFromUntil(k, i); IRangeFromUntil(j, m)])
+        end
+
+    | (IRangeAll, _) -> (true, [])
+    end
+  in
+
+  (* The above process may generate new ranges that are not in canonical form.
+  ie, a "range" from [1, 2) should just be the literal [1]. *)
+  let rec _filter_new_ranges new_ranges_rest new_ranges_filtered_rev =
+    begin match new_ranges_rest with
+    | [] -> new_ranges_filtered_rev
+
+    | (
+        (
+          IRangeLiteral(_) | IRangeAllFrom(_) | IRangeAllUntil(_) | IRangeAll
+        ) as valid_range
+      ) :: rest ->
+        _filter_new_ranges rest (valid_range :: new_ranges_filtered_rev)
+
+    | (IRangeFromUntil(i, j) as valid_range) :: rest ->
+        if i = j then
+          failwith (
+            Printf.sprintf
+              "(Probably shouldn't fail): i = j in IRangeFromUntil(%d, %d)"
+              i j
+          )
+        else if i = j - 1 then
+          _filter_new_ranges rest (IRangeLiteral(i) :: new_ranges_filtered_rev)
+        else
+          _filter_new_ranges rest (valid_range :: new_ranges_filtered_rev)
+    end
+  in
+
+  let new_ranges_filtered_rev = _filter_new_ranges new_ranges [] in
+  let new_ranges_filtered = List.rev new_ranges_filtered_rev in
+
+  (dominates, new_ranges_filtered)
+
+
+(* Does the LHS pattern dominate the RHS pattern?
+
+Returns a pair: (bool, pattern list)
+
+The boolean indicates whether the LHS pattern should be considered to dominate
+the RHS pattern. The pattern list is some possibly-empty list of _new_ patterns
+generated because the LHS pattern "split" the RHS pattern into sub-patterns. *)
+and pattern_dominates lhs_patt rhs_patt : (bool * pattern list) =
   begin match (lhs_patt, rhs_patt) with
-  | ((Wild(_) | VarBind(_, _)), _) -> true
+  | ((Wild(_) | VarBind(_, _)), _) -> (true, [])
 
   | (_, (Wild(_) | VarBind(_, _))) ->
       Printf.printf "No pattern dominates wildcards other than wildcards.\n" ;
-      false
+      (false, [])
 
-  | (PNil, PNil) -> true
+  | (PNil, PNil) -> (true, [])
 
   | (PBool(lhs_b), PBool(rhs_b)) ->
-      if lhs_b = rhs_b then
-        true
-      else
-        false
+      if lhs_b = rhs_b then (true, []) else (false, [])
 
-  | (PTuple(_, lhs_patts), PTuple(_, rhs_patts)) ->
-      List.fold_left (&&) true (
-        List.map2 pattern_dominates lhs_patts rhs_patts
-      )
+  | (PInt(t, lhs_range), PInt(_, rhs_range)) ->
+      let (dominates, new_ranges) = int_range_dominates lhs_range rhs_range in
+      let new_patts = List.map (fun range -> PInt(t, range)) new_ranges in
+      (dominates, new_patts)
 
-  | (Ctor(_, lhs_ctor_name, lhs_patts), Ctor(_, rhs_ctor_name, rhs_patts)) ->
+  | (PTuple(_, lhs_patts), PTuple(_ as rhs_t, rhs_patts)) ->
+      let (each_dominates, each_new_patts) =
+        List.split (
+          map2i (
+            fun i lhs rhs ->
+              (* This call to pattern_dominates may yield non-zero new patterns
+              based off the _sub_-pattern we're currently examining. If so, we
+              need to translate this into new full-size patterns where the
+              currently-examined field pattern is replaced by the new
+              pattern(s). *)
+              let (dominates, new_sub_patts) = pattern_dominates lhs rhs in
+              let new_patts =
+                begin if List.length new_sub_patts = 0 then
+                  []
+                else
+                  let (pre_fields, post_fields) = partition_i i rhs_patts in
+                  List.map (
+                    fun new_sub_patt ->
+                      PTuple(rhs_t, pre_fields @ [new_sub_patt] @ post_fields)
+                  ) new_sub_patts
+                end
+              in
+
+              (dominates, new_patts)
+          ) lhs_patts rhs_patts
+        )
+      in
+      let all_dominates = List.fold_left (&&) true each_dominates in
+      let all_new_patts = List.fold_left (List.append) [] each_new_patts in
+      (all_dominates, all_new_patts)
+
+  | (
+      Ctor(_, lhs_ctor_name, lhs_patts),
+      Ctor(_ as rhs_t, rhs_ctor_name, rhs_patts)
+    ) ->
       if lhs_ctor_name = rhs_ctor_name then
-        let each_dominates = List.map2 pattern_dominates lhs_patts rhs_patts in
+        let (each_dominates, each_new_patts) =
+          List.split(
+            map2i (
+              fun i lhs rhs ->
+              (* This call to pattern_dominates may yield non-zero new patterns
+              based off the _sub_-pattern we're currently examining. If so, we
+              need to translate this into new full-size patterns where the
+              currently-examined field pattern is replaced by the new
+              pattern(s). *)
+              let (dominates, new_sub_patts) = pattern_dominates lhs rhs in
+              let new_patts =
+                begin if List.length new_sub_patts = 0 then
+                  []
+                else
+                  let (pre_fields, post_fields) = partition_i i rhs_patts in
+                  List.map (
+                    fun new_sub_patt ->
+                      Ctor(
+                        rhs_t,
+                        rhs_ctor_name,
+                        pre_fields @ [new_sub_patt] @ post_fields
+                      )
+                  ) new_sub_patts
+                end
+              in
+
+              (dominates, new_patts)
+            ) lhs_patts rhs_patts
+          )
+        in
         let all_dominates = List.fold_left (&&) true each_dominates in
-        all_dominates
+        let all_new_patts = List.fold_left (List.append) [] each_new_patts in
+        (all_dominates, all_new_patts)
       else
-        false
+        (false, [])
 
   | (PatternAs(_, lhs_patt, _), PatternAs(_, rhs_patt, _)) ->
       pattern_dominates lhs_patt rhs_patt
@@ -1534,20 +1839,62 @@ and pattern_dominates lhs_patt rhs_patt =
 
   | (PNil, _)
   | (PBool(_), _)
+  | (
+      PInt(_),
+      (PNil | PBool(_) | PTuple(_, _) | Ctor(_, _, _) | PatternAs(_, _, _))
+    )
   | (PTuple(_, _), _)
   | (Ctor(_, _, _), _) -> failwith "Non-matching pattern types."
 
   end
 
-and filter_dominated lhs_patt rhs_patts =
-  List.filter (fun rhs -> not (pattern_dominates lhs_patt rhs)) rhs_patts
+(* Given a LHS pattern (something found in the source) and a list of RHS
+patterns expected to structurally match the LHS (a subset of all possible
+permutations of patterns the LHS should at least partially match), return
+whether the LHS pattern was useful (dominated at least one RHS pattern), and
+return the filtered list of RHS patterns that the LHS pattern does not dominate.
+*)
+and filter_dominated lhs_patt rhs_patts : (bool * pattern list) =
+  let rec _filter_dominated
+    rhs_patts_rest has_dominated rhs_patts_unfiltered_rev new_patts_so_far
+  =
+    match rhs_patts_rest with
+    | [] ->
+        (has_dominated, rhs_patts_unfiltered_rev, new_patts_so_far)
+
+    | rhs_patt :: rhs_patts_rest ->
+        let (dominates, new_patts) = pattern_dominates lhs_patt rhs_patt in
+        begin if dominates then
+          _filter_dominated
+            rhs_patts_rest
+            (dominates || has_dominated)
+            rhs_patts_unfiltered_rev
+            (new_patts_so_far @ new_patts)
+        else
+          _filter_dominated
+            rhs_patts_rest
+            (dominates || has_dominated)
+            (rhs_patt :: rhs_patts_unfiltered_rev)
+            (new_patts_so_far @ new_patts)
+        end
+  in
+  let (dominates, rhs_patts_unfiltered_rev, new_patts_so_far) =
+    _filter_dominated rhs_patts false [] []
+  in
+  let rhs_patts_unfiltered = List.rev rhs_patts_unfiltered_rev in
+  let all_unfiltered_patts =
+    List.append rhs_patts_unfiltered new_patts_so_far
+  in
+  (dominates, all_unfiltered_patts)
 
 (* Returns a pair. The left list is the list of patterns that are useless
 because the patterns before them are sufficient to match all pattern values, and
 the right list is the list of pattern values not matched by any pattern (lacking
 exhaustion). *)
 and determine_pattern_completeness lhs_patts rhs_patts =
-  let rec _determine_pattern_completeness lhs_patts_useless lhs_patts_rest rhs_patts_rest =
+  let rec _determine_pattern_completeness
+    lhs_patts_useless lhs_patts_rest rhs_patts_rest
+  =
     begin match (lhs_patts_rest, rhs_patts_rest) with
     | ([], []) -> ((List.rev lhs_patts_useless), [])
     | (_, []) -> ((List.rev lhs_patts_useless) @ lhs_patts_rest, [])
@@ -1555,11 +1902,13 @@ and determine_pattern_completeness lhs_patts rhs_patts =
     | (patt::lhs_patts_rest, _) ->
         (* Non-exhaustion of patterns is when there are remaining pattern values
         after exhausting all match pattern arms. *)
-        let filtered_rhs_patts = filter_dominated patt rhs_patts_rest in
+        let (dominated, filtered_rhs_patts) =
+          filter_dominated patt rhs_patts_rest
+        in
         (* Useless patterns are patterns that did not dominate any of the
         remaining pattern values. *)
         let lhs_patts_useless =
-          if (List.length rhs_patts_rest) = (List.length filtered_rhs_patts)
+          if not dominated
           then patt :: lhs_patts_useless
           else lhs_patts_useless
         in
@@ -1582,7 +1931,7 @@ and generate_value_patts t : pattern list =
   | Nil -> [PNil]
 
   | U64 | U32 | U16 | U8
-  | I64 | I32 | I16 | I8 -> failwith "Unimplemented"
+  | I64 | I32 | I16 | I8 -> [PInt(Undecided, IRangeAll)]
 
   | F128 | F64 | F32 -> failwith "Unimplemented"
 
@@ -1647,7 +1996,19 @@ and check_patt_usefulness_exhaustion lhs_patts t =
       Printf.printf "Unmatched pattern value(s):\n%s\n%!" unmatched_fmt ;
       failwith "Match patterns must be exhaustive."
 
-  | (_, _) ->
+  | (useless, unmatched) ->
+      let unmatched_fmt =
+        fmt_join_strs "\n" (
+          List.map (fmt_pattern ~print_typ:false) unmatched
+        )
+      in
+      let useless_fmt =
+        fmt_join_strs "\n" (
+          List.map (fmt_pattern ~print_typ:false) useless
+        )
+      in
+      Printf.printf "Unmatched pattern value(s):\n%s\n%!" unmatched_fmt ;
+      Printf.printf "Useless LHS pattern(s):\n%s\n%!" useless_fmt ;
       failwith (
-        "Unexpectedly both useless LHS pattern and unmatched RHS pattern value"
+        "Match patterns must be exhaustive and not contain useless patterns."
       )
