@@ -910,10 +910,11 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
 
           (* This constructor may have associated data. Assign it now. *)
           let ctor_args_ts = List.map rexpr_type ctor_args in
+
           let (
             mir_ctxt, bb, ({t=variant_ctor_t; _} as ctor_lval), construct_instr
-          ) = begin
-            match ctor_args_ts with
+          ) =
+            begin match ctor_args_ts with
             | [] ->
                 (* This variant constructor has no fields, so the internal
                 representation of the constructor is merely a "tuple" with
@@ -955,7 +956,8 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
                 in
 
                 (mir_ctxt, bb, ctor_lval, construct_instr)
-          end in
+            end
+          in
 
           (* The actual type of the variant aggregate itself needs to erase the
           type of the specific constructor we happen to know we're currently
