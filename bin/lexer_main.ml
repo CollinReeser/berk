@@ -645,8 +645,6 @@ let () =
         }
       }
 
-      // FIXME: Alignment issues during codegen when creating variant
-      // constructors with multi-byte fields means this miscompiles!
       let my_int_opt_match = Some(17);
       match my_int_opt_match {
       | Some(16) -> {

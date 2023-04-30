@@ -40,7 +40,29 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
     | Tuple(types) ->
         let llvm_t_lst = List.map (_berk_t_to_llvm_t) types in
         let llvm_t_arr = Array.of_list llvm_t_lst in
-        let llvm_tuple_t = Llvm.struct_type llvm_ctxt llvm_t_arr in
+
+        (* TODO: Note the use of `packed_struct_type` here. This ensures there
+        is no padding injected into the data layout for the underlying struct
+        for this tuple. This also applies to the member fields of individual
+        variant constructors. This is important particularly for variants so
+        that we can freely bitcast between the "generic" raw bytes and the
+        expected fields of the particular target variant constructor. Without
+        this, we'd need to take alignment into account, which can differ between
+        target architectures, and without packing nor taking alignment into
+        account, we'll end up with miscompilation where pieces of the padding
+        are being accessed as real data.
+
+        But, packing the struct is not a cure-all: this can have performance
+        penalties, as the CPU doesn't like having to deal with misaligned data.
+
+        We should _at least_ only use packed structs for variants, as we don't
+        need it for regular tuples. This implies creating a special kind of
+        "tuple" type just for variants, which is probably cleaner anyway.
+
+        Better, we teach the MIR codegen about alignment, so that we can avoid
+        having to use packed/misaligned data, to avoid potential perf issues. *)
+        let llvm_tuple_t = Llvm.packed_struct_type llvm_ctxt llvm_t_arr in
+
         llvm_tuple_t
 
     | Variant(_, ctors) ->
