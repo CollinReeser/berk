@@ -174,6 +174,22 @@ let initialize_fpm the_fpm =
   (* Dead-code elimination. *)
   Llvm_scalar_opts.add_aggressive_dce the_fpm ;
 
+  (* Repeat this transform. This can transform allocas of aggregates into
+  allocas of individual members, then further transforms into SSA form if
+  possible. This optimization can collapse complex variant construction/matching
+  logic into constants. This can also leave several basic blocks dead with no
+  predecessors, but attempts to remove them seem to be unsuccessful. *)
+  Llvm_scalar_opts.add_scalar_repl_aggregation_ssa the_fpm ;
+
+  (* NOTE: The above can make several basic blocks dead, so it would be nice to
+  be able to eliminate them. The following all don't seem to succeed: *)
+  (*
+  Llvm_scalar_opts.add_aggressive_dce the_fpm ;
+  Llvm_scalar_opts.add_sccp the_fpm ;
+  Llvm_scalar_opts.add_aggressive_dce the_fpm ;
+  Llvm_scalar_opts.add_cfg_simplification the_fpm ;
+  *)
+
   (* Note: We _don't_ apply tail-call elimination. Default tail-call behavior
   seems to produce better code, or approximately equivalent code that is easier
   to read (in simple cases, at least). *)
