@@ -1524,6 +1524,9 @@ and type_check_pattern
 
   (tc_ctxt, patt)
 
+(* Whether the left range dominates any portion of the right range. Also returns
+a possibly-empty list of the "split" ranges left over in the RHS range after
+"cutting out" the LHS range from the RHS range. *)
 and int_range_dominates lhs_range rhs_range : (bool * int_range list) =
   let (dominates, new_ranges) =
     begin match (lhs_range, rhs_range) with
