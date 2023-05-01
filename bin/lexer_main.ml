@@ -24,8 +24,8 @@ let () =
     }
 
     variant BinarySameFields {
-    | North(i8)
-    | South(i8)
+    | North(i32)
+    | South(i32)
     }
 
     variant Binary {
@@ -693,9 +693,32 @@ let () =
       | 15 .. as c -> {
           ignore printf("Correct match: 15..: [%d]\n", c);
         }
-      //| q -> {
-      //    ignore printf("Incorrect match: [%d]\n", q);
-      //  }
+      | q -> {
+          ignore printf("Incorrect match: [%d]\n", q);
+        }
+      }
+
+      let my_explosion_of_options = North(7);
+
+      match my_explosion_of_options {
+      | South(15..20) -> {
+          ignore printf("Incorrect match 15..20\n");
+        }
+      | North(5) -> {
+          ignore printf("Incorrect match: 6\n");
+        }
+      | South(..15) -> {
+          ignore printf("Other bad ranges!\n");
+        }
+      | South(20..) -> {
+          ignore printf("Other bad ranges!\n");
+        }
+      | North(..6) -> {
+          ignore printf("Other bad ranges!\n");
+        }
+      | North(6.. as a) -> {
+          ignore printf("Match! [%d]\n", a);
+        }
       }
 
       return 0;
