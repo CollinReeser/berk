@@ -713,11 +713,11 @@ let () =
       | South(20..) -> {
           ignore printf("Other bad ranges!\n");
         }
-      | North(..6) -> {
-          ignore printf("Other bad ranges!\n");
-        }
       | North(6.. as a) -> {
           ignore printf("Match! [%d]\n", a);
+        }
+      | North(..6) -> {
+          ignore printf("Other bad ranges!\n");
         }
       }
 
