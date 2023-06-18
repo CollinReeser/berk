@@ -535,6 +535,31 @@ let () =
         }
       }
 
+      // Ensure that variable names can be repeated in disparate scopes.
+      let my_disparate_values = (10, 20);
+      match my_disparate_values {
+      | (1, b) -> {
+          ignore printf("b: %d\n", b);
+        }
+      | (2, b) -> {
+          ignore printf("b: %d\n", b);
+        }
+      | (a, 1) -> {
+          ignore printf("a: %d\n", a);
+        }
+      | (a, 2) -> {
+          ignore printf("a: %d\n", a);
+        }
+      | (a, b) -> {
+          ignore printf("a, b: %d, %d\n", a, b);
+        }
+      }
+      match my_disparate_values {
+      | (a, b) -> {
+          ignore printf("a!, b!: %d, %d\n", a, b);
+        }
+      }
+
       match (multi_test_2, multi_test_3) {
       | (MultiThree(_, b1, One), MultiThree(_, b2, _)) -> {
           ignore printf("MultiThree: [%d](1), [%d](0)\n", b1, b2);

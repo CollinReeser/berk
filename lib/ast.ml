@@ -1579,7 +1579,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
   let rec _rewrite_stmt unique_varnames stmt : (ident_t StrMap.t * stmt) =
     begin match stmt with
     | DeclStmt(varname, varqual, t, exp) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
         let (unique_varnames, uniq_varname) =
           get_unique_varname unique_varnames varname
         in
@@ -1598,7 +1600,9 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         (unique_varnames, DeclDefStmt(uniq_idents_quals_ts))
 
     | DeclDeconStmt(varname_varquals, t, exp) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
         let (unique_varnames, uniq_varname_varquals) =
           List.fold_left_map (
             fun unique_varnames (varname, varqual) ->
@@ -1614,19 +1618,25 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         )
 
     | AssignStmt(varname, lval_idxs, exp) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
         (unique_varnames, AssignStmt(varname, lval_idxs, exp_rewritten))
 
     | ExprStmt(es_mod, exp) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
         (unique_varnames, ExprStmt(es_mod, exp_rewritten))
 
     | ReturnStmt(exp) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
         (unique_varnames, ReturnStmt(exp_rewritten))
     end
 
-  and _rewrite_exp unique_varnames exp : expr =
+  and _rewrite_exp unique_varnames exp : (ident_t StrMap.t * expr) =
     begin match exp with
     | ValF32(_) | ValF64(_) | ValF128(_)
     | ValBool(_)
@@ -1634,16 +1644,20 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     | ValNil
     | ValInt(_, _)
     | ValFunc(_, _) ->
-        exp
+        (unique_varnames, exp)
 
     | ExprInvoke(t, exp, exps) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
-        let exps_rewritten = List.map (_rewrite_exp unique_varnames) exps in
-        ExprInvoke(t, exp_rewritten, exps_rewritten)
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        let (unique_varnames, exps_rewritten) =
+          List.fold_left_map _rewrite_exp unique_varnames exps
+        in
+        (unique_varnames, ExprInvoke(t, exp_rewritten, exps_rewritten))
 
     | ValVar(t, varname) ->
         let uniq_varname = StrMap.find varname unique_varnames in
-        ValVar(t, uniq_varname)
+        (unique_varnames, ValVar(t, uniq_varname))
 
     | ValName(_, _) ->
         failwith "Cannot rewrite ValName(): Should have been resolved"
@@ -1652,77 +1666,121 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         failwith "Cannot rewrite ValRawArray(): Should not be present"
 
     | ValCast(t, op, exp) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
-        ValCast(t, op, exp_rewritten)
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        (unique_varnames, ValCast(t, op, exp_rewritten))
 
     | TupleIndexExpr(t, idx, tup_exp) ->
-        let tup_exp_rewritten = _rewrite_exp unique_varnames tup_exp in
-        TupleIndexExpr(t, idx, tup_exp_rewritten)
+        let (unique_varnames, tup_exp_rewritten) =
+          _rewrite_exp unique_varnames tup_exp
+        in
+        (unique_varnames, TupleIndexExpr(t, idx, tup_exp_rewritten))
 
     | IndexExpr(t, idx_exp, arr_exp) ->
-        let idx_exp_rewritten = _rewrite_exp unique_varnames idx_exp in
-        let arr_exp_rewritten = _rewrite_exp unique_varnames arr_exp in
-        IndexExpr(t, idx_exp_rewritten, arr_exp_rewritten)
+        let (unique_varnames, idx_exp_rewritten) =
+          _rewrite_exp unique_varnames idx_exp
+        in
+        let (unique_varnames, arr_exp_rewritten) =
+          _rewrite_exp unique_varnames arr_exp
+        in
+        (unique_varnames, IndexExpr(t, idx_exp_rewritten, arr_exp_rewritten))
 
     | UnOp(t, op, exp) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
-        UnOp(t, op, exp_rewritten)
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        (unique_varnames, UnOp(t, op, exp_rewritten))
 
     | BinOp(t, op, exp_lhs, exp_rhs) ->
-        let exp_lhs_rewritten = _rewrite_exp unique_varnames exp_lhs in
-        let exp_rhs_rewritten = _rewrite_exp unique_varnames exp_rhs in
-        BinOp(t, op, exp_lhs_rewritten, exp_rhs_rewritten)
+        let (unique_varnames, exp_lhs_rewritten) =
+          _rewrite_exp unique_varnames exp_lhs
+        in
+        let (unique_varnames, exp_rhs_rewritten) =
+          _rewrite_exp unique_varnames exp_rhs
+        in
+        (unique_varnames, BinOp(t, op, exp_lhs_rewritten, exp_rhs_rewritten))
 
     | IfThenElseExpr(t, exp_cond, exp_then, exp_else) ->
-        let exp_cond_rewritten = _rewrite_exp unique_varnames exp_cond in
-        let exp_then_rewritten = _rewrite_exp unique_varnames exp_then in
-        let exp_else_rewritten = _rewrite_exp unique_varnames exp_else in
-        IfThenElseExpr(
-          t, exp_cond_rewritten, exp_then_rewritten, exp_else_rewritten
+        let (unique_varnames, exp_cond_rewritten) =
+          _rewrite_exp unique_varnames exp_cond
+        in
+        let (unique_varnames, exp_then_rewritten) =
+          _rewrite_exp unique_varnames exp_then
+        in
+        let (unique_varnames, exp_else_rewritten) =
+          _rewrite_exp unique_varnames exp_else
+        in
+        (
+          unique_varnames,
+          IfThenElseExpr(
+            t, exp_cond_rewritten, exp_then_rewritten, exp_else_rewritten
+          )
         )
 
     | TupleExpr(t, exps) ->
-        let exps_rewritten = List.map (_rewrite_exp unique_varnames) exps in
-        TupleExpr(t, exps_rewritten)
+        let (unique_varnames, exps_rewritten) =
+          List.fold_left_map _rewrite_exp unique_varnames exps
+        in
+        (unique_varnames, TupleExpr(t, exps_rewritten))
 
     | ArrayExpr(t, exps) ->
-        let exps_rewritten = List.map (_rewrite_exp unique_varnames) exps in
-        ArrayExpr(t, exps_rewritten)
+        let (unique_varnames, exps_rewritten) =
+          List.fold_left_map _rewrite_exp unique_varnames exps
+        in
+        (unique_varnames, ArrayExpr(t, exps_rewritten))
 
     | FuncCall(t, func_name, exps) ->
-        let exps_rewritten = List.map (_rewrite_exp unique_varnames) exps in
-        FuncCall(t, func_name, exps_rewritten)
+        let (unique_varnames, exps_rewritten) =
+          List.fold_left_map _rewrite_exp unique_varnames exps
+        in
+        (unique_varnames, FuncCall(t, func_name, exps_rewritten))
 
     | UfcsCall(t, exp, func_name, exps) ->
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
-        let exps_rewritten = List.map (_rewrite_exp unique_varnames) exps in
-        UfcsCall(t, exp_rewritten, func_name, exps_rewritten)
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        let (unique_varnames, exps_rewritten) =
+          List.fold_left_map _rewrite_exp unique_varnames exps
+        in
+        (unique_varnames, UfcsCall(t, exp_rewritten, func_name, exps_rewritten))
 
     | BlockExpr(t, stmts, exp) ->
         let (unique_varnames, stmts_rewritten) =
           List.fold_left_map _rewrite_stmt unique_varnames stmts
         in
-        let exp_rewritten = _rewrite_exp unique_varnames exp in
-        BlockExpr(t, stmts_rewritten, exp_rewritten)
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        (unique_varnames, BlockExpr(t, stmts_rewritten, exp_rewritten))
 
     | VariantCtorExpr(t, ctor_name, exps) ->
-        let exps_rewritten = List.map (_rewrite_exp unique_varnames) exps in
-        VariantCtorExpr(t, ctor_name, exps_rewritten)
+        let (unique_varnames, exps_rewritten) =
+          List.fold_left_map _rewrite_exp unique_varnames exps
+        in
+        (unique_varnames, VariantCtorExpr(t, ctor_name, exps_rewritten))
 
     | MatchExpr(t, exp_match, patt_exp_pairs) ->
-        let exp_match_rewritten = _rewrite_exp unique_varnames exp_match in
+        let (unique_varnames, exp_match_rewritten) =
+          _rewrite_exp unique_varnames exp_match
+        in
 
-        let (_, patt_exp_pairs_rewritten) =
+        let (unique_varnames, patt_exp_pairs_rewritten) =
           List.fold_left_map (
             fun unique_varnames (patt, exp) ->
               let (unique_varnames, patt_rewritten) =
                 _rewrite_patt_exp unique_varnames patt
               in
-              let exp_rewritten = _rewrite_exp unique_varnames exp in
+              let (unique_varnames, exp_rewritten) =
+                _rewrite_exp unique_varnames exp
+              in
               (unique_varnames, (patt_rewritten, exp_rewritten))
           ) unique_varnames patt_exp_pairs
         in
-        MatchExpr(t, exp_match_rewritten, patt_exp_pairs_rewritten)
+        (
+          unique_varnames,
+          MatchExpr(t, exp_match_rewritten, patt_exp_pairs_rewritten)
+        )
 
     | WhileExpr(t, init_stmts, exp_cond, then_stmts) ->
         let (unique_varnames, init_stmts_rewritten) =
@@ -1733,9 +1791,14 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           List.fold_left_map _rewrite_stmt unique_varnames then_stmts
         in
 
-        let exp_cond_rewritten = _rewrite_exp unique_varnames exp_cond in
-        WhileExpr(
-          t, init_stmts_rewritten, exp_cond_rewritten, then_stmts_rewritten
+        let (unique_varnames, exp_cond_rewritten) =
+          _rewrite_exp unique_varnames exp_cond
+        in
+        (
+          unique_varnames,
+          WhileExpr(
+            t, init_stmts_rewritten, exp_cond_rewritten, then_stmts_rewritten
+          )
         )
 
     end
