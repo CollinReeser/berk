@@ -713,10 +713,37 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
           (mir_ctxt, bb, lval)
 
       | RBlockExpr(_, stmt, exp) ->
-          let (mir_ctxt, bb) = rstmt_to_mir mir_ctxt bb stmt in
-          let (mir_ctxt, bb, lval) = _rexpr_to_mir mir_ctxt bb exp in
+          (* Creating a new basic block, even though we don't really need it
+          at this point, helps with later lifetime checking, etc. *)
+          let (mir_ctxt, block_bb_name) = get_bbname mir_ctxt in
+          let (mir_ctxt, post_block_bb_name) = get_bbname mir_ctxt in
+          let block_bb = {name=block_bb_name; instrs=[]} in
+          let post_block_bb = {name=post_block_bb_name; instrs=[]} in
 
-          (mir_ctxt, bb, lval)
+          (* Branch from the current block to the new block, establishing a new
+          scope for lifetime analysis. *)
+          let bb = {bb with instrs = bb.instrs @ [Br(block_bb)]} in
+
+          let (mir_ctxt, block_bb) = rstmt_to_mir mir_ctxt block_bb stmt in
+          let (mir_ctxt, block_bb, lval) =
+            _rexpr_to_mir mir_ctxt block_bb exp
+          in
+
+          (* Branch from the current block to the new block, establishing a new
+          scope for lifetime analysis. *)
+          let block_bb = {
+            block_bb with instrs = block_bb.instrs @ [Br(post_block_bb)]
+          } in
+
+          (* Update the MIR context with our updated versions of the basic
+          blocks. *)
+          let (mir_ctxt, _) =
+            List.fold_left_map (
+              fun mir_ctxt bb -> (update_bb mir_ctxt bb, ())
+            ) mir_ctxt [bb; block_bb; post_block_bb]
+          in
+
+          (mir_ctxt, post_block_bb, lval)
 
       | RTupleExpr(t, exprs) ->
           let ((mir_ctxt, bb), tuple_values) =

@@ -748,6 +748,22 @@ let () =
 
       return 0;
     }
+
+    fn test_mov(lhs: u64, rhs: u64): u64 {
+      let new_lhs = lhs;
+      let new_rhs = rhs;
+      let result = new_lhs + new_rhs;
+      let new_new_lhs = lhs;
+      let new_result = new_new_lhs + rhs;
+
+      {
+        let fst_block_var = 5;
+        let new_block_var = 10;
+        let res_block_var = fst_block_var + new_block_var;
+      }
+
+      return result + new_result;
+    }
   |} in
 
   Printexc.record_backtrace true ;
