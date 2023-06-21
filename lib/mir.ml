@@ -155,7 +155,7 @@ let fmt_instr instr =
         (fmt_lval rhs_lval)
 
   | Assign(lval, rval) ->
-      sprintf "  %s = %s\n"
+      sprintf "  assign %s = %s\n"
         (fmt_lval lval)
         (fmt_rval rval)
 

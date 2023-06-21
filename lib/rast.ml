@@ -641,7 +641,7 @@ and fmt_rstmt ?(print_typ = false) ind rstmt =
   | RDeclStmt (ident, btype, ex) ->
       let typ_s = match btype with
         | Undecided -> ""
-        | x -> fmt_type x |> Printf.sprintf ": %s"
+        | x -> fmt_type x |> Printf.sprintf ":%s"
       in
       Printf.sprintf "%slet %s%s = %s;\n"
         ind
