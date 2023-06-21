@@ -761,7 +761,7 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
 
         begin match rest with
         | RBracket(_) :: rest ->
-            (rest, ALIndex(indexing_exp))
+            (rest, ALIndex(Undecided, indexing_exp))
 
         | _ -> failwith "Could not complete parse of indexing assignment."
         end
@@ -786,7 +786,7 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
 
     begin match tokens with
     | Dot(_) :: Integer(_, i) :: rest ->
-        (rest, ALStaticIndex(i))
+        (rest, ALStaticIndex(Undecided, i))
 
     | _ -> raise Backtrack
     end
@@ -823,7 +823,7 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
   (* var = ... *)
   | LowIdent(_, name) :: Equal(_) :: rest ->
       let (rest, exp) = parse_expr ~ind:ind_next rest in
-      (rest, AssignStmt(name, [], exp))
+      (rest, AssignStmt(name, Undecided, [], exp))
 
   (* complex_datastructure[i + 2][6].2.3[4] = ... *)
   | LowIdent(_, name) :: rest ->
@@ -838,7 +838,7 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
       | Equal(_) :: rest ->
           let (rest, exp) = parse_expr ~ind:ind_next rest in
 
-          (rest, AssignStmt(name, idxs, exp))
+          (rest, AssignStmt(name, Undecided, idxs, exp))
 
       | _ -> raise Backtrack
       end

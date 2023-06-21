@@ -121,12 +121,15 @@ and pattern =
   | PatternAs of berk_t * pattern * ident_t
 
 and assign_idx_lval =
-  (* An index into a tuple. *)
-  | ALStaticIndex of int
+  (* An index into a tuple. The type is the resultant type after indexing. *)
+  | ALStaticIndex of berk_t * int
+
   (* TODO: Add ALRecordIndex for indexing to access a record field:
   | ALRecordIndex of string *)
-  (* An index into a static or dynamic array. *)
-  | ALIndex of expr
+
+  (* An index into a static or dynamic array. The type is the resultant type
+  after indexing. *)
+  | ALIndex of berk_t * expr
 
 and expr_stmt_mod = {
   (* Whether or not it's permitted to ignore the result of the associated
@@ -150,8 +153,11 @@ and stmt =
   | DeclDeconStmt of (ident_t * var_qual) list * berk_t * expr
   (* Assignment to a LHS lvalue. Could be assignment directly to a named
   variable, where the idx list is empty, or could be arbitrarily-deep indexing
-  to the _real_ target of assignment, starting at that named variable. *)
-  | AssignStmt of ident_t * assign_idx_lval list * expr
+  to the _real_ target of assignment, starting at that named variable. The type
+  is the type of the named starting variable, even if there is a non-empty list
+  of indexes yielding a final lvalue of some completely different type (that
+  would instead be expected to agree with the type of the RHS expr). *)
+  | AssignStmt of ident_t * berk_t * assign_idx_lval list * expr
   | ExprStmt of expr_stmt_mod * expr
   | ReturnStmt of expr
 ;;
@@ -374,13 +380,14 @@ let rec dump_expr_ast ?(ind="") expr =
 and dump_assign_idx_lval_ast ?(ind="") assign_idx_lval =
   let open Printf in
   begin match assign_idx_lval with
-  | ALStaticIndex(i) ->
-      sprintf "ALStaticIndex(%d)" i
-  | ALIndex(e) ->
+  | ALStaticIndex(indexed_t, i) ->
+      sprintf "ALStaticIndex(%d; %s)" i (fmt_type indexed_t)
+  | ALIndex(indexed_t, e) ->
       let ind_next = ind ^ " " in
-      sprintf "ALIndex(\n%s%s\n%s)"
+      sprintf "ALIndex(\n%s%s; %s\n%s)"
         ind_next
         (dump_expr_ast ~ind:ind_next e)
+        (fmt_type indexed_t)
         ind
   end
 
@@ -432,14 +439,15 @@ and dump_stmt_ast ?(ind="") stmt =
         ind_next
         (dump_expr_ast ~ind:ind_next e)
         ind
-  | AssignStmt(name, idxs, e) ->
+  | AssignStmt(name, named_t, idxs, e) ->
       let ind_next = ind ^ " " in
       let dumped_idxs_ls =
         List.map (dump_assign_idx_lval_ast ~ind:ind_next) idxs
       in
       let dumped_idxs = fmt_join_strs ",\n" dumped_idxs_ls in
-      sprintf "AssignStmt(%s,\n%s,\n%s%s\n%s)"
+      sprintf "AssignStmt(%s:%s,\n%s,\n%s%s\n%s)"
         name
+        (fmt_type named_t)
         dumped_idxs
         ind_next
         (dump_expr_ast ~ind:ind_next e)
@@ -926,11 +934,13 @@ and fmt_assign_lval_idxs ?(print_typ = false) lval_idxs =
 
 and fmt_assign_lval_idx ?(print_typ = false) lval_idx =
   begin match lval_idx with
-  | ALStaticIndex(i) ->
-      Printf.sprintf ".%d" i
+  | ALStaticIndex(indexed_t, i) ->
+      let t_fmt = if print_typ then ":" ^ (fmt_type indexed_t) else "" in
+      Printf.sprintf ".%d%s" i t_fmt
 
-  | ALIndex(exp) ->
-      Printf.sprintf "[%s]" (fmt_expr ~print_typ:print_typ exp)
+  | ALIndex(indexed_t, exp) ->
+      let t_fmt = if print_typ then ":" ^ (fmt_type indexed_t) else "" in
+      Printf.sprintf "[%s]%s" (fmt_expr ~print_typ:print_typ exp) t_fmt
   end
 
 and fmt_stmt ?(print_typ = false) ind stmt =
@@ -963,10 +973,11 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         typ_s
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
-  | AssignStmt (ident, lval_idxs, ex) ->
-      Printf.sprintf "%s%s%s = %s;\n"
+  | AssignStmt (ident, named_t, lval_idxs, ex) ->
+      Printf.sprintf "%s%s:%s %s = %s;\n"
         ind
         ident
+        (fmt_type named_t)
         (fmt_assign_lval_idxs ~print_typ:print_typ lval_idxs)
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
@@ -1617,11 +1628,14 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           DeclDeconStmt(uniq_varname_varquals, t, exp_rewritten)
         )
 
-    | AssignStmt(varname, lval_idxs, exp) ->
+    | AssignStmt(varname, named_t, lval_idxs, exp) ->
         let (unique_varnames, exp_rewritten) =
           _rewrite_exp unique_varnames exp
         in
-        (unique_varnames, AssignStmt(varname, lval_idxs, exp_rewritten))
+        (
+          unique_varnames,
+          AssignStmt(varname, named_t, lval_idxs, exp_rewritten)
+        )
 
     | ExprStmt(es_mod, exp) ->
         let (unique_varnames, exp_rewritten) =

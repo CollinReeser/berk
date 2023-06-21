@@ -530,7 +530,9 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
               [
                 (* Initialize this index of the array. *)
                 RAssignStmt(
-                  arr_varname, [RALIndex(RValVar(U64, idx_varname))],
+                  arr_varname,
+                  flattened_arr_t,
+                  [RALIndex(base_elem_t, RValVar(U64, idx_varname))],
                   begin
                     let (_, exp) = default_expr_for_t mir_ctxt base_elem_t in
                     exp
@@ -538,7 +540,9 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
                 );
                 (* Increment the indexing variable. *)
                 RAssignStmt(
-                  idx_varname, [],
+                  idx_varname,
+                  U64,
+                  [],
                   RBinOp(U64, Add, RValVar(U64, idx_varname), RValInt(U64, 1))
                 );
               ]
@@ -1776,7 +1780,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
 
         (mir_ctxt, bb)
 
-    | RAssignStmt(lhs_name, [], exp) ->
+    | RAssignStmt(lhs_name, _, [], exp) ->
         (* This is an assignment to a pre-existing lvalue var, so we just need
         to find the lval for this var, and then we can directly store the RHS
         into that existing lval. *)
@@ -1791,7 +1795,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
 
         (mir_ctxt, bb)
 
-    | RAssignStmt(lhs_name, lval_idxs, exp) ->
+    | RAssignStmt(lhs_name, _, lval_idxs, exp) ->
         (* Generate MIR for iteratively indexing into the contents of the named
         variable, eventually yielding an lval that can be stored into with the
         RHS expression result. *)
@@ -1802,7 +1806,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
           | [] -> (mir_ctxt, bb, cur_lhs_lval)
 
 
-          | RALIndex(idx_exp) :: rest ->
+          | RALIndex(_, idx_exp) :: rest ->
               let (mir_ctxt, bb, idx_lval) = rexpr_to_mir mir_ctxt bb idx_exp in
 
               let deref_t = unwrap_ptr idxable_t in
@@ -1829,7 +1833,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
 
               gen_indexing_mir mir_ctxt bb ptr_to_next_elem_lval rest
 
-          | RALStaticIndex(i) :: rest ->
+          | RALStaticIndex(_, i) :: rest ->
               (* FIXME: Really, this should be "ALTupleIndex", and this
               unwrapping function should be named accordingly. *)
               let deref_t = unwrap_ptr idxable_t in

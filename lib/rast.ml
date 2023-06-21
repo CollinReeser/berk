@@ -71,17 +71,21 @@ and rpattern =
   | RPatternAs of berk_t * rpattern * string
 
 and rassign_idx_lval =
-  (* An index into a tuple. *)
-  | RALStaticIndex of int
-  (* An index into a static or dynamic array. *)
-  | RALIndex of rexpr
+  (* An index into a tuple. The type is of the result, after the index. *)
+  | RALStaticIndex of berk_t * int
+  (* An index into a static or dynamic array. The type is of the result, after
+  the index.*)
+  | RALIndex of berk_t * rexpr
 
 and rstmt =
   | RDeclStmt of string * berk_t * rexpr
 
   | RDeclDefStmt of (string * berk_t) list
 
-  | RAssignStmt of string * rassign_idx_lval list * rexpr
+  (* Type is the type of the RHS expression. Note that this may not be exactly
+  the type of the actual target variable, but prior typechecking implies it's
+  at least implicitly convertible. *)
+  | RAssignStmt of string * berk_t * rassign_idx_lval list * rexpr
 
   | RExprStmt of rexpr
   | RReturnStmt of rexpr
@@ -281,12 +285,12 @@ and pattern_to_rpattern patt : rpattern =
 
 and assign_idx_lval_to_rassign_idx_lval idx : rassign_idx_lval =
   begin match idx with
-  | ALStaticIndex(i) ->
-      RALStaticIndex(i)
+  | ALStaticIndex(indexed_t, i) ->
+      RALStaticIndex(indexed_t, i)
 
-  | ALIndex(e) ->
+  | ALIndex(indexed_t, e) ->
       let re = expr_to_rexpr e in
-      RALIndex(re)
+      RALIndex(indexed_t, re)
   end
 
 and stmt_to_rstmt stmt : rstmt =
@@ -307,10 +311,10 @@ and stmt_to_rstmt stmt : rstmt =
       let names_ts = List.map (fun (name, _, t) -> (name, t)) names_quals_ts in
       RDeclDefStmt(names_ts)
 
-  | AssignStmt(name, idxs, e) ->
+  | AssignStmt(name, named_t, idxs, e) ->
       let ridxs = List.map assign_idx_lval_to_rassign_idx_lval idxs in
       let re = expr_to_rexpr e in
-      RAssignStmt(name, ridxs, re)
+      RAssignStmt(name, named_t, ridxs, re)
 
   (* Deconstructing `let` stmts can be described as first assigning the
   result of the expr-to-be-deconstructed to a placeholder named variable, and
@@ -623,11 +627,13 @@ and fmt_rassign_lval_idxs ?(print_typ = false) lval_idxs =
 
 and fmt_rassign_lval_idx ?(print_typ = false) lval_idx =
   begin match lval_idx with
-  | RALStaticIndex(i) ->
-      Printf.sprintf ".%d" i
+  | RALStaticIndex(t, i) ->
+      let t_fmt = if print_typ then ":" ^ (fmt_type t) else "" in
+      Printf.sprintf ".%d%s" i t_fmt
 
-  | RALIndex(exp) ->
-      Printf.sprintf "[%s]" (fmt_rexpr ~print_typ:print_typ exp)
+  | RALIndex(t, exp) ->
+      let t_fmt = if print_typ then ":" ^ (fmt_type t) else "" in
+      Printf.sprintf "[%s]%s" (fmt_rexpr ~print_typ:print_typ exp) t_fmt
   end
 
 and fmt_rstmt ?(print_typ = false) ind rstmt =
@@ -648,10 +654,11 @@ and fmt_rstmt ?(print_typ = false) ind rstmt =
         ind
         (fmt_join_idents_types ", " idents_ts)
 
-  | RAssignStmt (ident, lval_idxs, ex) ->
-      Printf.sprintf "%s%s%s = %s;\n"
+  | RAssignStmt (ident, btype, lval_idxs, ex) ->
+      Printf.sprintf "%s%s:%s %s = %s;\n"
         ind
         ident
+        (fmt_type btype)
         (fmt_rassign_lval_idxs ~print_typ:print_typ lval_idxs)
         (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
 

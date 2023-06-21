@@ -28,6 +28,14 @@ instruction. *)
 type hir_instr =
   | HReturn of hir_variable
 
+  (* "Tuple-index" into the RHS variable with the given constant integer index,
+  yielding the value in the resultant LHS variable. ie: `tmp = tup.3;` *)
+  | HTupleIndex of hir_variable * int * hir_variable
+
+  (* LHS is resultant variable. Middle is indexing variable. RHS is indexed
+  variable. *)
+  | HDynamicIndex of hir_variable * hir_variable * hir_variable
+
   | HValueAssign of hir_variable * hir_value
 
   (* Create a raw array with the type of the given resultant variable. *)
@@ -254,6 +262,49 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
         fun (hctxt, hscope) rstmt -> rstmt_to_hir hctxt hscope rstmt
       ) (hctxt, hscope) rstmts
 
-  | RAssignStmt(_, _, _) -> failwith "Unimplemented"
+  (* Assign the RHS rexpr to the result of possibly-zero indexes into the LHS
+  lvalue. *)
+  | RAssignStmt(name, named_t, rassign_idx_lvals, rexpr) ->
+      let (hctxt, hscope, rhs_hvar) = rexpr_to_hir hctxt hscope rexpr in
+
+      let named_hvar = (named_t, name) in
+
+      (* Possibly-zero indexing operations, yielding a resultant lvalue. *)
+      let (hctxt, hscope, indexed_hvar) =
+        List.fold_left (
+          fun (hctxt, hscope, hvar) rassign_idx_lval ->
+            begin match rassign_idx_lval with
+            | RALStaticIndex(t, i) ->
+                let (hctxt, tmp) = get_tmp_name hctxt in
+                let decl = (t, tmp) in
+                let decls = decl :: hscope.declarations in
+                let instr = HTupleIndex(decl, i, hvar) in
+                let instrs = instr :: hscope.instructions in
+                let hscope = {
+                  hscope with declarations = decls; instructions = instrs
+                } in
+                (hctxt, hscope, decl)
+
+            | RALIndex(t, e) ->
+                let (hctxt, hscope, i_hvar) = rexpr_to_hir hctxt hscope e in
+
+                let (hctxt, tmp) = get_tmp_name hctxt in
+                let decl = (t, tmp) in
+                let decls = decl :: hscope.declarations in
+                let instr = HDynamicIndex(decl, i_hvar, hvar) in
+                let instrs = instr :: hscope.instructions in
+                let hscope = {
+                  hscope with declarations = decls; instructions = instrs
+                } in
+                (hctxt, hscope, decl)
+            end
+        ) (hctxt, hscope, named_hvar) rassign_idx_lvals
+      in
+
+      let instr = HValueAssign(indexed_hvar, HValVar(rhs_hvar)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+
+      (hctxt, hscope)
   end
 ;;

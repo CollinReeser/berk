@@ -129,7 +129,7 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
   let res = begin match stmt with
   | ExprStmt(_, expr)
   | ReturnStmt(expr)
-  | AssignStmt(_, _, expr) ->
+  | AssignStmt(_, _, _, expr) ->
       _is_concrete_expr expr
 
   | DeclStmt(_, _, typ, expr)
@@ -555,19 +555,19 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
       (tc_ctxt_up, DeclDeconStmt(idents_quals, resolved_t, exp_typechecked))
 
-  | AssignStmt(ident, lval_idxs, exp) ->
+  | AssignStmt(ident, _, lval_idxs, exp) ->
       (* Typecheck the chain of indexing against the named LHS variable, if
       there is any, and yield the type of the resultant target for the
       assignment (as well as the typechecked index expressions). *)
       let apply_index cur_t lval_idx =
         begin match lval_idx with
-        | ALStaticIndex(i) ->
+        | ALStaticIndex(_, i) ->
             let inner_t = unwrap_aggregate_indexable cur_t i in
-            let lval_idx_tc = ALStaticIndex(i) in
+            let lval_idx_tc = ALStaticIndex(inner_t, i) in
 
             (inner_t, lval_idx_tc)
 
-        | ALIndex(idx_exp) ->
+        | ALIndex(_, idx_exp) ->
             (* Typecheck the indexing expression itself. *)
             let idx_exp_tc =
               type_check_expr tc_ctxt Undecided idx_exp
@@ -582,7 +582,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
                 )
             in
 
-            let lval_idx_tc = ALIndex(idx_exp_tc) in
+            let lval_idx_tc = ALIndex(inner_t, idx_exp_tc) in
 
             (inner_t, lval_idx_tc)
         end
@@ -607,7 +607,10 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       in
 
       if type_convertible_to exp_t lval_t then
-        (tc_ctxt, AssignStmt(ident, lval_idxs_typechecked, exp_typechecked))
+        (
+          tc_ctxt,
+          AssignStmt(ident, var_t, lval_idxs_typechecked, exp_typechecked)
+        )
       else
         failwith (
           Printf.sprintf "Expr for assignment to [%s] does not typecheck" ident
