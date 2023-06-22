@@ -244,12 +244,30 @@ let rec rexpr_to_hir hctxt hscope rexpr
       (hctxt, hscope, decl)
 
 
-  | _ -> failwith "Unimplemented"
+  | RIndexExpr(_, _, _) -> failwith "Unimplemented"
+  | RTupleIndexExpr(_, _, _) -> failwith "Unimplemented"
+  | RArrayExpr(_, _) -> failwith "Unimplemented"
+  | RValRawArray(_) -> failwith "Unimplemented"
+  | RVariantCtorExpr(_, _, _) -> failwith "Unimplemented"
+  | RExprInvoke(_, _, _) -> failwith "Unimplemented"
+  | RWhileExpr(_, _, _, _) -> failwith "Unimplemented"
+  | RMatchExpr(_, _, _) -> failwith "Unimplemented"
   end
 
 
 and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
   begin match rstmt with
+  (* "Expand" a list of rstmts into hir instructions. *)
+  | RStmts(rstmts) ->
+      List.fold_left (
+        fun (hctxt, hscope) rstmt -> rstmt_to_hir hctxt hscope rstmt
+      ) (hctxt, hscope) rstmts
+
+  (* Evaluate an expression. The result is abandoned. *)
+  | RExprStmt(rexpr) ->
+      let (hctxt, hscope, _) = rexpr_to_hir hctxt hscope rexpr in
+      (hctxt, hscope)
+
   (* Declare, evaluate the expr for, and assign, a new named variable. *)
   | RDeclStmt(name, t, rexpr) ->
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
@@ -270,22 +288,12 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
           (hctxt, hscope)
       ) (hctxt, hscope) name_t_pairs
 
-  (* Evaluate an expression. *)
-  | RExprStmt(rexpr) ->
-      let (hctxt, hscope, _) = rexpr_to_hir hctxt hscope rexpr in
-      (hctxt, hscope)
-
   | RReturnStmt(rexpr) ->
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
 
       let instrs = HReturn(hvar) :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope)
-
-  | RStmts(rstmts) ->
-      List.fold_left (
-        fun (hctxt, hscope) rstmt -> rstmt_to_hir hctxt hscope rstmt
-      ) (hctxt, hscope) rstmts
 
   (* Assign the RHS rexpr to the result of possibly-zero indexes into the LHS
   lvalue. *)
