@@ -202,6 +202,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {hscope with declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
+  (* Declare an outer variable, create an inner scope, evaluate an initial
+  statement within that inner scope, evaluate an expr within that inner scope
+  and assign the result to the declared outer variable. *)
   | RBlockExpr(t, rstmt, rexpr) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
@@ -211,7 +214,10 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, inner_scope) = rstmt_to_hir hctxt inner_scope rstmt in
       let (hctxt, inner_scope, hvar) = rexpr_to_hir hctxt inner_scope rexpr in
 
-      let instrs = HValueAssign(decl, HValVar(hvar)) :: hscope.instructions in
+      let instr = HValueAssign(decl, HValVar(hvar)) in
+      let instrs = instr :: inner_scope.instructions in
+      let inner_scope = {inner_scope with instructions = instrs} in
+
       let inners = inner_scope :: hscope.inner_scopes in
       let hscope = {
         declarations = decls; instructions = instrs; inner_scopes = inners
