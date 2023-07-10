@@ -1,11 +1,13 @@
-open Berk.Ast
-open Berk.Rast
-open Berk.Codegen_mir
+(* NOTE: Deliberately in approximately "compiler pipeline" order. *)
 open Berk.Lexer
-open Berk.Llvm_utility
-open Berk.Mir
 open Berk.Parser
 open Berk.Type_check
+open Berk.Ast
+open Berk.Rast
+open Berk.Hir
+open Berk.Mir
+open Berk.Codegen_mir
+open Berk.Llvm_utility
 
 
 let () =
@@ -831,6 +833,10 @@ let () =
               let rfunc_def = func_def_t_to_rfunc_def_t func_def in
 
               Printf.printf "RAST:\n%s\n" (fmt_rfunc_def_t rfunc_def) ;
+
+              let hfunc_def = rfunc_def_t_to_hfunc_def_t rfunc_def in
+
+              Printf.printf "HIR:\n%s\n" (fmt_hfunc_def_t hfunc_def) ;
 
               let mir_ctxt = rfunc_to_mir rfunc_def in
               Some(mir_ctxt)
