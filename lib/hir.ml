@@ -138,15 +138,23 @@ and hfunc_def_t = {
 
 type hir_scope = {
   declarations: hir_variable list;
-  instructions: hir_instr list;
-  inner_scopes: hir_scope list;
+  instructions: hir_scope_instr list;
 }
+
+and hir_scope_instr =
+  (* Basic instruction *)
+  | Instr of hir_instr
+  (* Basic scope, unconditional evaluation and no looping. *)
+  | Scope of hir_scope
+  (* Conditional variable, then instruction list, else alternate scope *)
+  | CondScope of hir_variable * hir_scope * hir_scope
+  (* Conditional  variable for whether to run the body *)
+  | CondLoop of hir_variable * hir_scope
 
 
 let empty_scope : hir_scope = {
   declarations = [];
   instructions = [];
-  inner_scopes = [];
 }
 
 
@@ -178,8 +186,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (Nil, tmp) in
       let decls = decl :: hscope.declarations in
-      let instrs = HValueAssign(decl, HValNil) :: hscope.instructions in
-      let hscope = {hscope with declarations = decls; instructions = instrs} in
+      let instr = Instr(HValueAssign(decl, HValNil)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValF128(_) -> failwith "Unimplemented"
@@ -198,8 +207,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
       let decls = decl :: hscope.declarations in
-      let instrs = HBinOp(decl, op, lhs_var, rhs_var) :: hscope.instructions in
-      let hscope = {hscope with declarations = decls; instructions = instrs} in
+      let instr = Instr(HBinOp(decl, op, lhs_var, rhs_var)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
   (* Declare an outer variable, create an inner scope, evaluate an initial
@@ -214,14 +224,14 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, inner_scope) = rstmt_to_hir hctxt inner_scope rstmt in
       let (hctxt, inner_scope, hvar) = rexpr_to_hir hctxt inner_scope rexpr in
 
-      let instr = HValueAssign(decl, HValVar(hvar)) in
-      let instrs = instr :: inner_scope.instructions in
-      let inner_scope = {inner_scope with instructions = instrs} in
+      let inner_instr = Instr(HValueAssign(decl, HValVar(hvar))) in
+      let inner_instrs = inner_instr :: inner_scope.instructions in
+      let inner_scope = {inner_scope with instructions = inner_instrs} in
 
-      let inners = inner_scope :: hscope.inner_scopes in
-      let hscope = {
-        declarations = decls; instructions = instrs; inner_scopes = inners
-      } in
+      let instr = Scope(inner_scope) in
+      let instrs = instr :: hscope.instructions in
+
+      let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RTupleExpr(t, rexprs) ->
@@ -236,11 +246,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
       let decls = decl :: hscope.declarations in
-      let instr = HTupleExpr(decl, hvars) in
+      let instr = Instr(HTupleExpr(decl, hvars)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {
-        hscope with declarations = decls; instructions = instrs
-      } in
+      let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
 
@@ -274,8 +282,9 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
 
       let decl = (t, name) in
       let decls = decl :: hscope.declarations in
-      let instrs = HValueAssign(decl, HValVar(hvar)) :: hscope.instructions in
-      let hscope = {hscope with declarations = decls; instructions = instrs} in
+      let instr = Instr(HValueAssign(decl, HValVar(hvar))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope)
 
   (* Declare a list of new named variables. *)
@@ -291,7 +300,8 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
   | RReturnStmt(rexpr) ->
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
 
-      let instrs = HReturn(hvar) :: hscope.instructions in
+      let instr = Instr(HReturn(hvar)) in
+      let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope)
 
@@ -311,11 +321,9 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
                 let (hctxt, tmp) = get_tmp_name hctxt in
                 let decl = (t, tmp) in
                 let decls = decl :: hscope.declarations in
-                let instr = HTupleIndex(decl, i, hvar) in
+                let instr = Instr(HTupleIndex(decl, i, hvar)) in
                 let instrs = instr :: hscope.instructions in
-                let hscope = {
-                  hscope with declarations = decls; instructions = instrs
-                } in
+                let hscope = {declarations = decls; instructions = instrs} in
                 (hctxt, hscope, decl)
 
             | RALIndex(t, e) ->
@@ -324,17 +332,15 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
                 let (hctxt, tmp) = get_tmp_name hctxt in
                 let decl = (t, tmp) in
                 let decls = decl :: hscope.declarations in
-                let instr = HDynamicIndex(decl, i_hvar, hvar) in
+                let instr = Instr(HDynamicIndex(decl, i_hvar, hvar)) in
                 let instrs = instr :: hscope.instructions in
-                let hscope = {
-                  hscope with declarations = decls; instructions = instrs
-                } in
+                let hscope = {declarations = decls; instructions = instrs} in
                 (hctxt, hscope, decl)
             end
         ) (hctxt, hscope, named_hvar) rassign_idx_lvals
       in
 
-      let instr = HValueAssign(indexed_hvar, HValVar(rhs_hvar)) in
+      let instr = Instr(HValueAssign(indexed_hvar, HValVar(rhs_hvar))) in
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
 
