@@ -1,6 +1,7 @@
 open Ir
 open Rast
 open Typing
+open Utility
 
 module StrMap = Map.Make(String)
 
@@ -16,11 +17,6 @@ type hir_value =
 | HValStr of string
 | HValFunc of string
 | HValVar of hir_variable
-
-type hir_ctxt = {
-  seen_vars: hir_variable StrMap.t;
-  tmp_counter: int;
-}
 
 (* The left-most hir_variable is the assigned-to value that holds the result of
 the instruction. The remaining hir_variables are the argument(s) to the
@@ -74,7 +70,7 @@ type hir_instr =
   | HMatchExpr of hir_variable * (rpattern * hir_instr) list
 
   (* ??? *)
-  | HWhileExpr of berk_t * hstmt list * hir_instr * hstmt list
+  (* | HWhileExpr of berk_t * hstmt list * hir_instr * hstmt list *)
 
 
 (* ??? *)
@@ -91,9 +87,9 @@ and rpattern =
   | HCtor of berk_t * string * rpattern list
   | HPatternAs of berk_t * rpattern * string
 
-
+(*
 (* ??? *)
-and rassign_idx_lval =
+and hassign_idx_lval =
   (* An index into a tuple. *)
   | HALStaticIndex of int
   (* An index into a static or dynamic array. *)
@@ -106,7 +102,7 @@ and hstmt =
 
   | HDeclDefStmt of (string * berk_t) list
 
-  | HAssignStmt of string * rassign_idx_lval list * hir_instr
+  | HAssignStmt of string * hassign_idx_lval list * hir_instr
 
   | HExprStmt of hir_instr
   | HReturnStmt of hir_instr
@@ -114,26 +110,7 @@ and hstmt =
   (* A convenience container for when a stmt needs to be rewritten using
   multiple rstmt. *)
   | HStmts of hstmt list
-
-
-(* ??? *)
-and hf_param = (string * berk_t)
-
-
-(* ??? *)
-and hfunc_decl_t = {
-  hf_name: string;
-  hf_params: hf_param list;
-  hf_ret_t: berk_t;
-}
-
-
-(* ??? *)
-and hfunc_def_t = {
-  hf_decl: hfunc_decl_t;
-  hf_stmts: hstmt list;
-}
-;;
+*)
 
 
 type hir_scope = {
@@ -149,7 +126,26 @@ and hir_scope_instr =
   (* Conditional variable, then instruction list, else alternate scope *)
   | CondScope of hir_variable * hir_scope * hir_scope
   (* Conditional  variable for whether to run the body *)
-  | CondLoop of hir_variable * hir_scope
+  | CondLoopScope of hir_variable * hir_scope
+
+
+(* ??? *)
+and hf_param = (string * berk_t)
+
+
+(* ??? *)
+type hfunc_decl_t = {
+  hf_name: string;
+  hf_params: hf_param list;
+  hf_ret_t: berk_t;
+}
+
+
+(* ??? *)
+type hfunc_def_t = {
+  hf_decl: hfunc_decl_t;
+  hf_scope: hir_scope;
+}
 
 
 let empty_scope : hir_scope = {
@@ -157,6 +153,255 @@ let empty_scope : hir_scope = {
   instructions = [];
 }
 
+
+let fmt_hir_variable (t, name) : string =
+  Printf.sprintf "%s: %s" name (fmt_type t)
+;;
+
+let fmt_hir_value hir_value : string =
+  let open Printf in
+  begin match hir_value with
+  | HValNil ->
+      sprintf "nil"
+  | HValU8(i) | HValU16(i) | HValU32(i) | HValU64(i)
+  | HValI8(i) | HValI16(i) | HValI32(i) | HValI64(i) ->
+      sprintf "%d" i
+  | HValF32(f) | HValF64(f) ->
+      sprintf "%f" f
+  | HValF128(f_str) ->
+      sprintf "%s" f_str
+  | HValBool(b) ->
+      sprintf "%b" b
+  | HValStr(str) ->
+      sprintf "\"%s\"" (String.escaped str)
+  | HValFunc(func_name) ->
+      sprintf "fn<%s>" func_name
+  | HValVar(hir_variable) ->
+      fmt_hir_variable hir_variable
+  end
+;;
+
+let fmt_hir_instr hir_instr : string =
+  let open Printf in
+  begin match hir_instr with
+  | HReturn(h_var_res) ->
+      fmt_hir_variable h_var_res
+
+  | HTupleIndex(h_var_res, i, h_var_tup) ->
+      sprintf "%s = (%s).%d"
+        (fmt_hir_variable h_var_res)
+        (fmt_hir_variable h_var_tup)
+        i
+
+  | HDynamicIndex(h_var_res, h_var_idx, h_var_arr) ->
+      sprintf "%s = DYN IDX (%s)[%s]"
+        (fmt_hir_variable h_var_res)
+        (fmt_hir_variable h_var_arr)
+        (fmt_hir_variable h_var_idx)
+
+  | HValueAssign(h_var_res, h_val) ->
+      sprintf "%s = %s"
+        (fmt_hir_variable h_var_res)
+        (fmt_hir_value h_val)
+
+  | HValRawArray(_) ->
+      failwith "Unimplemented"
+
+  | HValCast(h_var_res, cast_op, h_var_orig) ->
+      sprintf "%s = %s (%s)"
+        (fmt_hir_variable h_var_res)
+        (fmt_cast_op cast_op)
+        (fmt_hir_variable h_var_orig)
+
+  | HUnOp(h_var_res, un_op, h_var_orig) ->
+      sprintf "%s = %s (%s)"
+        (fmt_hir_variable h_var_res)
+        (fmt_un_op un_op)
+        (fmt_hir_variable h_var_orig)
+
+  | HBinOp(h_var_res, bin_op, h_var_lhs, h_var_rhs) ->
+      sprintf "%s = (%s) %s (%s)"
+        (fmt_hir_variable h_var_res)
+        (fmt_bin_op bin_op)
+        (fmt_hir_variable h_var_lhs)
+        (fmt_hir_variable h_var_rhs)
+
+  | HExprInvoke(h_var_res, h_var_func, h_var_args) ->
+      let arg_fmt_xs = List.map fmt_hir_variable h_var_args in
+      let args_fmt = fmt_join_strs ", " arg_fmt_xs in
+
+      sprintf "%s = (%s)(%s)"
+        (fmt_hir_variable h_var_res)
+        (fmt_hir_variable h_var_func)
+        args_fmt
+
+  | HArrayExpr(h_var_res, h_var_elems) ->
+      let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
+      let elems_fmt = fmt_join_strs ", " elem_fmt_xs in
+      sprintf "%s = [%s]"
+        (fmt_hir_variable h_var_res)
+        elems_fmt
+
+  | HIndexExpr(h_var_res, h_var_idx, h_var_arr) ->
+      sprintf "%s = IDX (%s)[%s]"
+        (fmt_hir_variable h_var_res)
+        (fmt_hir_variable h_var_arr)
+        (fmt_hir_variable h_var_idx)
+
+  | HTupleIndexExpr(h_var_res, i, h_var_tup) ->
+      sprintf "%s = (%s).%d"
+        (fmt_hir_variable h_var_res)
+        (fmt_hir_variable h_var_tup)
+        i
+
+  | HTupleExpr(h_var_res, h_var_elems) ->
+      let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
+      let elems_fmt = fmt_join_strs ", " elem_fmt_xs in
+      sprintf "%s = (%s)"
+        (fmt_hir_variable h_var_res)
+        elems_fmt
+
+  | HVariantCtorExpr(h_var_res, ctor_name, h_var_elems) ->
+      let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
+      let elems_fmt = fmt_join_strs ", " elem_fmt_xs in
+      sprintf "%s = %s(%s)"
+        (fmt_hir_variable h_var_res)
+        ctor_name
+        elems_fmt
+
+  | _ -> failwith "Unimplemented"
+  end
+;;
+
+
+(*
+let fmt_hassign_idx_lval hassign_idx_lval : string =
+  let open Printf in
+  begin match hassign_idx_lval with
+  | HALStaticIndex(i) -> sprintf ".%d" i
+  | HALIndex(_) -> failwith "Unimplemented"
+  end
+;;
+*)
+
+
+
+(*
+let fmt_hstmt hstmt : string =
+  let open Printf in
+  begin match hstmt with
+  | HDeclStmt(name, t, * hir_instr
+  | HDeclDefStmt of (string * berk_t) list
+  | HAssignStmt of string * hassign_idx_lval list * hir_instr
+  | HExprStmt of hir_instr
+  | HReturnStmt of hir_instr
+  | HStmts of hstmt list
+  end
+;;
+*)
+
+
+let rec fmt_hir_scope ?(ind = "") {declarations; instructions} : string =
+  let declaration_fmt_xs = List.map fmt_hir_variable declarations in
+  let declaration_fmt_prefix_xs =
+    List.map (
+      Printf.sprintf "%s%s" (ind ^ "  ")
+    ) declaration_fmt_xs
+  in
+  let declarations_fmt = fmt_join_strs "\n" declaration_fmt_prefix_xs in
+
+  let instruction_fmt_xs =
+    List.map (
+      fmt_hir_scope_instr ~ind:(ind ^ "  ")
+    ) instructions in
+  let instructions_fmt = fmt_join_strs "\n" instruction_fmt_xs in
+
+  Printf.sprintf (
+    "%s{\n" ^^
+    "%sdeclarations:\n" ^^
+    "%s%s\n" ^^
+    "%sinstructions:\n" ^^
+    "%s%s\n" ^^
+    "%s}\n"
+  )
+    ind
+    ind
+    (ind ^ ind) declarations_fmt
+    ind
+    (ind ^ ind) instructions_fmt
+    ind
+
+
+and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
+  let open Printf in
+  begin match hir_scope_instr with
+  | Instr(h_instr) ->
+      sprintf "%s%s"
+        ind (fmt_hir_instr h_instr)
+
+  | Scope(h_scope) ->
+      fmt_hir_scope ~ind:ind h_scope
+
+  | CondScope(h_var_cond, h_scope_then, h_scope_else) ->
+      sprintf (
+        "%sif (%s) {\n" ^^
+        "%s" ^^
+        "%s}\n" ^^
+        "%selse {\n" ^^
+        "%s" ^^
+        "%s}\n"
+      )
+        ind (fmt_hir_variable h_var_cond)
+        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_then)
+        ind
+        ind
+        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_else)
+        ind
+
+  | CondLoopScope(h_var_cond, h_scope_body) ->
+      sprintf (
+        "%swhile (%s) {\n" ^^
+        "%s" ^^
+        "%s}\n"
+      )
+        ind (fmt_hir_variable h_var_cond)
+        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_body)
+        ind
+  end
+;;
+
+
+let fmt_hf_param (name, t) : string =
+  Printf.sprintf "%s: %s" name (fmt_type t)
+;;
+
+
+let fmt_hfunc_decl_t {hf_name; hf_params; hf_ret_t} : string =
+  let hf_param_fmt_xs = List.map fmt_hf_param hf_params in
+  let hf_params_fmt = fmt_join_strs ", " hf_param_fmt_xs in
+
+  Printf.sprintf "fn %s(%s): %s"
+    hf_name
+    hf_params_fmt
+    (fmt_type hf_ret_t)
+;;
+
+
+let fmt_hfunc_def_t {hf_decl; hf_scope} =
+  Printf.sprintf (
+    "%s {\n" ^^
+    "%s" ^^
+    "}\n"
+  )
+    (fmt_hfunc_decl_t hf_decl)
+    (fmt_hir_scope ~ind:"  " hf_scope)
+;;
+
+
+type hir_ctxt = {
+  seen_vars: hir_variable StrMap.t;
+  tmp_counter: int;
+}
 
 let default_hir_ctxt : hir_ctxt = {
   seen_vars = StrMap.empty;
@@ -346,4 +591,31 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
 
       (hctxt, hscope)
   end
+;;
+
+
+let rfunc_decl_t_to_hfunc_decl_t {rf_name; rf_params; rf_ret_t} : hfunc_decl_t =
+  {
+    hf_name = rf_name;
+    hf_params = rf_params;
+    hf_ret_t = rf_ret_t;
+  }
+;;
+
+
+let rfunc_def_t_to_hfunc_def_t {rf_decl; rf_stmts} : hfunc_def_t =
+  let hf_decl = rfunc_decl_t_to_hfunc_decl_t rf_decl in
+
+  let (_, hf_scope) =
+    List.fold_left (
+      fun (hctxt, hf_scope) rstmt ->
+        let (hctxt, hf_scope) = rstmt_to_hir hctxt hf_scope rstmt in
+        (hctxt, hf_scope)
+    ) (default_hir_ctxt, empty_scope) rf_stmts
+  in
+
+  {
+    hf_decl = hf_decl;
+    hf_scope = hf_scope;
+  }
 ;;
