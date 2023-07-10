@@ -185,7 +185,7 @@ let fmt_hir_instr hir_instr : string =
   let open Printf in
   begin match hir_instr with
   | HReturn(h_var_res) ->
-      fmt_hir_variable h_var_res
+      sprintf "return %s" (fmt_hir_variable h_var_res)
 
   | HTupleIndex(h_var_res, i, h_var_tup) ->
       sprintf "%s = (%s).%d"
@@ -222,8 +222,8 @@ let fmt_hir_instr hir_instr : string =
   | HBinOp(h_var_res, bin_op, h_var_lhs, h_var_rhs) ->
       sprintf "%s = (%s) %s (%s)"
         (fmt_hir_variable h_var_res)
-        (fmt_bin_op bin_op)
         (fmt_hir_variable h_var_lhs)
+        (fmt_bin_op bin_op)
         (fmt_hir_variable h_var_rhs)
 
   | HExprInvoke(h_var_res, h_var_func, h_var_args) ->
@@ -305,30 +305,32 @@ let rec fmt_hir_scope ?(ind = "") {declarations; instructions} : string =
   let declaration_fmt_xs = List.map fmt_hir_variable declarations in
   let declaration_fmt_prefix_xs =
     List.map (
-      Printf.sprintf "%s%s" (ind ^ "  ")
+      Printf.sprintf "%s%s" (ind ^ "   ")
     ) declaration_fmt_xs
   in
-  let declarations_fmt = fmt_join_strs "\n" declaration_fmt_prefix_xs in
+  let declaration_fmt_prefix_xs_rev = List.rev declaration_fmt_prefix_xs in
+  let declarations_fmt = fmt_join_strs "\n" declaration_fmt_prefix_xs_rev in
 
   let instruction_fmt_xs =
     List.map (
-      fmt_hir_scope_instr ~ind:(ind ^ "  ")
+      fmt_hir_scope_instr ~ind:(ind ^ "   ")
     ) instructions in
-  let instructions_fmt = fmt_join_strs "\n" instruction_fmt_xs in
+  let instruction_fmt_xs_rev = List.rev instruction_fmt_xs in
+  let instructions_fmt = fmt_join_strs "\n" instruction_fmt_xs_rev in
 
   Printf.sprintf (
-    "%s{\n" ^^
-    "%sdeclarations:\n" ^^
-    "%s%s\n" ^^
-    "%sinstructions:\n" ^^
-    "%s%s\n" ^^
-    "%s}\n"
+    "%sscope {\n" ^^
+    "%s declarations:\n" ^^
+    "%s\n" ^^
+    "%s instructions:\n" ^^
+    "%s\n" ^^
+    "%s}"
   )
     ind
     ind
-    (ind ^ ind) declarations_fmt
+    declarations_fmt
     ind
-    (ind ^ ind) instructions_fmt
+    instructions_fmt
     ind
 
 
@@ -345,27 +347,27 @@ and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
   | CondScope(h_var_cond, h_scope_then, h_scope_else) ->
       sprintf (
         "%sif (%s) {\n" ^^
-        "%s" ^^
+        "%s\n" ^^
         "%s}\n" ^^
         "%selse {\n" ^^
-        "%s" ^^
-        "%s}\n"
+        "%s\n" ^^
+        "%s}"
       )
         ind (fmt_hir_variable h_var_cond)
-        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_then)
+        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_then)
         ind
         ind
-        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_else)
+        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_else)
         ind
 
   | CondLoopScope(h_var_cond, h_scope_body) ->
       sprintf (
         "%swhile (%s) {\n" ^^
-        "%s" ^^
-        "%s}\n"
+        "%s\n" ^^
+        "%s}"
       )
         ind (fmt_hir_variable h_var_cond)
-        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_body)
+        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_body)
         ind
   end
 ;;
@@ -390,11 +392,11 @@ let fmt_hfunc_decl_t {hf_name; hf_params; hf_ret_t} : string =
 let fmt_hfunc_def_t {hf_decl; hf_scope} =
   Printf.sprintf (
     "%s {\n" ^^
-    "%s" ^^
+    "%s\n" ^^
     "}\n"
   )
     (fmt_hfunc_decl_t hf_decl)
-    (fmt_hir_scope ~ind:"  " hf_scope)
+    (fmt_hir_scope ~ind:"   " hf_scope)
 ;;
 
 
@@ -441,7 +443,33 @@ let rec rexpr_to_hir hctxt hscope rexpr
   | RValF32(_) -> failwith "Unimplemented"
   | RValBool(_) -> failwith "Unimplemented"
   | RValStr(_) -> failwith "Unimplemented"
-  | RValInt(_, _) -> failwith "Unimplemented"
+
+  | RValInt(t, x) ->
+      let hval =
+        begin match t with
+        | U8 ->  HValU8 (x)
+        | U16 -> HValU16(x)
+        | U32 -> HValU32(x)
+        | U64 -> HValU64(x)
+        | I8 ->  HValI8 (x)
+        | I16 -> HValI16(x)
+        | I32 -> HValI32(x)
+        | I64 -> HValI64(x)
+        | _ ->
+            failwith (
+              Printf.sprintf "Nonsense type [%s] for int [%d] convert to HIR."
+                (fmt_type t) x
+            )
+        end
+      in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, hval)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
 
   | RValCast(_, _, _) -> failwith "Unimplemented"
   | RUnOp(_, _, _) -> failwith "Unimplemented"
