@@ -22,10 +22,6 @@ type hir_value =
 the instruction. The remaining hir_variables are the argument(s) to the
 instruction. *)
 type hir_instr =
-  (* LHS is a new variable that represents the function argument indicated by
-  the given name and func-arg-index. *)
-  | HArgToVar of hir_variable * string * int
-
   (* Return from the function using the given variable. *)
   | HReturn of hir_variable
 
@@ -36,6 +32,10 @@ type hir_instr =
   (* LHS is resultant variable. Middle is indexing variable. RHS is indexed
   variable. *)
   | HDynamicIndex of hir_variable * hir_variable * hir_variable
+
+  (* LHS is a new variable that represents the function argument indicated by
+  the given name and func-arg-index. *)
+  | HArgToVar of hir_variable * string * int
 
   | HValueAssign of hir_variable * hir_value
 
@@ -204,13 +204,19 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_arr)
         (fmt_hir_variable h_var_idx)
 
+  | HArgToVar(h_var_res, func_arg_name, func_arg_idx) ->
+      sprintf "%s = arg(%d) # %s"
+        (fmt_hir_variable h_var_res)
+        func_arg_idx
+        func_arg_name
+
   | HValueAssign(h_var_res, h_val) ->
       sprintf "%s = %s"
         (fmt_hir_variable h_var_res)
         (fmt_hir_value h_val)
 
   | HValRawArray(_) ->
-      failwith "Unimplemented"
+      failwith "fmt_hir_instr(HValRawArray): Unimplemented"
 
   | HValCast(h_var_res, cast_op, h_var_orig) ->
       sprintf "%s = %s (%s)"
@@ -274,7 +280,7 @@ let fmt_hir_instr hir_instr : string =
         ctor_name
         elems_fmt
 
-  | _ -> failwith "Unimplemented"
+  | _ -> failwith "fmt_hir_instr(): Unimplemented"
   end
 ;;
 
@@ -449,7 +455,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
           (hctxt, hscope, decl)
       end
 
-  | RValFunc(_, _) -> failwith "Unimplemented"
+  | RValFunc(_, _) -> failwith "rexpr_to_hir(RValFunc): Unimplemented"
 
   | RValNil ->
       let (hctxt, tmp) = get_tmp_name hctxt in
@@ -460,11 +466,11 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
-  | RValF128(_) -> failwith "Unimplemented"
-  | RValF64(_) -> failwith "Unimplemented"
-  | RValF32(_) -> failwith "Unimplemented"
-  | RValBool(_) -> failwith "Unimplemented"
-  | RValStr(_) -> failwith "Unimplemented"
+  | RValF128(_) -> failwith "rexpr_to_hir(RValF128): Unimplemented"
+  | RValF64(_) -> failwith "rexpr_to_hir(RValF64): Unimplemented"
+  | RValF32(_) -> failwith "rexpr_to_hir(RValF32): Unimplemented"
+  | RValBool(_) -> failwith "rexpr_to_hir(RValBool): Unimplemented"
+  | RValStr(_) -> failwith "rexpr_to_hir(RValStr): Unimplemented"
 
   | RValInt(t, x) ->
       let hval =
@@ -493,8 +499,8 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
-  | RValCast(_, _, _) -> failwith "Unimplemented"
-  | RUnOp(_, _, _) -> failwith "Unimplemented"
+  | RValCast(_, _, _) -> failwith "rexpr_to_hir(RValCast): Unimplemented"
+  | RUnOp(_, _, _) -> failwith "rexpr_to_hir(RUnOp): Unimplemented"
   | RBinOp(t, op, lhs, rhs) ->
       let (hctxt, hscope, lhs_var) = rexpr_to_hir hctxt hscope lhs in
       let (hctxt, hscope, rhs_var) = rexpr_to_hir hctxt hscope rhs in
@@ -546,15 +552,22 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
-
-  | RIndexExpr(_, _, _) -> failwith "Unimplemented"
-  | RTupleIndexExpr(_, _, _) -> failwith "Unimplemented"
-  | RArrayExpr(_, _) -> failwith "Unimplemented"
-  | RValRawArray(_) -> failwith "Unimplemented"
-  | RVariantCtorExpr(_, _, _) -> failwith "Unimplemented"
-  | RExprInvoke(_, _, _) -> failwith "Unimplemented"
-  | RWhileExpr(_, _, _, _) -> failwith "Unimplemented"
-  | RMatchExpr(_, _, _) -> failwith "Unimplemented"
+  | RIndexExpr(_, _, _) ->
+      failwith "rexpr_to_hir(RIndexExpr): Unimplemented"
+  | RTupleIndexExpr(_, _, _) ->
+      failwith "rexpr_to_hir(RTupleIndexExpr): Unimplemented"
+  | RArrayExpr(_, _) ->
+      failwith "rexpr_to_hir(RArrayExpr): Unimplemented"
+  | RValRawArray(_) ->
+      failwith "rexpr_to_hir(RValRawArray): Unimplemented"
+  | RVariantCtorExpr(_, _, _) ->
+      failwith "rexpr_to_hir(RVariantCtorExpr): Unimplemented"
+  | RExprInvoke(_, _, _) ->
+      failwith "rexpr_to_hir(RExprInvoke): Unimplemented"
+  | RWhileExpr(_, _, _, _) ->
+      failwith "rexpr_to_hir(RWhileExpr): Unimplemented"
+  | RMatchExpr(_, _, _) ->
+      failwith "rexpr_to_hir(RMatchExpr): Unimplemented"
   end
 
 
