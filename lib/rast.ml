@@ -28,7 +28,10 @@ type rexpr =
   | RValStr of string
   | RValInt of berk_t * int
 
+  (* A typical variable. *)
   | RValVar of berk_t * string
+
+  (* A variable that represents a function as a first-class value. *)
   | RValFunc of berk_t * string
 
   | RValRawArray of berk_t

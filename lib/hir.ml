@@ -22,6 +22,11 @@ type hir_value =
 the instruction. The remaining hir_variables are the argument(s) to the
 instruction. *)
 type hir_instr =
+  (* LHS is a new variable that represents the function argument indicated by
+  the given name and func-arg-index. *)
+  | HArgToVar of hir_variable * string * int
+
+  (* Return from the function using the given variable. *)
   | HReturn of hir_variable
 
   (* "Tuple-index" into the RHS variable with the given constant integer index,
@@ -401,11 +406,13 @@ let fmt_hfunc_def_t {hf_decl; hf_scope} =
 
 
 type hir_ctxt = {
+  func_vars: (berk_t * int) StrMap.t;
   seen_vars: hir_variable StrMap.t;
   tmp_counter: int;
 }
 
 let default_hir_ctxt : hir_ctxt = {
+  func_vars = StrMap.empty;
   seen_vars = StrMap.empty;
   tmp_counter = 0;
 }
@@ -424,8 +431,23 @@ let rec rexpr_to_hir hctxt hscope rexpr
 =
   begin match rexpr with
   | RValVar(t, name) ->
-      let decl = (t, name) in
-      (hctxt, hscope, decl)
+      (* Check whether the given name represents a function argument. *)
+      begin match (StrMap.find_opt name hctxt.func_vars) with
+      | Some((t, i)) ->
+          (* This name refers to a function argument. *)
+          let (hctxt, tmp) = get_tmp_name hctxt in
+          let decl = (t, tmp) in
+          let decls = decl :: hscope.declarations in
+          let instr = Instr(HArgToVar(decl, name, i)) in
+          let instrs = instr :: hscope.instructions in
+          let hscope = {declarations = decls; instructions = instrs} in
+          (hctxt, hscope, decl)
+
+      | None ->
+          (* This was not a function argument. *)
+          let decl = (t, name) in
+          (hctxt, hscope, decl)
+      end
 
   | RValFunc(_, _) -> failwith "Unimplemented"
 
@@ -631,15 +653,33 @@ let rfunc_decl_t_to_hfunc_decl_t {rf_name; rf_params; rf_ret_t} : hfunc_decl_t =
 ;;
 
 
+let populate_hctxt_with_func_args hctxt {hf_params; _} : hir_ctxt =
+  let (hctxt, _) =
+    List.fold_left (
+      fun (hctxt, i) (name, t) ->
+        let func_vars' = StrMap.add name (t, i) hctxt.func_vars in
+        let hctxt = {hctxt with func_vars = func_vars'} in
+
+        (hctxt, (i + 1))
+    ) (hctxt, 0) hf_params
+  in
+
+  hctxt
+;;
+
+
 let rfunc_def_t_to_hfunc_def_t {rf_decl; rf_stmts} : hfunc_def_t =
   let hf_decl = rfunc_decl_t_to_hfunc_decl_t rf_decl in
+
+  (* Initialize a ctxt with the function arguments. *)
+  let hctxt = populate_hctxt_with_func_args default_hir_ctxt hf_decl in
 
   let (_, hf_scope) =
     List.fold_left (
       fun (hctxt, hf_scope) rstmt ->
         let (hctxt, hf_scope) = rstmt_to_hir hctxt hf_scope rstmt in
         (hctxt, hf_scope)
-    ) (default_hir_ctxt, empty_scope) rf_stmts
+    ) (hctxt, empty_scope) rf_stmts
   in
 
   {
