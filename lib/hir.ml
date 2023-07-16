@@ -42,7 +42,7 @@ type hir_instr =
   (* Create a raw array with the type of the given resultant variable. *)
   | HValRawArray of hir_variable
 
-  (* Perform an operation on the target variable(s), producting the resultant
+  (* Perform an operation on the target variable(s), producing the resultant
   variable. *)
   | HValCast of hir_variable * cast_op * hir_variable
   | HUnOp of hir_variable * un_op * hir_variable
@@ -455,7 +455,14 @@ let rec rexpr_to_hir hctxt hscope rexpr
           (hctxt, hscope, decl)
       end
 
-  | RValFunc(_, _) -> failwith "rexpr_to_hir(RValFunc): Unimplemented"
+  | RValFunc(func_t, func_name) ->
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (func_t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValFunc(func_name))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
 
   | RValNil ->
       let (hctxt, tmp) = get_tmp_name hctxt in
