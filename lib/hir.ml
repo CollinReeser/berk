@@ -64,9 +64,6 @@ type hir_instr =
   the array in the third hir_variable. *)
   | HIndexExpr of hir_variable * hir_variable * hir_variable
 
-  (* The resultant hir_variable is the tuple of the given hir_variables. *)
-  | HTupleExpr of hir_variable * hir_variable list
-
   (* The resultant hir_variable is the variant value construction of the given
   name and the given possibly-zero list of constructor fields. *)
   | HVariantCtorExpr of hir_variable * string * hir_variable list
@@ -268,13 +265,6 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_arr)
         (fmt_hir_variable h_var_idx)
-
-  | HTupleExpr(h_var_res, h_var_elems) ->
-      let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
-      let elems_fmt = fmt_join_strs ", " elem_fmt_xs in
-      sprintf "%s = (%s)"
-        (fmt_hir_variable h_var_res)
-        elems_fmt
 
   | HVariantCtorExpr(h_var_res, ctor_name, h_var_elems) ->
       let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
@@ -567,7 +557,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
       let decls = decl :: hscope.declarations in
-      let instr = Instr(HTupleExpr(decl, hvars)) in
+      let instr = Instr(HAggregate(decl, hvars)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
