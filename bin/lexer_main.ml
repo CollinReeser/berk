@@ -11,6 +11,8 @@ open Berk.Llvm_utility
 
 
 let () =
+  let timing_program_start = Unix.gettimeofday () in
+
   let source_text = {|
     extern fn printf(fmt: string, ...): i32
 
@@ -771,13 +773,22 @@ let () =
   Printexc.record_backtrace true ;
   Llvm.enable_pretty_stacktrace () ;
 
+  let timing_lex_start = Unix.gettimeofday () in
+
   (* Lexing. *)
   let lexbuf = Sedlexing.Latin1.from_gen (Gen.of_string source_text) in
   let tokens = tokenize lexbuf in
+
+  let timing_lex_end = Unix.gettimeofday () in
+
   print_tokens tokens ;
+
+  let timing_parse_start = Unix.gettimeofday () in
 
   (* Parsing into module-declaration AST list. *)
   let mod_decls = parse_tokens ~trace:true tokens in
+
+  let timing_parse_end = Unix.gettimeofday () in
 
   (* Currently require declaration before use, but we build a list of module
   declarations in reverse order. *)
@@ -790,8 +801,13 @@ let () =
     ) mod_decls
   in
 
+  let timing_typecheck_start = Unix.gettimeofday () in
+
   (* Typechecking. *)
   let mod_decls_tc = type_check_mod_decls mod_decls in
+
+  let timing_typecheck_end = Unix.gettimeofday () in
+  let timing_uniquify_varnames_start = Unix.gettimeofday () in
 
   (* Uniquify varnames for MIR generation. *)
   let mod_decls_tc_rewritten =
@@ -807,6 +823,8 @@ let () =
     ) mod_decls_tc
   in
 
+  let timing_uniquify_varnames_end = Unix.gettimeofday () in
+
   (* Print typechecked source. *)
   let asts_fmted =
     List.map
@@ -814,6 +832,17 @@ let () =
       mod_decls_tc_rewritten
   in
   let _ = List.iter (Printf.printf "%s") asts_fmted in
+
+  (* let timing_ast_to_rast_start = Unix.gettimeofday () in
+  let timing_ast_to_rast_end = Unix.gettimeofday () in
+
+  let timing_rast_to_hir_start = Unix.gettimeofday () in
+  let timing_rast_to_hir_end = Unix.gettimeofday () in
+
+  let timing_hir_to_mir_start = Unix.gettimeofday () in
+  let timing_hir_to_mir_end = Unix.gettimeofday () in *)
+
+  let timing_ast_to_rast_to_hir_to_mir_start = Unix.gettimeofday () in
 
   (* Generate MIR. *)
   let mir_ctxts =
@@ -844,12 +873,16 @@ let () =
     ) mod_decls_tc_rewritten
   in
 
+  let timing_ast_to_rast_to_hir_to_mir_end = Unix.gettimeofday () in
+
   (* Print MIR. *)
   let _ =
     List.iter (
       fun mir_ctxt -> Printf.printf "%s%!" (fmt_mir_ctxt mir_ctxt)
     ) mir_ctxts
   in
+
+  let timing_llvm_init_start = Unix.gettimeofday () in
 
   (* Setup LLVM context. *)
   Llvm.enable_pretty_stacktrace ();
@@ -871,6 +904,8 @@ let () =
     Int64.to_int llvm_sizeof_int64
   in
 
+  let timing_llvm_init_end = Unix.gettimeofday () in
+
   let mod_gen_ctxt : module_gen_context = {
     func_sigs = StrMap.empty;
     llvm_mod = the_module;
@@ -878,6 +913,8 @@ let () =
     berk_t_to_llvm_t = berk_t_to_llvm_t llvm_sizeof llvm_ctxt;
     llvm_sizeof = llvm_sizeof;
   } in
+
+  let timing_llvm_codegen_start = Unix.gettimeofday () in
 
   (* MIR -> LLVM codegen. *)
   let _ =
@@ -890,20 +927,140 @@ let () =
       mir_ctxts
   in
 
+  let timing_llvm_codegen_end = Unix.gettimeofday () in
+  let timing_output_gen_start = Unix.gettimeofday () in
+  let timing_output_ll_start = Unix.gettimeofday () in
+
   (* Dump various output files from populated LLVM context. *)
+
+  (* Dump LLVM human-readable IR. *)
   let filename_ll = "output.ll" in
   dump_llvm_ir filename_ll the_module ;
 
+  let timing_output_ll_end = Unix.gettimeofday () in
+  let timing_output_s_start = Unix.gettimeofday () in
+
+  (* Dump human-readable assembly. *)
   let filename_asm = "output.s" in
   let file_type = Llvm_target.CodeGenFileType.AssemblyFile in
   dump_to_file file_type filename_asm the_fpm the_module ;
 
+  let timing_output_s_end = Unix.gettimeofday () in
+  let timing_output_o_start = Unix.gettimeofday () in
+
+  (* Dump machine-readable object file. *)
   let filename_obj = "output.o" in
   let file_type = Llvm_target.CodeGenFileType.ObjectFile in
   dump_to_file file_type filename_obj the_fpm the_module ;
 
+  let timing_output_o_end = Unix.gettimeofday () in
+  let timing_output_exe_start = Unix.gettimeofday () in
+
+  (* Dump executable. *)
   let filename_exe = "output" in
   generate_executable filename_exe filename_obj ;
+
+  let timing_output_exe_end = Unix.gettimeofday () in
+  let timing_output_gen_end = Unix.gettimeofday () in
+
+  let timing_program_end = Unix.gettimeofday () in
+
+  (* Calcuclate and print timing info for compiler stages. *)
+  let _ = begin
+    let timing_lex = timing_lex_end -. timing_lex_start in
+    let timing_parse = timing_parse_end -. timing_parse_start in
+    let timing_typecheck = timing_typecheck_end -. timing_typecheck_start in
+    let timing_uniquify_varnames = (
+      timing_uniquify_varnames_end -. timing_uniquify_varnames_start
+    ) in
+    let timing_ast_to_rast_to_hir_to_mir = (
+      timing_ast_to_rast_to_hir_to_mir_end -.
+      timing_ast_to_rast_to_hir_to_mir_start
+    ) in
+    let timing_llvm_init = timing_llvm_init_end -. timing_llvm_init_start in
+    let timing_llvm_codegen = (
+      timing_llvm_codegen_end -. timing_llvm_codegen_start
+    ) in
+    let timing_output_ll = timing_output_ll_end -. timing_output_ll_start in
+    let timing_output_s = timing_output_s_end -. timing_output_s_start in
+    let timing_output_o = timing_output_o_end -. timing_output_o_start in
+    let timing_output_exe = timing_output_exe_end -. timing_output_exe_start in
+    let timing_output_gen = timing_output_gen_end -. timing_output_gen_start in
+
+    let timing_program = timing_program_end -. timing_program_start in
+
+    let timing_lex_pct = 100.0 *. timing_lex /. timing_program in
+    let timing_parse_pct = 100.0 *. timing_parse /. timing_program in
+    let timing_typecheck_pct = 100.0 *. timing_typecheck /. timing_program in
+    let timing_uniquify_varnames_pct =
+      100.0 *. timing_uniquify_varnames /. timing_program
+    in
+    let timing_ast_to_rast_to_hir_to_mir_pct =
+      100.0 *. timing_ast_to_rast_to_hir_to_mir /. timing_program
+    in
+    let timing_llvm_init_pct = 100.0 *. timing_llvm_init /. timing_program in
+    let timing_output_ll_pct = 100.0 *. timing_output_ll /. timing_program in
+    let timing_output_s_pct = 100.0 *. timing_output_s /. timing_program in
+    let timing_output_o_pct = 100.0 *. timing_output_o /. timing_program in
+    let timing_output_exe_pct = 100.0 *. timing_output_exe /. timing_program in
+    let timing_llvm_codegen_pct =
+      100.0 *. timing_llvm_codegen /. timing_program
+    in
+    let timing_output_gen_pct = 100.0 *. timing_output_gen /. timing_program in
+
+    Printf.printf "timing_lex                      : (%6.2f%%) %f s\n"
+      timing_lex_pct
+      timing_lex
+    ;
+    Printf.printf "timing_parse                    : (%6.2f%%) %f s\n"
+      timing_parse_pct
+      timing_parse
+    ;
+    Printf.printf "timing_typecheck                : (%6.2f%%) %f s\n"
+      timing_typecheck_pct
+      timing_typecheck
+    ;
+    Printf.printf "timing_uniquify_varnames        : (%6.2f%%) %f s\n"
+      timing_uniquify_varnames_pct
+      timing_uniquify_varnames
+    ;
+    Printf.printf "timing_ast_to_rast_to_hir_to_mir: (%6.2f%%) %f s\n"
+      timing_ast_to_rast_to_hir_to_mir_pct
+      timing_ast_to_rast_to_hir_to_mir
+    ;
+    Printf.printf "timing_llvm_init                : (%6.2f%%) %f s\n"
+      timing_llvm_init_pct
+      timing_llvm_init
+    ;
+    Printf.printf "timing_llvm_codegen             : (%6.2f%%) %f s\n"
+      timing_llvm_codegen_pct
+      timing_llvm_codegen
+    ;
+    Printf.printf "timing_output_gen               : (%6.2f%%) %f s\n"
+      timing_output_gen_pct
+      timing_output_gen
+    ;
+    Printf.printf "  timing_output_ll              : (%6.2f%%) %f s\n"
+      timing_output_ll_pct
+      timing_output_ll
+    ;
+    Printf.printf "  timing_output_s               : (%6.2f%%) %f s\n"
+      timing_output_s_pct
+      timing_output_s
+    ;
+    Printf.printf "  timing_output_o               : (%6.2f%%) %f s\n"
+      timing_output_o_pct
+      timing_output_o
+    ;
+    Printf.printf "  timing_output_exe             : (%6.2f%%) %f s\n"
+      timing_output_exe_pct
+      timing_output_exe
+    ;
+    Printf.printf "timing_program                  : (100.00%%) %f s\n"
+      timing_program
+    ;
+    ()
+  end in
 
   ()
 ;;
