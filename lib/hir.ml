@@ -60,10 +60,6 @@ type hir_instr =
   the array in the third hir_variable. *)
   | HIndexExpr of hir_variable * hir_variable * hir_variable
 
-  (* The resultant hir_variable is the static index into the target tuple expr
-  hir_variable. *)
-  | HTupleIndexExpr of hir_variable * int * hir_variable
-
   (* The resultant hir_variable is the tuple of the given hir_variables. *)
   | HTupleExpr of hir_variable * hir_variable list
 
@@ -258,12 +254,6 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_arr)
         (fmt_hir_variable h_var_idx)
-
-  | HTupleIndexExpr(h_var_res, i, h_var_tup) ->
-      sprintf "%s = (%s).%d"
-        (fmt_hir_variable h_var_res)
-        (fmt_hir_variable h_var_tup)
-        i
 
   | HTupleExpr(h_var_res, h_var_elems) ->
       let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
@@ -508,6 +498,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
   | RValCast(_, _, _) -> failwith "rexpr_to_hir(RValCast): Unimplemented"
   | RUnOp(_, _, _) -> failwith "rexpr_to_hir(RUnOp): Unimplemented"
+
   | RBinOp(t, op, lhs, rhs) ->
       let (hctxt, hscope, lhs_var) = rexpr_to_hir hctxt hscope lhs in
       let (hctxt, hscope, rhs_var) = rexpr_to_hir hctxt hscope rhs in
@@ -559,10 +550,22 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
+  | RTupleIndexExpr(_, idx, tuple_exp) ->
+      let tup_t = rexpr_type tuple_exp in
+      let elem_t = unwrap_aggregate_indexable tup_t idx in
+
+      let (hctxt, hscope, tup_var) = rexpr_to_hir hctxt hscope tuple_exp in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (elem_t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HTupleIndex(decl, idx, tup_var)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
+
   | RIndexExpr(_, _, _) ->
       failwith "rexpr_to_hir(RIndexExpr): Unimplemented"
-  | RTupleIndexExpr(_, _, _) ->
-      failwith "rexpr_to_hir(RTupleIndexExpr): Unimplemented"
   | RArrayExpr(_, _) ->
       failwith "rexpr_to_hir(RArrayExpr): Unimplemented"
   | RValRawArray(_) ->
