@@ -25,6 +25,10 @@ type hir_instr =
   (* Return from the function using the given variable. *)
   | HReturn of hir_variable
 
+  (* The LHS is a variable representing an aggregation of other variables
+  provided by the RHS. *)
+  | HAggregate of hir_variable * hir_variable list
+
   (* "Tuple-index" into the RHS variable with the given constant integer index,
   yielding the value in the resultant LHS variable. ie: `tmp = tup.3;` *)
   | HTupleIndex of hir_variable * int * hir_variable
@@ -149,6 +153,9 @@ type hfunc_def_t = {
 }
 
 
+let hir_variable_type (t, _) = t ;;
+
+
 let empty_scope : hir_scope = {
   declarations = [];
   instructions = [];
@@ -187,6 +194,13 @@ let fmt_hir_instr hir_instr : string =
   begin match hir_instr with
   | HReturn(h_var_res) ->
       sprintf "return %s" (fmt_hir_variable h_var_res)
+
+  | HAggregate(h_var_res, h_var_elems) ->
+      let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
+      let elems_fmt = fmt_join_strs ", " elem_fmt_xs in
+      sprintf "%s = (%s)"
+        (fmt_hir_variable h_var_res)
+        elems_fmt
 
   | HTupleIndex(h_var_res, i, h_var_tup) ->
       sprintf "%s = (%s).%d"
@@ -463,10 +477,18 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
+  | RValBool(b) ->
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (Bool, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValBool(b))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
+
   | RValF128(_) -> failwith "rexpr_to_hir(RValF128): Unimplemented"
   | RValF64(_) -> failwith "rexpr_to_hir(RValF64): Unimplemented"
   | RValF32(_) -> failwith "rexpr_to_hir(RValF32): Unimplemented"
-  | RValBool(_) -> failwith "rexpr_to_hir(RValBool): Unimplemented"
   | RValStr(_) -> failwith "rexpr_to_hir(RValStr): Unimplemented"
 
   | RValInt(t, x) ->
@@ -564,14 +586,72 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
+  | RVariantCtorExpr(variant_t, ctor_name, ctor_args) ->
+      (* Variant index, a static integer. *)
+      let ctor_idx = get_tag_index_by_variant_ctor variant_t ctor_name in
+
+      let idx_t = U8 in
+
+      (* Generate HIR for the variant constructor index. *)
+      let (hctxt, hscope, ctor_idx_var) = begin
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (idx_t, tmp) in
+        let decls = decl :: hscope.declarations in
+        let instr = Instr(HValueAssign(decl, HValU8(ctor_idx))) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
+        (hctxt, hscope, decl)
+      end in
+
+      (* The (reversed) list of types that make up this aggregate, starting with
+      the variant constructor index. If there are no fields for this
+      constructor, then this is also the entirety of the aggregate type. *)
+      let agg_ts_rev = [idx_t] in
+
+      (* Generate HIR for the variant constructor fields, if any. *)
+      let ((hctxt, hscope, agg_ts_rev), ctor_arg_vars) =
+        List.fold_left_map (
+          fun (hctxt, hscope, agg_ts_rev) ctor_arg ->
+            let elem_t = rexpr_type ctor_arg in
+            let agg_ts_rev = elem_t :: agg_ts_rev in
+
+            let (hctxt, hscope, ctor_arg_var) =
+              rexpr_to_hir hctxt hscope ctor_arg
+            in
+            ((hctxt, hscope, agg_ts_rev), ctor_arg_var)
+        ) (hctxt, hscope, agg_ts_rev) ctor_args
+      in
+
+      (* Our list of aggregate element types was generated in reverse order. *)
+      let agg_ts = List.rev agg_ts_rev in
+
+      (* The variant is represented internally as a tuple of the ctor index
+      and its fields. *)
+      let agg_t = Tuple(agg_ts) in
+
+      (* The elements of the variant aggregate are the ctor idx and any fields
+      it may have had. *)
+      let agg_elems = ctor_idx_var :: ctor_arg_vars in
+
+      (* Generate HIR for the final aggregate representation of the variant. *)
+      let (hctxt, hscope, variant_var) = begin
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (agg_t, tmp) in
+        let decls = decl :: hscope.declarations in
+        let instr = Instr(HAggregate(decl, agg_elems)) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
+        (hctxt, hscope, decl)
+      end in
+
+      (hctxt, hscope, variant_var)
+
   | RIndexExpr(_, _, _) ->
       failwith "rexpr_to_hir(RIndexExpr): Unimplemented"
   | RArrayExpr(_, _) ->
       failwith "rexpr_to_hir(RArrayExpr): Unimplemented"
   | RValRawArray(_) ->
       failwith "rexpr_to_hir(RValRawArray): Unimplemented"
-  | RVariantCtorExpr(_, _, _) ->
-      failwith "rexpr_to_hir(RVariantCtorExpr): Unimplemented"
   | RExprInvoke(_, _, _) ->
       failwith "rexpr_to_hir(RExprInvoke): Unimplemented"
   | RWhileExpr(_, _, _, _) ->
@@ -596,9 +676,16 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
 
   (* Declare, evaluate the expr for, and assign, a new named variable. *)
   | RDeclStmt(name, t, rexpr) ->
-      let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
+      (* The declared type is not used. We might be doing some sort of a
+      representational transformation (like a variant becoming a bare tuple)
+      and want to use the resultant transformation type, not the high-level
+      original type. *)
+      t |> ignore ;
 
-      let decl = (t, name) in
+      let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
+      let hvar_t = hir_variable_type hvar in
+
+      let decl = (hvar_t, name) in
       let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValVar(hvar))) in
       let instrs = instr :: hscope.instructions in
@@ -606,14 +693,20 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       (hctxt, hscope)
 
   (* Declare a list of new named variables. *)
-  | RDeclDefStmt(name_t_pairs) ->
-      List.fold_left (
+  | RDeclDefStmt(_) ->
+  (* | RDeclDefStmt(name_t_pairs) -> *)
+      (* List.fold_left (
         fun (hctxt, hscope) (name, t) ->
           let decl = (t, name) in
           let decls = decl :: hscope.declarations in
           let hscope = {hscope with declarations = decls} in
           (hctxt, hscope)
-      ) (hctxt, hscope) name_t_pairs
+      ) (hctxt, hscope) name_t_pairs *)
+
+      failwith (
+        "RDeclDefStmt -> HIR: Unimplemented: Must generate decls with " ^
+        "transformed type rather than original high-level type."
+      )
 
   | RReturnStmt(rexpr) ->
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
