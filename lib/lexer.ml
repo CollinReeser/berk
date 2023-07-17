@@ -66,6 +66,9 @@ type token =
 | Underscore of position
 | LowIdent of position * string
 | CapIdent of position * string
+| Float32 of position * float
+| Float64 of position * float
+| Float128 of position * string
 | Float of position * float
 | Integer of position * int
 | String of position * string
@@ -175,6 +178,9 @@ let fmt_token tok =
   | Underscore(p)  -> Printf.sprintf "_  (syn)       : %s"   (fmt_pos p)
   | LowIdent(p, s) -> Printf.sprintf "%s (low-ident) : %s" s (fmt_pos p)
   | CapIdent(p, s) -> Printf.sprintf "%s (cap-ident) : %s" s (fmt_pos p)
+  | Float32(p, f)  -> Printf.sprintf "%f (float)     : %s" f (fmt_pos p)
+  | Float64(p, f)  -> Printf.sprintf "%f (float)     : %s" f (fmt_pos p)
+  | Float128(p, s) -> Printf.sprintf "%s (float)     : %s" s (fmt_pos p)
   | Float(p, f)    -> Printf.sprintf "%f (float)     : %s" f (fmt_pos p)
   | Integer(p, i)  -> Printf.sprintf "%d (integer)   : %s" i (fmt_pos p)
   | String(p, s)   -> Printf.sprintf "%s (string)    : %s" s (fmt_pos p)
@@ -338,6 +344,29 @@ let tokenize buf =
     | ('a' .. 'z'), Star(id_continue) ->
         let lexeme = Sedlexing.Latin1.lexeme buf in
         let tok = LowIdent(get_pos buf, lexeme) in
+        _tokenize buf (tok :: tokens)
+
+    (* 123.456f32 *)
+    | float_reg, "f32" ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let numeric_prefix = String.sub lexeme 0 ((String.length lexeme) - 4) in
+        let f = float_of_string numeric_prefix in
+        let tok = Float32(get_pos buf, f) in
+        _tokenize buf (tok :: tokens)
+
+    (* 123.456f64 *)
+    | float_reg, "f64" ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let numeric_prefix = String.sub lexeme 0 ((String.length lexeme) - 4) in
+        let f = float_of_string numeric_prefix in
+        let tok = Float64(get_pos buf, f) in
+        _tokenize buf (tok :: tokens)
+
+    (* 123.456f128 *)
+    | float_reg, "f128" ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let string_prefix = String.sub lexeme 0 ((String.length lexeme) - 5) in
+        let tok = Float128(get_pos buf, string_prefix) in
         _tokenize buf (tok :: tokens)
 
     | float_reg ->

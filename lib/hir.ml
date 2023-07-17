@@ -494,9 +494,32 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
-  | RValF128(_) -> failwith "rexpr_to_hir(RValF128): Unimplemented"
-  | RValF64(_) -> failwith "rexpr_to_hir(RValF64): Unimplemented"
-  | RValF32(_) -> failwith "rexpr_to_hir(RValF32): Unimplemented"
+  | RValF32(f) ->
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (F32, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValF32(f))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
+
+  | RValF64(f) ->
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (F64, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValF64(f))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
+
+  | RValF128(s) ->
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (F128, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValF128(s))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
 
   | RValInt(t, x) ->
       let hval =
