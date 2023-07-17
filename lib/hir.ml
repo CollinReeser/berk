@@ -536,8 +536,27 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
-  | RValCast(_, _, _) -> failwith "rexpr_to_hir(RValCast): Unimplemented"
-  | RUnOp(_, _, _) -> failwith "rexpr_to_hir(RUnOp): Unimplemented"
+  | RUnOp(t, op, exp) ->
+      let (hctxt, hscope, rhs_var) = rexpr_to_hir hctxt hscope exp in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HUnOp(decl, op, rhs_var)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
+
+  | RValCast(t, op, exp) ->
+      let (hctxt, hscope, rhs_var) = rexpr_to_hir hctxt hscope exp in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValCast(decl, op, rhs_var)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
 
   | RBinOp(t, op, lhs, rhs) ->
       let (hctxt, hscope, lhs_var) = rexpr_to_hir hctxt hscope lhs in
