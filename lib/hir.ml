@@ -65,10 +65,6 @@ type hir_instr =
   the array in the third hir_variable. *)
   | HIndexExpr of hir_variable * hir_variable * hir_variable
 
-  (* The resultant hir_variable is the variant value construction of the given
-  name and the given possibly-zero list of constructor fields. *)
-  | HVariantCtorExpr of hir_variable * string * hir_variable list
-
   (* ??? *)
   | HMatchExpr of hir_variable * (rpattern * hir_instr) list
 
@@ -268,14 +264,6 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_arr)
         (fmt_hir_variable h_var_idx)
-
-  | HVariantCtorExpr(h_var_res, ctor_name, h_var_elems) ->
-      let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
-      let elems_fmt = fmt_join_strs ", " elem_fmt_xs in
-      sprintf "%s = %s(%s)"
-        (fmt_hir_variable h_var_res)
-        ctor_name
-        elems_fmt
 
   | _ -> failwith "fmt_hir_instr(): Unimplemented"
   end
