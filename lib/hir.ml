@@ -68,8 +68,6 @@ type hir_instr =
   (* ??? *)
   | HMatchExpr of hir_variable * (rpattern * hir_instr) list
 
-  (* ??? *)
-  (* | HWhileExpr of berk_t * hstmt list * hir_instr * hstmt list *)
 
 
 (* ??? *)
@@ -85,31 +83,6 @@ and rpattern =
   | HPTuple of berk_t * rpattern list
   | HCtor of berk_t * string * rpattern list
   | HPatternAs of berk_t * rpattern * string
-
-(*
-(* ??? *)
-and hassign_idx_lval =
-  (* An index into a tuple. *)
-  | HALStaticIndex of int
-  (* An index into a static or dynamic array. *)
-  | HALIndex of hir_instr
-
-
-(* ??? *)
-and hstmt =
-  | HDeclStmt of string * berk_t * hir_instr
-
-  | HDeclDefStmt of (string * berk_t) list
-
-  | HAssignStmt of string * hassign_idx_lval list * hir_instr
-
-  | HExprStmt of hir_instr
-  | HReturnStmt of hir_instr
-
-  (* A convenience container for when a stmt needs to be rewritten using
-  multiple rstmt. *)
-  | HStmts of hstmt list
-*)
 
 
 type hir_scope = {
