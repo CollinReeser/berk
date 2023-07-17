@@ -237,7 +237,7 @@ let rec fmt_hir_scope ?(ind = "") {declarations; instructions} : string =
   let declaration_fmt_xs = List.map fmt_hir_variable declarations in
   let declaration_fmt_prefix_xs =
     List.map (
-      Printf.sprintf "%s%s" (ind ^ "   ")
+      Printf.sprintf "%s%s" (ind ^ "    ")
     ) declaration_fmt_xs
   in
   let declaration_fmt_prefix_xs_rev = List.rev declaration_fmt_prefix_xs in
@@ -245,16 +245,16 @@ let rec fmt_hir_scope ?(ind = "") {declarations; instructions} : string =
 
   let instruction_fmt_xs =
     List.map (
-      fmt_hir_scope_instr ~ind:(ind ^ "   ")
+      fmt_hir_scope_instr ~ind:(ind ^ "    ")
     ) instructions in
   let instruction_fmt_xs_rev = List.rev instruction_fmt_xs in
   let instructions_fmt = fmt_join_strs "\n" instruction_fmt_xs_rev in
 
   Printf.sprintf (
     "%sscope {\n" ^^
-    "%s declarations:\n" ^^
+    "%s  declarations:\n" ^^
     "%s\n" ^^
-    "%s instructions:\n" ^^
+    "%s  instructions:\n" ^^
     "%s\n" ^^
     "%s}"
   )
@@ -286,10 +286,10 @@ and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
         "%s}"
       )
         ind (fmt_hir_variable h_var_cond)
-        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_then)
+        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_then)
         ind
         ind
-        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_else)
+        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_else)
         ind
 
   | CondLoopScope(h_scope_cond, h_var_cond, h_scope_body) ->
@@ -302,10 +302,10 @@ and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
         "%s}"
       )
         ind
-        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_cond)
-        (ind ^ "   ") (fmt_hir_variable h_var_cond)
+        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_cond)
+        (ind ^ "    ") (fmt_hir_variable h_var_cond)
         ind
-        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_body)
+        (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_body)
         ind
   end
 ;;
@@ -334,7 +334,7 @@ let fmt_hfunc_def_t {hf_decl; hf_scope} =
     "}\n"
   )
     (fmt_hfunc_decl_t hf_decl)
-    (fmt_hir_scope ~ind:"   " hf_scope)
+    (fmt_hir_scope ~ind:"    " hf_scope)
 ;;
 
 
