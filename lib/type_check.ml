@@ -501,8 +501,17 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       let tc_ctxt =
         List.fold_left (
           fun tc_ctxt (ident, qual, t) ->
-            let vars_up = StrMap.add ident (t, qual) tc_ctxt.vars in
-            {tc_ctxt with vars = vars_up}
+            (* Only permit variable declarations with no associated expr
+            assignment if the decl type has a deterministic default value. *)
+            if (has_default_value t) then
+              let vars_up = StrMap.add ident (t, qual) tc_ctxt.vars in
+              {tc_ctxt with vars = vars_up}
+            else
+              failwith (
+                Printf.sprintf
+                  "Cannot declare variable with no default value: [%s]"
+                  (fmt_type t)
+              )
         ) tc_ctxt idents_quals_ts
       in
 

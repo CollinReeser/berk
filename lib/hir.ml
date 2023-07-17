@@ -485,10 +485,18 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
+  | RValStr(s) ->
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (String, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValStr(s))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
+
   | RValF128(_) -> failwith "rexpr_to_hir(RValF128): Unimplemented"
   | RValF64(_) -> failwith "rexpr_to_hir(RValF64): Unimplemented"
   | RValF32(_) -> failwith "rexpr_to_hir(RValF32): Unimplemented"
-  | RValStr(_) -> failwith "rexpr_to_hir(RValStr): Unimplemented"
 
   | RValInt(t, x) ->
       let hval =
@@ -737,20 +745,18 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       (hctxt, hscope)
 
   (* Declare a list of new named variables. *)
-  | RDeclDefStmt(_) ->
-  (* | RDeclDefStmt(name_t_pairs) -> *)
-      (* List.fold_left (
+  | RDeclDefStmt(name_t_pairs) ->
+      (* NOTE: This depends on an earlier pass having ensured that the only
+      variables declared this way are those with types that have deterministic
+      default values, which coincidentally is also the set of types which we
+      would lower any higher-level types into. *)
+      List.fold_left (
         fun (hctxt, hscope) (name, t) ->
           let decl = (t, name) in
           let decls = decl :: hscope.declarations in
           let hscope = {hscope with declarations = decls} in
           (hctxt, hscope)
-      ) (hctxt, hscope) name_t_pairs *)
-
-      failwith (
-        "RDeclDefStmt -> HIR: Unimplemented: Must generate decls with " ^
-        "transformed type rather than original high-level type."
-      )
+      ) (hctxt, hscope) name_t_pairs
 
   | RReturnStmt(rexpr) ->
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in

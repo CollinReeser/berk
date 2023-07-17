@@ -149,6 +149,55 @@ let dump_var_qual_ast {mut} =
 
 let def_var_qual = {mut = false}
 
+
+(* Return true iff this type has a deterministic default value that can be used
+for variable declarations that do not include a RHS expression. *)
+let rec has_default_value t =
+  begin match t with
+  | U64 | U32 | U16 | U8
+  | I64 | I32 | I16 | I8
+  | F128 | F64 | F32
+  | Bool
+  | String
+  | Nil ->
+      true
+
+  | Array(t, _)
+  | ByteArray(t) ->
+      has_default_value t
+
+  | Tuple(ts) ->
+      List.for_all has_default_value ts
+
+  | Variant(_, _) ->
+      (* Variants must always be assigned an explicit value at declaration
+      time; there is no "default constructor". *)
+      false
+
+  | Ptr(_) ->
+      (* Pointers must always point to something. *)
+      false
+
+  | Function(_, _) ->
+      (* Function pointers must always point to a specific function. *)
+      false
+
+  | VarArgSentinel ->
+      (* It should be impossible to construct a variable declaration in the
+      language syntax that resolves to the var-arg sentinel type. *)
+      failwith (
+        "Error: Cannot determine whether VarArgSentinel has default value"
+      )
+
+  | UnboundType(_, _)
+  | Unbound(_)
+  | Undecided ->
+      (* Placeholder/unresolved type variables cammpt jabe default values. *)
+      false
+  end
+;;
+
+
 (* Determine the common type between two. ie, if they're not the same type, but
 one is convertible to the other, yield the common type. *)
 let rec common_type_of_lr lhs rhs =
