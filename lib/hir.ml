@@ -61,10 +61,6 @@ type hir_instr =
   list. *)
   | HArrayExpr of hir_variable * hir_variable list
 
-  (* The resultant hir_variable is indexing using the middle hir_variable into
-  the array in the third hir_variable. *)
-  | HIndexExpr of hir_variable * hir_variable * hir_variable
-
   (* ??? *)
   | HMatchExpr of hir_variable * (rpattern * hir_instr) list
 
@@ -178,7 +174,7 @@ let fmt_hir_instr hir_instr : string =
         i
 
   | HDynamicIndex(h_var_res, h_var_idx, h_var_arr) ->
-      sprintf "%s = DYN IDX (%s)[%s]"
+      sprintf "%s = IDX (%s)[%s]"
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_arr)
         (fmt_hir_variable h_var_idx)
@@ -232,42 +228,9 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_res)
         elems_fmt
 
-  | HIndexExpr(h_var_res, h_var_idx, h_var_arr) ->
-      sprintf "%s = IDX (%s)[%s]"
-        (fmt_hir_variable h_var_res)
-        (fmt_hir_variable h_var_arr)
-        (fmt_hir_variable h_var_idx)
-
   | _ -> failwith "fmt_hir_instr(): Unimplemented"
   end
 ;;
-
-
-(*
-let fmt_hassign_idx_lval hassign_idx_lval : string =
-  let open Printf in
-  begin match hassign_idx_lval with
-  | HALStaticIndex(i) -> sprintf ".%d" i
-  | HALIndex(_) -> failwith "Unimplemented"
-  end
-;;
-*)
-
-
-
-(*
-let fmt_hstmt hstmt : string =
-  let open Printf in
-  begin match hstmt with
-  | HDeclStmt(name, t, * hir_instr
-  | HDeclDefStmt of (string * berk_t) list
-  | HAssignStmt of string * hassign_idx_lval list * hir_instr
-  | HExprStmt of hir_instr
-  | HReturnStmt of hir_instr
-  | HStmts of hstmt list
-  end
-;;
-*)
 
 
 let rec fmt_hir_scope ?(ind = "") {declarations; instructions} : string =
@@ -596,6 +559,22 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
+  | RIndexExpr(_, idx_expr, idxable_expr) ->
+      let (hctxt, hscope, idx) = rexpr_to_hir hctxt hscope idx_expr in
+      let (hctxt, hscope, idxable) = rexpr_to_hir hctxt hscope idxable_expr in
+
+      let (arr_t, _) = idxable in
+
+      let elem_t = unwrap_ptr arr_t in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (elem_t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HDynamicIndex(decl, idx, idxable)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+      (hctxt, hscope, decl)
+
   | RVariantCtorExpr(variant_t, ctor_name, ctor_args) ->
       (* Variant index, a static integer. *)
       let ctor_idx = get_tag_index_by_variant_ctor variant_t ctor_name in
@@ -703,8 +682,6 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       (hctxt, hscope, decl)
 
-  | RIndexExpr(_, _, _) ->
-      failwith "rexpr_to_hir(RIndexExpr): Unimplemented"
   | RArrayExpr(_, _) ->
       failwith "rexpr_to_hir(RArrayExpr): Unimplemented"
   | RValRawArray(_) ->
