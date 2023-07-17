@@ -41,6 +41,7 @@ type hir_instr =
   the given name and func-arg-index. *)
   | HArgToVar of hir_variable * string * int
 
+  (* Assign to a resultant variable a given "value". *)
   | HValueAssign of hir_variable * hir_value
 
   (* Create a raw array with the type of the given resultant variable. *)
@@ -127,8 +128,10 @@ and hir_scope_instr =
   | Scope of hir_scope
   (* Conditional variable, then instruction list, else alternate scope *)
   | CondScope of hir_variable * hir_scope * hir_scope
-  (* Conditional  variable for whether to run the body *)
-  | CondLoopScope of hir_variable * hir_scope
+  (* The first scope is the evaluation of the condition. The variable is the
+  actual decision of whether to (re-)run the body of the loop. The second
+  scope is the body of the loop itself. *)
+  | CondLoopScope of hir_scope * hir_variable * hir_scope
 
 
 (* ??? *)
@@ -365,13 +368,19 @@ and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
         (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_else)
         ind
 
-  | CondLoopScope(h_var_cond, h_scope_body) ->
+  | CondLoopScope(h_scope_cond, h_var_cond, h_scope_body) ->
       sprintf (
-        "%swhile (%s) {\n" ^^
+        "%swhile (\n" ^^
+        "%s\n" ^^
+        "%s%s\n" ^^
+        "%s) {\n" ^^
         "%s\n" ^^
         "%s}"
       )
-        ind (fmt_hir_variable h_var_cond)
+        ind
+        (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_cond)
+        (ind ^ "   ") (fmt_hir_variable h_var_cond)
+        ind
         (fmt_hir_scope ~ind:(ind ^ "   ") h_scope_body)
         ind
   end
@@ -636,6 +645,53 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       (hctxt, hscope, variant_var)
 
+  (* | RWhileExpr of berk_t * rstmt list * rexpr * rstmt list *)
+  | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
+      (* Evaluate the initializing statements. *)
+      let (hctxt, hscope) =
+        List.fold_left (
+          fun (hctxt, hscope) init_stmt ->
+            let (hctxt, hscope) = rstmt_to_hir hctxt hscope init_stmt in
+
+            (hctxt, hscope)
+        ) (hctxt, hscope) init_stmts
+      in
+
+      (* Evaluate the condition into a single variable. *)
+      let loop_cond_scope = empty_scope in
+      let (hctxt, loop_cond_scope, cond_var) =
+        rexpr_to_hir hctxt loop_cond_scope while_cond
+      in
+
+      (* Evaluate the body of the loop into an inner scope. *)
+      let loop_body_scope = empty_scope in
+      let (hctxt, loop_body_scope) =
+        List.fold_left (
+          fun (hctxt, loop_body_scope) then_stmt ->
+            let (hctxt, loop_body_scope) =
+              rstmt_to_hir hctxt loop_body_scope then_stmt
+            in
+
+            (hctxt, loop_body_scope)
+        ) (hctxt, loop_body_scope) then_stmts
+      in
+
+      (* Inject the inner conditional loop scope into our scope/context. *)
+      let instr = CondLoopScope(loop_cond_scope, cond_var, loop_body_scope) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+
+      (* NOTE: We're creating a dummy result value, as WhileExpr doesn't yet
+      support yielding a result value. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (Nil, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValNil)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
   | RIndexExpr(_, _, _) ->
       failwith "rexpr_to_hir(RIndexExpr): Unimplemented"
   | RArrayExpr(_, _) ->
@@ -644,8 +700,6 @@ let rec rexpr_to_hir hctxt hscope rexpr
       failwith "rexpr_to_hir(RValRawArray): Unimplemented"
   | RExprInvoke(_, _, _) ->
       failwith "rexpr_to_hir(RExprInvoke): Unimplemented"
-  | RWhileExpr(_, _, _, _) ->
-      failwith "rexpr_to_hir(RWhileExpr): Unimplemented"
   | RMatchExpr(_, _, _) ->
       failwith "rexpr_to_hir(RMatchExpr): Unimplemented"
   end
