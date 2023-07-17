@@ -31,7 +31,7 @@ type hir_instr =
 
   (* "Tuple-index" into the RHS variable with the given constant integer index,
   yielding the value in the resultant LHS variable. ie: `tmp = tup.3;` *)
-  | HTupleIndex of hir_variable * int * hir_variable
+  | HAggregateIndex of hir_variable * int * hir_variable
 
   (* LHS is resultant variable. Middle is indexing variable. RHS is indexed
   variable. *)
@@ -167,7 +167,7 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_res)
         elems_fmt
 
-  | HTupleIndex(h_var_res, i, h_var_tup) ->
+  | HAggregateIndex(h_var_res, i, h_var_tup) ->
       sprintf "%s = (%s).%d"
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_tup)
@@ -554,7 +554,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (elem_t, tmp) in
       let decls = decl :: hscope.declarations in
-      let instr = Instr(HTupleIndex(decl, idx, tup_var)) in
+      let instr = Instr(HAggregateIndex(decl, idx, tup_var)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
@@ -762,7 +762,7 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
                 let (hctxt, tmp) = get_tmp_name hctxt in
                 let decl = (t, tmp) in
                 let decls = decl :: hscope.declarations in
-                let instr = Instr(HTupleIndex(decl, i, hvar)) in
+                let instr = Instr(HAggregateIndex(decl, i, hvar)) in
                 let instrs = instr :: hscope.instructions in
                 let hscope = {declarations = decls; instructions = instrs} in
                 (hctxt, hscope, decl)
