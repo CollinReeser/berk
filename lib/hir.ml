@@ -711,8 +711,26 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       (hctxt, hscope, decl)
 
-  | RExprInvoke(_, _, _) ->
-      failwith "rexpr_to_hir(RExprInvoke): Unimplemented"
+  | RExprInvoke(t, func_rexpr, arg_rexprs) ->
+      let (hctxt, hscope, hfunc) = rexpr_to_hir hctxt hscope func_rexpr in
+
+      let ((hctxt, hscope), hargs) =
+        List.fold_left_map (
+          fun (hctxt, hscope) rexpr ->
+            let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
+            ((hctxt, hscope), hvar)
+        ) (hctxt, hscope) arg_rexprs
+      in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HExprInvoke(decl, hfunc, hargs)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
   | RMatchExpr(_, _, _) ->
       failwith "rexpr_to_hir(RMatchExpr): Unimplemented"
   end
