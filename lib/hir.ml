@@ -636,7 +636,6 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       (hctxt, hscope, variant_var)
 
-  (* | RWhileExpr of berk_t * rstmt list * rexpr * rstmt list *)
   | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
       (* Evaluate the initializing statements. *)
       let (hctxt, hscope) =
