@@ -1,6 +1,6 @@
 (executables
- (names lexer_main)
- (public_names lexer_berk)
+ (names lexer_main hir_main_test)
+ (public_names lexer_berk hir_berk)
  (libraries
    berk
  )
