@@ -228,15 +228,27 @@ let rec dump_expr_ast ?(ind="") expr =
         ind
   | BlockExpr(t, ss, e) ->
       let ind_next = ind ^ " " in
-      let dumped_ss = List.map (dump_stmt_ast ~ind:ind_next) ss in
-      let dumped_ss' = List.map (sprintf "%s%s" ind_next) dumped_ss in
-      let dumped_ss'' = fmt_join_strs ",\n" dumped_ss' in
-      sprintf "BlockExpr(%s,\n%s,\n%s%s\n%s)"
-        (fmt_type t)
-        dumped_ss''
-        ind_next
-        (dump_expr_ast ~ind:ind_next e)
-        ind
+      begin
+        (* Only attempt to include formatting of initial block stmts if there
+        actually are any. *)
+        if List.length ss > 0 then
+          let dumped_ss = List.map (dump_stmt_ast ~ind:ind_next) ss in
+          let dumped_ss' = List.map (sprintf "%s%s" ind_next) dumped_ss in
+          let dumped_ss'' = fmt_join_strs ",\n" dumped_ss' in
+
+          sprintf "BlockExpr(%s,\n%s,\n%s%s\n%s)"
+            (fmt_type t)
+            dumped_ss''
+            ind_next
+            (dump_expr_ast ~ind:ind_next e)
+            ind
+        else
+          sprintf "BlockExpr(%s,\n%s%s\n%s)"
+            (fmt_type t)
+            ind_next
+            (dump_expr_ast ~ind:ind_next e)
+            ind
+      end
   | IfThenElseExpr(t, e_cond, e_then, e_else) ->
       let ind_next = ind ^ " " in
       sprintf "IfThenElseExpr(%s,\n%s%s,\n%s%s,\n%s%s\n%s)"
