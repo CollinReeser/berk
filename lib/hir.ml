@@ -873,12 +873,11 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       (hctxt, hscope)
 
   (* Declare, evaluate the expr for, and assign, a new named variable. *)
-  | RDeclStmt(name, t, rexpr) ->
-      (* The declared type is not used. We might be doing some sort of a
+  | RDeclStmt(name, _, rexpr) ->
+      (* NOTE: The declared type is not used. We might be doing some sort of a
       representational transformation (like a variant becoming a bare tuple)
       and want to use the resultant transformation type, not the high-level
       original type. *)
-      t |> ignore ;
 
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
       let hvar_t = hir_variable_type hvar in
