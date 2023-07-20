@@ -730,9 +730,133 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       (hctxt, hscope, decl)
 
-  | RMatchExpr(_, _, _) ->
-      failwith "rexpr_to_hir(RMatchExpr): Unimplemented"
+  | RMatchExpr(t, matched_exp, patts_to_exprs) ->
+      let (hctxt, hscope, hmatchee) = rexpr_to_hir hctxt hscope matched_exp in
+
+      (* Create a variable which will be assigned to in each match arm with
+      the match-arm result value. This will be used as the overall match-expr
+      result value. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let hscope = {hscope with declarations = decls} in
+
+      (* Create an inner scope within which we'll generate the match arms. *)
+      let match_scope = empty_scope in
+
+      let (hctxt, match_scope) =
+        rmatch_arms_to_hir hctxt match_scope hmatchee decl patts_to_exprs
+      in
+
+      let instr = Scope(match_scope) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+
+      (hctxt, hscope, decl)
   end
+
+
+(* Deconstruct a match pattern, returning a true/false boolean hvariable
+indicating whether the match arm should be evaluated. *)
+and rpattern_to_hir hctxt hscope hmatchee patt =
+  begin match patt with
+  | RWild(_) ->
+      (* Create a temporary containing an unconditionally-true boolean,
+      indicating this match pattern always succeeds. *)
+      let (hctxt, hscope, htrue) = rexpr_to_hir hctxt hscope (RValBool(true)) in
+
+      (hctxt, hscope, htrue)
+
+  | RPBool(b) ->
+      (* Create a temporary containing the boolean to match against. *)
+      let (hctxt, hscope, hbool) = rexpr_to_hir hctxt hscope (RValBool(b)) in
+
+      (* Create an instruction to compare the matchee against the boolean. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (Bool, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HBinOp(decl, Eq, hmatchee, hbool)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
+  | _ ->
+    failwith (
+      Printf.sprintf
+        "rpattern_to_hir, patt unimplemented: %s"
+        (fmt_rpattern patt)
+    )
+  end
+
+
+(* Given a complete, ordered set of pattern-to-match-arms, generate HIR that
+represents this match expression. *)
+and rmatch_arms_to_hir hctxt hscope hmatchee hresult patts_to_exprs
+  : (hir_ctxt * hir_scope)
+=
+  let rec _rmatch_arms_to_hir hctxt hscope patts_to_exprs =
+    begin match patts_to_exprs with
+    (* We have exhausted the match arms. *)
+    | [] ->
+        (* TODO: This scope should be impossible to reach, as that implies
+        that no match arms in a match expr matched the matchee, which should
+        be statically impossible and verified during typecheck. We should add
+        some sort of an assert/crash/halt here. *)
+        let dead_scope = empty_scope in
+
+        (hctxt, dead_scope)
+
+    | (patt, expr) :: patts_to_exprs_rest ->
+        (* Evaluate a boolean variable indicating whether we should enter this
+        match arm. *)
+        let (hctxt, hscope, hmatched) =
+          rpattern_to_hir hctxt hscope hmatchee patt
+        in
+
+        (* Evaluate the arm expression, assigning the arm result to the
+        overall match-expr result. *)
+        let (hctxt, arm_exp_scope) =
+          begin
+            let arm_exp_scope = empty_scope in
+
+            let (hctxt, arm_exp_scope, arm_result) =
+              rexpr_to_hir hctxt arm_exp_scope expr
+            in
+
+            let instr = Instr(HValueAssign(hresult, HValVar(arm_result))) in
+            let instrs = instr :: arm_exp_scope.instructions in
+            let arm_exp_scope = {arm_exp_scope with instructions = instrs} in
+
+            (hctxt, arm_exp_scope)
+          end
+        in
+
+        (* Evaluate the next arm, in a fresh scope. *)
+        let (hctxt, next_arm_scope) =
+          let next_arm_scope = empty_scope in
+
+          let (hctxt, next_arm_scope) =
+            _rmatch_arms_to_hir hctxt next_arm_scope patts_to_exprs_rest
+          in
+
+          (hctxt, next_arm_scope)
+        in
+
+        (* Incorporate the potentially arbitrarily-nested conditional-scope
+        hierarchy, representing the N match arms of this arm and all
+        following arms, into the current scope. *)
+        let instr = CondScope(hmatched, arm_exp_scope, next_arm_scope) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {hscope with instructions = instrs} in
+
+        (hctxt, hscope)
+    end
+  in
+
+  let (hctxt, hscope) = _rmatch_arms_to_hir hctxt hscope patts_to_exprs in
+
+  (hctxt, hscope)
 
 
 and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
