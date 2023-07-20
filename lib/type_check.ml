@@ -736,7 +736,7 @@ expression is the right type. However, in cases of eg variants/structs that
 might have type variables that the expression cannot infer, this information
 can provide the needed type info. *)
 and type_check_expr
-  (tc_ctxt : typecheck_context) (expected_t : berk_t) (exp : expr)
+  (tc_ctxt : typecheck_context) (expected_t : berk_t) (exp : expr) : expr
 =
   let rec _type_check_expr exp =
     begin match exp with
