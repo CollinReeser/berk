@@ -1090,6 +1090,8 @@ and parse_value ?(ind="") tokens : (token list * expr) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let (rest, exp) = begin
+    try parse_array_expr ~ind:ind_next tokens
+    with Backtrack ->
     try parse_tuple_expr ~ind:ind_next tokens
     with Backtrack ->
     try parse_paren_expr ~ind:ind_next tokens
@@ -1281,6 +1283,67 @@ and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
       (rest, TupleIndexExpr(Undecided, i, exp))
 
   | _ -> raise Backtrack
+  end
+
+
+and parse_array_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  begin match tokens with
+  (* Accept empty array-expr. *)
+  | LBracket(_) :: RBracket(_) :: rest ->
+      (rest, ArrayExpr(Undecided, []))
+
+  | LBracket(_) :: rest ->
+      let (rest, init_exp) = parse_expr ~ind:ind_next rest in
+
+      begin match rest with
+      (* Accept trailing comma. *)
+      | Comma(_) :: RBracket(_) :: rest ->
+          (rest, ArrayExpr(Undecided, [init_exp]))
+
+      (* This is at least a 2-element array. *)
+      | Comma(_) :: rest ->
+          let (rest, pair_exp) = parse_expr ~ind:ind_next rest in
+
+          (* At this point, we want to match 0 or more `, <expr>` sequences,
+          followed by a final closing bracket. *)
+          let rec _parse_remaining_array rest exprs_so_far =
+            begin match rest with
+            (* Accept trailing comma. *)
+            | Comma(_) :: RBracket(_) :: rest -> (rest, exprs_so_far)
+
+            (* Termination of array expr without trailing comma. *)
+            | RBracket(_) :: rest -> (rest, exprs_so_far)
+
+            (* Comma followed by another array expr. *)
+            | Comma(_) :: rest ->
+                let (rest, next_exp) = parse_expr ~ind:ind_next rest in
+                _parse_remaining_array rest (exprs_so_far @ [next_exp])
+
+            | tok :: _ ->
+                let fmted = fmt_token tok in
+                failwith (
+                  Printf.sprintf
+                    "Unexpected token [%s] parsing array expr, expected `)`."
+                    fmted
+                )
+            | [] -> failwith "Unexpected EOF while parsing array expr."
+            end
+          in
+
+          let (rest, remaining_array_exprs) = _parse_remaining_array rest [] in
+
+          (
+            rest,
+            ArrayExpr(Undecided, [init_exp; pair_exp] @ remaining_array_exprs)
+          )
+
+      | _ -> raise Backtrack
+      end
+
+  | _ ->
+      raise Backtrack
   end
 
 

@@ -190,8 +190,9 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_res)
         (fmt_hir_value h_val)
 
-  | HValRawArray(_) ->
-      failwith "fmt_hir_instr(HValRawArray): Unimplemented"
+  | HValRawArray(h_var_res) ->
+      sprintf "ARRAY where %s"
+        (fmt_hir_variable h_var_res)
 
   | HValCast(h_var_res, cast_op, h_var_orig) ->
       sprintf "%s = %s (%s)"
@@ -682,10 +683,34 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       (hctxt, hscope, decl)
 
-  | RArrayExpr(_, _) ->
-      failwith "rexpr_to_hir(RArrayExpr): Unimplemented"
-  | RValRawArray(_) ->
-      failwith "rexpr_to_hir(RValRawArray): Unimplemented"
+  | RValRawArray(t) ->
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValRawArray(decl)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
+  | RArrayExpr(t, rexprs) ->
+      let ((hctxt, hscope), hvars) =
+        List.fold_left_map (
+          fun (hctxt, hscope) rexpr ->
+            let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
+            ((hctxt, hscope), hvar)
+        ) (hctxt, hscope) rexprs
+      in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HAggregate(decl, hvars)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
   | RExprInvoke(_, _, _) ->
       failwith "rexpr_to_hir(RExprInvoke): Unimplemented"
   | RMatchExpr(_, _, _) ->
