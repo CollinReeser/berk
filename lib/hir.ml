@@ -784,6 +784,24 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
       (hctxt, hscope, htrue)
 
+  | RPatternAs(t, as_patt, name) ->
+      (* Declare a new variable that binds to the matchee.
+
+      TODO: Later: this should be a transparent reference to the actual matched
+      value. *)
+      let decl = (t, name) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValueAssign(decl, HValVar(hmatchee))) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (* Evaluate the actual pattern. *)
+      let (hctxt, hscope, hbool) =
+        rpattern_to_hir hctxt hscope hmatchee as_patt
+      in
+
+      (hctxt, hscope, hbool)
+
   | RPBool(b) ->
       (* Create a temporary containing the boolean to match against. *)
       let (hctxt, hscope, hbool) = rexpr_to_hir hctxt hscope (RValBool(b)) in

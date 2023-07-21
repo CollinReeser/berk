@@ -183,6 +183,17 @@ let () =
       return result;
     }
 
+    fn as_match_expr(): i32 {
+      let cond = true;
+
+      let result = match cond {
+      | true as true_var -> 10
+      | false as false_var -> 20
+      };
+
+      return result;
+    }
+
     fn test_mov(lhs: u64): u64 {
       let new_lhs = lhs + 5;
       let arg_result = lhs + new_lhs;
