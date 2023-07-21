@@ -161,6 +161,28 @@ let () =
       return result;
     }
 
+    fn basic_match_expr(): i32 {
+      let cond = true;
+
+      let result = match cond {
+      | true -> 10
+      | false -> 20
+      };
+
+      return result;
+    }
+
+    fn var_bind_match_expr(): i32 {
+      let cond = true;
+
+      let result = match cond {
+      | true -> 10
+      | cond_bind -> 20
+      };
+
+      return result;
+    }
+
     fn test_mov(lhs: u64): u64 {
       let new_lhs = lhs + 5;
       let arg_result = lhs + new_lhs;
