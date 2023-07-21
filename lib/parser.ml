@@ -1435,16 +1435,29 @@ and parse_if_expr ?(ind="") tokens : (token list * expr) =
       let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
       let (rest, then_exp) = parse_expr_block ~ind:ind_next rest in
 
-      begin match rest with
-      | KWElse(_) :: rest ->
-          let (rest, else_exp) = parse_expr_block ~ind:ind_next rest in
-          (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, else_exp))
+      let rec _parse_else_chain tokens : (token list * expr) =
+        begin match tokens with
+        | KWElse(_) :: KWIf(_) :: rest ->
+            let (rest, cond_exp) = parse_expr ~ind:ind_next rest in
+            let (rest, then_exp) = parse_expr_block ~ind:ind_next rest in
+            let (rest, else_exp) = _parse_else_chain rest in
 
-      | _ :: _ ->
-          (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, ValNil))
+            (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, else_exp))
 
-      | [] -> failwith "Unexpected EOF while parsing if-expr."
-      end
+        | KWElse(_) :: rest ->
+            let (rest, else_exp) = parse_expr_block ~ind:ind_next rest in
+            (rest, else_exp)
+
+        | _ :: _ ->
+            (rest, ValNil)
+
+        | [] -> failwith "Unexpected EOF while parsing if-expr."
+        end
+      in
+
+      let (rest, else_exp) = _parse_else_chain rest in
+
+      (rest, IfThenElseExpr(Undecided, cond_exp, then_exp, else_exp))
 
   | _ ->
       raise Backtrack

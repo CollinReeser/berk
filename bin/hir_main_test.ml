@@ -114,7 +114,20 @@ let () =
       return;
     }
 
-    fn basic_if(): i32 {
+    fn basic_if() {
+      let cond = true;
+
+      if cond {
+        let if_arm = 10;
+      }
+      else {
+        let else_arm = 20;
+      }
+
+      return;
+    }
+
+    fn basic_if_expr(): i32 {
       let cond = true;
 
       let result =
@@ -123,6 +136,26 @@ let () =
         }
         else {
           20
+        };
+
+      return result;
+    }
+
+    fn if_else_if_else_expr(): i32 {
+      let value = 10;
+
+      let result =
+        if value == 5 {
+          500
+        }
+        else if value == 10 {
+          1000
+        }
+        else if value == 15 {
+          1500
+        }
+        else {
+          2000
         };
 
       return result;
