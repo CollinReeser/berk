@@ -30,9 +30,17 @@ let () =
       return 0;
     }
 
-    fn test_tuples() {
+    fn test_tuple() {
       let tup = (1, 2);
       let val = tup.1;
+
+      return;
+    }
+
+    fn test_complex_tuple() {
+      let tup = (1, ("two", 3, "four"), 5);
+      let inner = tup.1;
+      let str = inner.2;
 
       return;
     }
@@ -192,6 +200,15 @@ let () =
       };
 
       return result;
+    }
+
+    fn tup_match_simple() {
+      let tup = (true, false, true);
+
+      let result = match tup {
+      | (_, false, _) -> 10
+      | (_, true, _) -> 10
+      };
     }
 
     fn test_mov(lhs: u64): u64 {

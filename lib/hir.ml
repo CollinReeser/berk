@@ -816,6 +816,87 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
       (hctxt, hscope, decl)
 
+  | RPTuple(tup_t, patts) ->
+      (* Declare a boolean, defaulting to true but assignable to false in the
+      case that any of the tuple elems don't match the pattern. *)
+      let (hctxt, hscope, hoverall_bool) = begin
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (Bool, tmp) in
+        let decls = decl :: hscope.declarations in
+        let instr = Instr(HValueAssign(decl, HValBool(true))) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
+        (hctxt, hscope, decl)
+      end in
+
+      (* Descend into the patterns for each of the elements of the tuple,
+      short-circuiting if any pattern in turn doesn't match. *)
+
+      let rec _rptuple_patt_deconstruct hctxt cur_scope idx patts =
+        begin match patts with
+        | [] ->
+            let dead_scope = empty_scope in
+
+            (hctxt, dead_scope)
+
+
+        | patt :: patts_rest ->
+            let (hctxt, cur_scope, helem) = begin
+              let elem_t = unwrap_aggregate_indexable tup_t idx in
+
+              let (hctxt, tmp) = get_tmp_name hctxt in
+              let decl = (elem_t, tmp) in
+              let decls = decl :: cur_scope.declarations in
+              let instr = Instr(HAggregateIndex(decl, idx, hmatchee)) in
+              let instrs = instr :: cur_scope.instructions in
+              let cur_scope = {declarations = decls; instructions = instrs} in
+              (hctxt, cur_scope, decl)
+            end in
+
+            (* Evaluate the tuple-element sub-pattern, yielding a match/no-match
+            boolean value. *)
+            let (hctxt, cur_scope, elem_res) =
+              rpattern_to_hir hctxt cur_scope helem patt
+            in
+
+            (* Recursively evaluate the remainder of the sub-patterns in the
+            tuple pattern, building a hierarchy of conditional inner scopes,
+            accomplishing a short-circuiting tuple pattern match. *)
+            let (hctxt, rest_scope) =
+              _rptuple_patt_deconstruct hctxt empty_scope (idx + 1) patts_rest
+            in
+
+            (* In the event the sub-pattern did not match, assign "no-match"
+            to our top-level whole-tuple match/no-match boolean. *)
+            let else_scope = begin
+              let else_scope = empty_scope in
+              let instr =
+                Instr(HValueAssign(hoverall_bool, HValBool(false)))
+              in
+              let instrs = instr :: else_scope.instructions in
+              let else_scope = {else_scope with instructions = instrs} in
+              else_scope
+            end in
+
+            let instr = CondScope(elem_res, rest_scope, else_scope) in
+            let instrs = instr :: cur_scope.instructions in
+            let cur_scope = {cur_scope with instructions = instrs} in
+
+            (hctxt, cur_scope)
+        end
+      in
+
+      (* Build a short-circuiting tuple match tree, where the value of
+      hoverall_bool determines if the match was successful. *)
+      let (hctxt, tuple_match_scope) =
+        _rptuple_patt_deconstruct hctxt empty_scope 0 patts
+      in
+
+      let instr = Scope(tuple_match_scope) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+      (hctxt, hscope, hoverall_bool)
+
   | _ ->
     failwith (
       Printf.sprintf
