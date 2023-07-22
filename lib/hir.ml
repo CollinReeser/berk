@@ -576,65 +576,32 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
 
-  | RVariantCtorExpr(variant_t, ctor_name, ctor_args) ->
+  | RVariantCtorExpr(variant_t, ctor_name, ctor_rexprs) ->
+      (* Generate the variant value as though it were a tuple of the constructor
+      field args prefixed with the constructor index. *)
+
       (* Variant index, a static integer. *)
+      let ctor_idx_t = U8 in
       let ctor_idx = get_tag_index_by_variant_ctor variant_t ctor_name in
+      let ctor_idx_rexpr = RValInt(ctor_idx_t, ctor_idx) in
 
-      let idx_t = U8 in
+      let ctor_field_ts = List.map rexpr_type ctor_rexprs in
+      let tuple_analogue_t = Tuple(ctor_idx_t :: ctor_field_ts) in
 
-      (* Generate HIR for the variant constructor index. *)
-      let (hctxt, hscope, ctor_idx_var) = begin
-        let (hctxt, tmp) = get_tmp_name hctxt in
-        let decl = (idx_t, tmp) in
-        let decls = decl :: hscope.declarations in
-        let instr = Instr(HValueAssign(decl, HValU8(ctor_idx))) in
-        let instrs = instr :: hscope.instructions in
-        let hscope = {declarations = decls; instructions = instrs} in
-        (hctxt, hscope, decl)
-      end in
+      let tuple_analogue_rexprs = ctor_idx_rexpr :: ctor_rexprs in
 
-      (* The (reversed) list of types that make up this aggregate, starting with
-      the variant constructor index. If there are no fields for this
-      constructor, then this is also the entirety of the aggregate type. *)
-      let agg_ts_rev = [idx_t] in
-
-      (* Generate HIR for the variant constructor fields, if any. *)
-      let ((hctxt, hscope, agg_ts_rev), ctor_arg_vars) =
-        List.fold_left_map (
-          fun (hctxt, hscope, agg_ts_rev) ctor_arg ->
-            let elem_t = rexpr_type ctor_arg in
-            let agg_ts_rev = elem_t :: agg_ts_rev in
-
-            let (hctxt, hscope, ctor_arg_var) =
-              rexpr_to_hir hctxt hscope ctor_arg
-            in
-            ((hctxt, hscope, agg_ts_rev), ctor_arg_var)
-        ) (hctxt, hscope, agg_ts_rev) ctor_args
+      let variant_tuple_analogue_rexpr =
+        RTupleExpr(tuple_analogue_t, tuple_analogue_rexprs)
       in
 
-      (* Our list of aggregate element types was generated in reverse order. *)
-      let agg_ts = List.rev agg_ts_rev in
+      (* The variant has been equivalently described as a tuple expression, so
+      generate HIR for that equivalent form instead.
 
-      (* The variant is represented internally as a tuple of the ctor index
-      and its fields. *)
-      let agg_t = Tuple(agg_ts) in
-
-      (* The elements of the variant aggregate are the ctor idx and any fields
-      it may have had. *)
-      let agg_elems = ctor_idx_var :: ctor_arg_vars in
-
-      (* Generate HIR for the final aggregate representation of the variant. *)
-      let (hctxt, hscope, variant_var) = begin
-        let (hctxt, tmp) = get_tmp_name hctxt in
-        let decl = (agg_t, tmp) in
-        let decls = decl :: hscope.declarations in
-        let instr = Instr(HAggregate(decl, agg_elems)) in
-        let instrs = instr :: hscope.instructions in
-        let hscope = {declarations = decls; instructions = instrs} in
-        (hctxt, hscope, decl)
-      end in
-
-      (hctxt, hscope, variant_var)
+      TODO: Depending on where else it might make sense to want to know that
+      a value is a variant in the HIR, we may just choose to rewrite variant
+      expressions (and variant match-patterns, etc) as tuple expressions in
+      the RAST instead, simplifying the HIR (and consequently the MIR, etc). *)
+      rexpr_to_hir hctxt hscope variant_tuple_analogue_rexpr
 
   | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
       (* Evaluate the initializing statements. *)
