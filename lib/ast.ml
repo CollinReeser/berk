@@ -1136,7 +1136,6 @@ let rec default_expr_for_t t =
   | VarArgSentinel
   | Ptr(_)
   | Variant(_, _)
-  | ByteArray(_)
   | Function(_, _) ->
       failwith (
         Printf.sprintf
@@ -1500,7 +1499,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         )
 
     | (Ptr(_), _) -> failwith "Unimplemented"
-    | (ByteArray(_), _) -> failwith "Unimplemented"
 ;;
 
 

@@ -905,10 +905,10 @@ let () =
     func_sigs = StrMap.empty;
     llvm_mod = the_module;
     data_layout_mod = data_layout_mod;
-    berk_t_to_llvm_t = berk_t_to_llvm_t llvm_sizeof llvm_ctxt;
+    rast_t_to_llvm_t = rast_t_to_llvm_t llvm_sizeof llvm_ctxt;
     llvm_sizeof = llvm_sizeof;
-    validate = false;
-    optimize = false;
+    validate = true;
+    optimize = true;
   } in
 
   let timing_llvm_codegen_start = Unix.gettimeofday () in

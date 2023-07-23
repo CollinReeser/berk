@@ -1,6 +1,6 @@
 open Ir
 open Mir
-open Typing
+open Rast
 
 module StrMap = Map.Make(String)
 
@@ -8,7 +8,7 @@ type module_gen_context = {
   func_sigs: Llvm.llvalue StrMap.t;
   llvm_mod: Llvm.llmodule;
   data_layout_mod: Llvm_target.DataLayout.t;
-  berk_t_to_llvm_t: berk_t -> Llvm.lltype;
+  rast_t_to_llvm_t: rast_t -> Llvm.lltype;
   llvm_sizeof: Llvm.lltype -> int;
   (* Whether to validate generated LLVM IR for static correctness. *)
   validate: bool;
@@ -68,7 +68,7 @@ let codegen_constant
 
   begin match constant with
   | ValNil ->
-      let llvm_nil_typ = func_ctxt.mod_ctxt.berk_t_to_llvm_t Nil in
+      let llvm_nil_typ = func_ctxt.mod_ctxt.rast_t_to_llvm_t Nil in
       Llvm.undef llvm_nil_typ
 
   | ValU64(n) | ValI64(n) -> Llvm.const_int i64_t n
@@ -192,7 +192,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       func_ctxt
 
   | Alloca({lname; _}, t) ->
-      let alloca_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
+      let alloca_t = func_ctxt.mod_ctxt.rast_t_to_llvm_t t in
 
       let alloca =
         Llvm.build_alloca alloca_t lname builder |>
@@ -260,7 +260,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       func_ctxt
 
   | ConstructAggregate({lname; t; _}, elems) ->
-      let llvm_aggregate_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
+      let llvm_aggregate_t = func_ctxt.mod_ctxt.rast_t_to_llvm_t t in
       let llvm_elems =
         List.map (
           fun {lname=elem_name; _} -> StrMap.find elem_name func_ctxt.cur_vars
@@ -377,7 +377,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       func_ctxt
 
   | Cast({lname; t; _}, op, {lname=rhs_name; _}) ->
-      let llvm_t = func_ctxt.mod_ctxt.berk_t_to_llvm_t t in
+      let llvm_t = func_ctxt.mod_ctxt.rast_t_to_llvm_t t in
       let op_val = StrMap.find rhs_name func_ctxt.cur_vars in
 
       let trunc_val =
@@ -504,9 +504,9 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         failwith (
           Printf.sprintf
             "Unexpected expression type in BinOp: [%s]: [%s] op [%s]"
-            (fmt_type t)
-            (fmt_type lhs_t)
-            (fmt_type rhs_t)
+            (fmt_rtype t)
+            (fmt_rtype lhs_t)
+            (fmt_rtype rhs_t)
         )
       end
         |> enforce_mir_llvm_name_agreement lname
@@ -567,7 +567,7 @@ let codegen_func_bbs llvm_ctxt builder func_ctxt (mir_ctxt : mir_ctxt) =
 ;;
 
 
-let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_t; _} =
+let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_rt; _} =
   (* Return the pair of all the non-variadic function parameter types, and
   whether the parameter list ends with a variadic-args sentinel. Fails if
   ill-formed. *)
@@ -586,10 +586,10 @@ let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_t; _} =
   in
 
   (* Generate the LLVM context for defining a new function. *)
-  let llvm_ret_t = mod_ctxt.berk_t_to_llvm_t f_ret_t in
+  let llvm_ret_t = mod_ctxt.rast_t_to_llvm_t f_ret_rt in
   let (f_params_non_variadic, is_var_arg) = get_static_f_params f_params in
   let llvm_param_t_lst =
-    List.map (mod_ctxt.berk_t_to_llvm_t) f_params_non_variadic
+    List.map (mod_ctxt.rast_t_to_llvm_t) f_params_non_variadic
   in
   let llvm_param_t_arr = Array.of_list llvm_param_t_lst in
   let func_sig_t =

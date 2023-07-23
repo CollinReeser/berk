@@ -1,11 +1,10 @@
 open Ir
 open Rast
-open Typing
 open Utility
 
 module StrMap = Map.Make(String)
 
-type hir_variable = berk_t * string
+type hir_variable = rast_t * string
 
 type hir_value =
 | HValNil
@@ -68,17 +67,21 @@ type hir_instr =
 
 (* ??? *)
 and rpattern =
-  | HWild of berk_t
-  | HVarBind of berk_t * string
+  | HWild of rast_t
+  | HVarBind of rast_t * string
   | HPNil
   | HPBool of bool
-  | HPIntLit of berk_t * int
-  | HPIntFrom of berk_t * int
-  | HPIntUntil of berk_t * int
-  | HPIntRange of berk_t * int * int
-  | HPTuple of berk_t * rpattern list
-  | HCtor of berk_t * string * rpattern list
-  | HPatternAs of berk_t * rpattern * string
+  | HPIntLit of rast_t * int
+  | HPIntFrom of rast_t * int
+  | HPIntUntil of rast_t * int
+  | HPIntRange of rast_t * int * int
+  | HPTuple of rast_t * rpattern list
+  (* Reinterpret the matchee as the given type, and then apply the given
+  pattern. *)
+  | HPCastThen of rast_t * cast_op * rpattern
+  (* Match the matchee against the given pattern, but also bind a variable of
+  the given name to the matchee. *)
+  | HPatternAs of rast_t * rpattern * string
 
 
 type hir_scope = {
@@ -100,14 +103,14 @@ and hir_scope_instr =
 
 
 (* ??? *)
-and hf_param = (string * berk_t)
+and hf_param = (string * rast_t)
 
 
 (* ??? *)
 type hfunc_decl_t = {
   hf_name: string;
   hf_params: hf_param list;
-  hf_ret_t: berk_t;
+  hf_ret_t: rast_t;
 }
 
 
@@ -128,7 +131,7 @@ let empty_scope : hir_scope = {
 
 
 let fmt_hir_variable (t, name) : string =
-  Printf.sprintf "%s: %s" name (fmt_type t)
+  Printf.sprintf "%s: %s" name (fmt_rtype t)
 ;;
 
 let fmt_hir_value hir_value : string =
@@ -313,7 +316,7 @@ and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
 
 
 let fmt_hf_param (name, t) : string =
-  Printf.sprintf "%s: %s" name (fmt_type t)
+  Printf.sprintf "%s: %s" name (fmt_rtype t)
 ;;
 
 
@@ -324,7 +327,7 @@ let fmt_hfunc_decl_t {hf_name; hf_params; hf_ret_t} : string =
   Printf.sprintf "fn %s(%s): %s"
     hf_name
     hf_params_fmt
-    (fmt_type hf_ret_t)
+    (fmt_rtype hf_ret_t)
 ;;
 
 
@@ -340,7 +343,7 @@ let fmt_hfunc_def_t {hf_decl; hf_scope} =
 
 
 type hir_ctxt = {
-  func_vars: (berk_t * int) StrMap.t;
+  func_vars: (rast_t * int) StrMap.t;
   seen_vars: hir_variable StrMap.t;
   tmp_counter: int;
 }
@@ -460,7 +463,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
         | _ ->
             failwith (
               Printf.sprintf "Nonsense type [%s] for int [%d] convert to HIR."
-                (fmt_type t) x
+                (fmt_rtype t) x
             )
         end
       in
@@ -575,33 +578,6 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let instrs = instr :: hscope.instructions in
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope, decl)
-
-  | RVariantCtorExpr(variant_t, ctor_name, ctor_rexprs) ->
-      (* Generate the variant value as though it were a tuple of the constructor
-      field args prefixed with the constructor index. *)
-
-      (* Variant index, a static integer. *)
-      let ctor_idx_t = U8 in
-      let ctor_idx = get_tag_index_by_variant_ctor variant_t ctor_name in
-      let ctor_idx_rexpr = RValInt(ctor_idx_t, ctor_idx) in
-
-      let ctor_field_ts = List.map rexpr_type ctor_rexprs in
-      let tuple_analogue_t = Tuple(ctor_idx_t :: ctor_field_ts) in
-
-      let tuple_analogue_rexprs = ctor_idx_rexpr :: ctor_rexprs in
-
-      let variant_tuple_analogue_rexpr =
-        RTupleExpr(tuple_analogue_t, tuple_analogue_rexprs)
-      in
-
-      (* The variant has been equivalently described as a tuple expression, so
-      generate HIR for that equivalent form instead.
-
-      TODO: Depending on where else it might make sense to want to know that
-      a value is a variant in the HIR, we may just choose to rewrite variant
-      expressions (and variant match-patterns, etc) as tuple expressions in
-      the RAST instead, simplifying the HIR (and consequently the MIR, etc). *)
-      rexpr_to_hir hctxt hscope variant_tuple_analogue_rexpr
 
   | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
       (* Evaluate the initializing statements. *)
@@ -957,10 +933,9 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
 
   (* Declare, evaluate the expr for, and assign, a new named variable. *)
   | RDeclStmt(name, _, rexpr) ->
-      (* NOTE: The declared type is not used. We might be doing some sort of a
-      representational transformation (like a variant becoming a bare tuple)
-      and want to use the resultant transformation type, not the high-level
-      original type. *)
+      (* NOTE: The declared type is not used. We might be doing some sort of an
+      internal representational transformation and want to use the resultant
+      transformation type, not the high-level original type. *)
 
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
       let hvar_t = hir_variable_type hvar in

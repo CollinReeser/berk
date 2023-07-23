@@ -1,18 +1,7 @@
-open Typing
+open Rast
 
-let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
-  (* Helper function to map an individual variant constructor into an abstract
-  type we can translate into an LLVM type. *)
-  let rec _v_ctor_to_llvm_t {fields; _} =
-    begin match fields with
-    | [] ->
-        Nil
-    | _ ->
-        let ts = List.map (fun {t} -> t) fields in
-        Tuple(ts)
-    end
-
-  and _berk_t_to_llvm_t typ =
+let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
+  let rec _rast_t_to_llvm_t (typ : rast_t) : Llvm.lltype =
     begin match typ with
     | Nil -> Llvm.void_type llvm_ctxt
 
@@ -33,12 +22,12 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
         llvm_str_t
 
     | Array(elem_typ, sz) ->
-        let llvm_elem_t = _berk_t_to_llvm_t elem_typ in
+        let llvm_elem_t = _rast_t_to_llvm_t elem_typ in
         let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
         llvm_arr_t
 
     | Tuple(types) ->
-        let llvm_t_lst = List.map (_berk_t_to_llvm_t) types in
+        let llvm_t_lst = List.map (_rast_t_to_llvm_t) types in
         let llvm_t_arr = Array.of_list llvm_t_lst in
 
         (* TODO: Note the use of `packed_struct_type` here. This ensures there
@@ -65,44 +54,47 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
 
         llvm_tuple_t
 
-    | Variant(_, ctors) ->
-        let _ = if List.length ctors > 255 then
-          failwith "Variants with >255 constructors not implemented"
-        else
-          ()
+    | SuperTuple(tss) ->
+        (* The size/layout of a supertuple is the size/layout of the largest
+        superimposed tuple.
+
+        TODO: This should take alignment into consideration. For now, it assumes
+        a packed aggregate type. *)
+
+        let tuples = List.map (fun ts -> Tuple(ts)) tss in
+        let size_to_tuple =
+          List.map (
+            fun tuple ->
+              let llvm_t = _rast_t_to_llvm_t tuple in
+              let llvm_sz = llvm_sizeof llvm_t in
+              (llvm_sz, tuple)
+          ) tuples
         in
 
-        let v_ctor_ts = List.map _v_ctor_to_llvm_t ctors in
-        let llvm_nonempty_typs = List.filter_map (
-          fun typ ->
-            match typ with
-            | Nil -> None
-            | _ -> Some(_berk_t_to_llvm_t typ)
-        ) v_ctor_ts in
-
-        let typ_sizes = List.map llvm_sizeof llvm_nonempty_typs in
-        let largest = List.fold_left max 0 typ_sizes in
-
-        let union_t = begin
-          if largest = 0 then
-            Tuple([U8])
-          else
-            Tuple([U8; Array(U8, largest)])
-          end
+        let (_, largest_tuple) =
+          List.fold_left (
+            fun (max_sz_so_far, max_tup_so_far) (cur_sz, cur_tup) ->
+              begin
+                if max_sz_so_far < cur_sz then
+                  (cur_sz, cur_tup)
+                else
+                  (max_sz_so_far, max_tup_so_far)
+              end
+          ) (0, Tuple([])) size_to_tuple
         in
 
-        _berk_t_to_llvm_t union_t
+        _rast_t_to_llvm_t largest_tuple
 
-    | Ptr(pointed_t) -> Llvm.pointer_type (_berk_t_to_llvm_t pointed_t)
+    | Ptr(pointed_t) -> Llvm.pointer_type (_rast_t_to_llvm_t pointed_t)
 
     | ByteArray(actual_t) ->
-        let llvm_actual_t = _berk_t_to_llvm_t actual_t in
+        let llvm_actual_t = _rast_t_to_llvm_t actual_t in
         let sizeof = llvm_sizeof llvm_actual_t in
         let byte_array_t = Array(U8, sizeof) in
-        _berk_t_to_llvm_t byte_array_t
+        _rast_t_to_llvm_t byte_array_t
 
     | Function(ret_t, args_t_lst) ->
-        let llvm_ret_t = _berk_t_to_llvm_t ret_t in
+        let llvm_ret_t = _rast_t_to_llvm_t ret_t in
 
         let args_to_llvm args_t_lst =
           let rec _args_to_rev_llvm llvm_t_lst_so_far args_t_lst =
@@ -112,7 +104,7 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
             | VarArgSentinel::_ ->
                 failwith "VarArgSentinel must be alone and last."
             | x::xs ->
-                let llvm_t = _berk_t_to_llvm_t x in
+                let llvm_t = _rast_t_to_llvm_t x in
 
                 _args_to_rev_llvm (llvm_t::llvm_t_lst_so_far) xs
           end in
@@ -135,19 +127,9 @@ let berk_t_to_llvm_t llvm_sizeof llvm_ctxt =
         Llvm.pointer_type func_t
 
     | VarArgSentinel -> failwith "Should not need to determine type for var arg"
-
-    | UnboundType(name, _) ->
-        failwith ("Cannot determine llvm type for unbound type " ^ name)
-
-    | Unbound(template) ->
-        failwith (
-          "Cannot determine llvm type for unbound type template " ^ template
-        )
-
-    | Undecided -> failwith "Cannot determine llvm type for undecided type"
   end in
 
-  _berk_t_to_llvm_t
+  _rast_t_to_llvm_t
 ;;
 
 
@@ -161,10 +143,30 @@ let initialize_fpm the_fpm =
   (* Try to promote allocas to SSA/registers. *)
   Llvm_scalar_opts.add_scalar_repl_aggregation the_fpm ;
   Llvm_scalar_opts.add_scalar_repl_aggregation_ssa the_fpm ;
+
   (* Reassociate expressions. *)
   Llvm_scalar_opts.add_reassociation the_fpm ;
-  (* Eliminate Common SubExpressions. *)
-  Llvm_scalar_opts.add_gvn the_fpm ;
+
+  (* Eliminate Common SubExpressions.
+
+  NOTE: This is _disabled_ due to this optimization appearing to run into
+  LLVM backend code generation bugs, RE "Cannot select", involving bitcasts
+  between lowered variants (super-tuples) and their target constructor tuples.
+
+  Example:
+
+  LLVM ERROR: Cannot select: 0x5628a72cf220: ch = bitcast Constant:i8<0>
+    0x5628a71dce30: i8 = Constant<0>
+  In function: main
+  PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace.
+  Stack dump:
+  0.  Running pass 'Function Pass Manager' on module 'main'.
+  1.  Running pass 'X86 DAG->DAG Instruction Selection' on function '@main'
+  zsh: IOT instruction (core dumped)  _build/default/bin/lexer_main.exe
+
+  *)
+  (* Llvm_scalar_opts.add_gvn the_fpm ; *)
+
   (* Constant propagation/merging. *)
   Llvm_scalar_opts.add_sccp the_fpm ;
   (* Trivial removal of redundant stores. *)

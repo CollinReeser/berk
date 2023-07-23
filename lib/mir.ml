@@ -1,6 +1,5 @@
 open Rast
 open Ir
-open Typing
 open Utility
 
 module StrMap = Map.Make(String)
@@ -17,7 +16,7 @@ type lval_kind =
 
 (* Lvalues, which can be assigned to and can be read in the RHS. *)
 type lval = {
-  t: berk_t;
+  t: rast_t;
   kind: lval_kind;
   lname: string;
 }
@@ -46,7 +45,7 @@ type instr =
 (* The lval representation of the function argument at the given index. *)
 | GetArg of lval * int
 (* Create an alloca (stack-allocated space of some static size) *)
-| Alloca of lval * berk_t
+| Alloca of lval * rast_t
 (* Store -> lhs is memory target, rhs is stored value *)
 | Store of lval * lval
 (* Load -> lhs is loaded value, rhs memory target *)
@@ -87,8 +86,8 @@ and bb = {
 
 type mir_ctxt = {
   f_name: string;
-  f_params: (string * berk_t) list;
-  f_ret_t: berk_t;
+  f_params: (string * rast_t) list;
+  f_ret_rt: rast_t;
   name_gen: int;
   lvars: lval StrMap.t;
   bbs: bb StrMap.t;
@@ -115,7 +114,7 @@ let fmt_constant constant =
   | ValFunc(func_name) -> sprintf "fn<%s>" func_name
 
 let fmt_lval ({t; kind; lname} : lval) =
-  Printf.sprintf "%s<%s>: %s" lname (fmt_lval_kind kind) (fmt_type t)
+  Printf.sprintf "%s<%s>: %s" lname (fmt_lval_kind kind) (fmt_rtype t)
 
 let fmt_rval rval =
   match rval with
@@ -142,7 +141,7 @@ let fmt_instr instr =
   | Alloca(lval, pointed_t) ->
       sprintf "  %s = alloca of %s\n"
         (fmt_lval lval)
-        (fmt_type pointed_t)
+        (fmt_rtype pointed_t)
 
   | Store(lval, rhs_lval) ->
       sprintf "  store %s into %s\n"
@@ -183,12 +182,12 @@ let fmt_instr instr =
         (fmt_lval lval)
         (fmt_un_op un_op)
         (fmt_lval rhs_lval)
-        (fmt_type target_t)
+        (fmt_rtype target_t)
 
   | PtrTo({t; _} as lval, idxs, aggregate_lval) ->
       sprintf "  %s = getptr %s via %s following indices (%s)\n"
         (fmt_lval lval)
-        (fmt_type t)
+        (fmt_rtype t)
         (fmt_lval aggregate_lval)
         (fmt_join_indices idxs)
 
@@ -312,7 +311,7 @@ let control_flow_list mir_ctxt : bb list =
     List.rev (build_control_flow_graph_rev graph_so_far_rev next_queue seen)
 
 let fmt_mir_ctxt
-  ?(sorted=true) ({f_name; f_params; f_ret_t; bbs=bbs_map; _} as mir_ctxt)
+  ?(sorted=true) ({f_name; f_params; f_ret_rt; bbs=bbs_map; _} as mir_ctxt)
 =
   let open Printf in
   let bbs =
@@ -326,7 +325,7 @@ let fmt_mir_ctxt
   in
   let f_params_fmted =
     fmt_join_strs ", " (
-      List.map (fun (n, t) -> sprintf "%s: %s" n (fmt_type t)) f_params
+      List.map (fun (n, t) -> sprintf "%s: %s" n (fmt_rtype t)) f_params
     )
   in
 
@@ -334,12 +333,12 @@ let fmt_mir_ctxt
     sprintf "\ndecl fn %s(%s) -> %s\n"
       f_name
       f_params_fmted
-      (fmt_type f_ret_t)
+      (fmt_rtype f_ret_rt)
   else
     sprintf "\nfn %s(%s) -> %s:\n%s"
       f_name
       f_params_fmted
-      (fmt_type f_ret_t)
+      (fmt_rtype f_ret_rt)
       (List.fold_left (^) "" (List.map fmt_bb bbs))
 
 let pprint_mir_ctxt ppf mir_ctxt =
@@ -424,20 +423,17 @@ let literal_to_instr mir_ctxt bb t ctor =
 
 
 (* Get a "default value" expr for the given type. *)
-let rec default_expr_for_t mir_ctxt t : (mir_ctxt * rexpr) =
+let rec default_expr_for_t mir_ctxt (t : rast_t) : (mir_ctxt * rexpr) =
   begin match t with
-  | Undecided
-  | Unbound(_)
-  | UnboundType(_, _)
   | VarArgSentinel
-  | Ptr(_)
-  | Variant(_, _)
   | ByteArray(_)
+  | Ptr(_)
+  | SuperTuple(_)
   | Function(_, _) ->
       failwith (
         Printf.sprintf
           "Nonsense attempt to generate default expr value for type [%s]"
-          (fmt_type t)
+          (fmt_rtype t)
       )
 
   | Nil  -> (mir_ctxt, RValNil)
@@ -471,13 +467,13 @@ let rec default_expr_for_t mir_ctxt t : (mir_ctxt * rexpr) =
         Printf.sprintf (
           "Error: Do not attempt to generate default array. " ^^
           "Array declarations must be initialized: [%s]"
-        ) (fmt_type t)
+        ) (fmt_rtype t)
       )
   end
 ;;
 
 
-let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
+let rec type_to_default_lval mir_ctxt bb (t : rast_t) : (mir_ctxt * bb * lval) =
   let (mir_ctxt, bb, lval) =
     begin match t with
     (* For initialization of static arrays, we generate a loop with dynamic
@@ -489,8 +485,8 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         size of the array, and determine what the "base" array element type is.
         If this is a one-dimensional array, this should degrade to simply
         yielding the element type and array size of the top-level array type. *)
-        let arr_elem_and_total_sz cur_t =
-          let rec _arr_elem_and_total_sz cur_t sz_so_far =
+        let arr_elem_and_total_sz (cur_t : rast_t) =
+          let rec _arr_elem_and_total_sz (cur_t : rast_t) sz_so_far =
             begin match cur_t with
             | Array(Array(_) as next_t, cur_sz) ->
                 _arr_elem_and_total_sz next_t (sz_so_far * cur_sz)
@@ -506,7 +502,7 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         in
 
         let (base_elem_t, total_arr_sz) = arr_elem_and_total_sz t in
-        let flattened_arr_t = Array(base_elem_t, total_arr_sz) in
+        let flattened_arr_t : rast_t = Array(base_elem_t, total_arr_sz) in
 
         (* Generate MIR for the mini-AST that initializes the array. Our
         "output" of this mini-AST is the temporary variable holding the
@@ -571,7 +567,7 @@ let rec type_to_default_lval mir_ctxt bb t : (mir_ctxt * bb * lval) =
         we need to bitcast our array pointer back into the original expected
         type. *)
 
-        let ptr_to_unflattened_t = Ptr(t) in
+        let ptr_to_unflattened_t : rast_t = Ptr(t) in
 
         begin if ptr_to_unflattened_t = array_lval_t then
           (mir_ctxt, bb, array_lval)
@@ -629,7 +625,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
       | RValInt(t, x) ->
           failwith (
             Printf.sprintf "Nonsense type [%s] for int [%d] converting to MIR."
-              (fmt_type t) x
+              (fmt_rtype t) x
           )
 
       | RValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb F32
@@ -670,16 +666,31 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
 
           (mir_ctxt, bb, alloca_arr_lval)
 
-      | RValCast(t, op, exp) ->
-          let (mir_ctxt, bb, exp_lval) = _rexpr_to_mir mir_ctxt bb exp in
+      | RValCast(target_t, op, exp) ->
+          let (mir_ctxt, bb, ({t=source_t; _} as exp_lval)) =
+            _rexpr_to_mir mir_ctxt bb exp
+          in
 
-          let (mir_ctxt, varname) = get_varname mir_ctxt in
-          let target_lval = {t=t; kind=Tmp; lname=varname} in
-          let instr = Cast(target_lval, op, exp_lval) in
+          (* Only generate the cast if it's a non-no-op cast, as otherwise
+          during codegen the code generator may elide the cast instruction
+          entirely, which can mess up the expectation that MIR and codegen IR
+          agree on names of temporaries. *)
 
-          let bb = {bb with instrs=bb.instrs @ [instr]} in
+          let (mir_ctxt, bb, result_lval) = begin
+            if (is_bitwise_same_type target_t source_t) then
+              (mir_ctxt, bb, exp_lval)
 
-          (mir_ctxt, bb, target_lval)
+            else
+              let (mir_ctxt, varname) = get_varname mir_ctxt in
+              let cast_lval = {t=target_t; kind=Tmp; lname=varname} in
+              let instr = Cast(cast_lval, op, exp_lval) in
+
+              let bb = {bb with instrs=bb.instrs @ [instr]} in
+
+              (mir_ctxt, bb, cast_lval)
+          end in
+
+          (mir_ctxt, bb, result_lval)
 
       | RExprInvoke(t, func_expr, arg_exprs) ->
           let (mir_ctxt, bb, func_lval) = _rexpr_to_mir mir_ctxt bb func_expr in
@@ -930,134 +941,6 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
           } in
 
           (mir_ctxt, bb, tup_elem_lval)
-
-      | RVariantCtorExpr(variant_t, ctor_name, ctor_args) ->
-          (* Assign the variant tag (first field in aggregate), based on the
-          specific constructor we're building. *)
-          let ctor_idx = get_tag_index_by_variant_ctor variant_t ctor_name in
-          let (mir_ctxt, bb, tag_lval) =
-            ValU8(ctor_idx) |> literal_to_instr mir_ctxt bb U8
-          in
-
-          (* This constructor may have associated data. Assign it now. *)
-          let ctor_args_ts = List.map rexpr_type ctor_args in
-
-          let (
-            mir_ctxt, bb, ({t=variant_ctor_t; _} as ctor_lval), construct_instr
-          ) =
-            begin match ctor_args_ts with
-            | [] ->
-                (* This variant constructor has no fields, so the internal
-                representation of the constructor is merely a "tuple" with
-                one element: the constructor-identifying tag. *)
-                let variant_ctor_t = Tuple([U8]) in
-
-                let (mir_ctxt, varname) = get_varname mir_ctxt in
-                let ctor_lval =
-                  {t=variant_ctor_t; kind=Tmp; lname=varname}
-                in
-                let construct_instr =
-                  ConstructAggregate(ctor_lval, [tag_lval])
-                in
-
-                (mir_ctxt, bb, ctor_lval, construct_instr)
-
-            | _ ->
-                (* The variant constructor contains non-zero fields, so as an
-                implementation detail we represent those fields as a tuple.
-                The first element of the tuple is the constructor tag. *)
-                let variant_ctor_t = Tuple(U8 :: ctor_args_ts) in
-
-                (* Generate lvals for the expression for each field in the
-                variant constructor. *)
-                let ((mir_ctxt, bb), ctor_elem_lvals) =
-                  List.fold_left_map (
-                    fun (mir_ctxt, bb) ctor_arg ->
-                      let (mir_ctxt, bb, lval) =
-                        _rexpr_to_mir mir_ctxt bb ctor_arg
-                      in
-                      ((mir_ctxt, bb), lval)
-                  ) (mir_ctxt, bb) ctor_args
-                in
-
-                let (mir_ctxt, varname) = get_varname mir_ctxt in
-                let ctor_lval = {t=variant_ctor_t; kind=Tmp; lname=varname} in
-                let construct_instr =
-                  ConstructAggregate(ctor_lval, tag_lval :: ctor_elem_lvals)
-                in
-
-                (mir_ctxt, bb, ctor_lval, construct_instr)
-            end
-          in
-
-          (* The actual type of the variant aggregate itself needs to erase the
-          type of the specific constructor we happen to know we're currently
-          looking at. Erase the contructor member type now and replace with a
-          generic byte array. This dance will be optimized away by the code
-          generator. *)
-
-          (* FIXME: This is wrong, because it messes up alignment.
-          Instead, the original alloca needs to be in terms of the type-erased
-          datastructure, and then bitcasts are used to refer to type-specific
-          pointers to the "field data". *)
-
-          let (mir_ctxt, tmp_alloca_varname) = get_varname mir_ctxt in
-          let tmp_alloca_lval =
-            {t=Ptr(variant_ctor_t); kind=Tmp; lname = tmp_alloca_varname}
-          in
-          let tmp_alloca_instr = Alloca(tmp_alloca_lval, variant_ctor_t) in
-
-          (* Store the known-constructor ctor aggregate into an alloca, that
-          we can bitcast to the "generic" variant type and then load. *)
-          let tmp_store_instr = Store(tmp_alloca_lval, ctor_lval) in
-
-          (* We might not actually need to do the bitwise cast, if the variant
-          has exclusively zero-member constructors, as there is then nothing
-          that needs to be "erased".
-
-          We avoid generating the bitcast, rather than just leaving it in
-          anyway, as otherwise the LLVM codegen will see that the bitcast is
-          entirely useless (bitcast from an `ptr {i8}` to an `ptr {i8}`) and
-          elide it entirely, which interferes with the MIR tmp naming and LLVM
-          tmp naming agreement.
-          *)
-          let is_complex_variant = not (is_zero_field_variant variant_t) in
-          let (mir_ctxt, resolved_tmp_alloca_lval, bitcast_instr_lst) =
-            begin if is_complex_variant then
-              let (mir_ctxt, tmp_alloca_bitcast_varname) =
-                get_varname mir_ctxt
-              in
-              let tmp_alloca_bitcast_lval =
-                {t=Ptr(variant_t); kind=Tmp; lname = tmp_alloca_bitcast_varname}
-              in
-              let tmp_alloca_bitcast_instr =
-                Cast(tmp_alloca_bitcast_lval, Bitwise, tmp_alloca_lval)
-              in
-              (mir_ctxt, tmp_alloca_bitcast_lval, [tmp_alloca_bitcast_instr])
-            else
-              (mir_ctxt, tmp_alloca_lval, [])
-            end
-          in
-
-          let (mir_ctxt, tmp_load_variant_varname) = get_varname mir_ctxt in
-          let tmp_load_variant_lval =
-            {t=variant_t; kind=Tmp; lname = tmp_load_variant_varname}
-          in
-          let tmp_load_variant_instr =
-            Load(tmp_load_variant_lval, resolved_tmp_alloca_lval)
-          in
-
-          let bb = {
-            bb with instrs = bb.instrs @ [
-              construct_instr;
-              tmp_alloca_instr;
-              tmp_store_instr;
-            ] @ bitcast_instr_lst @ [
-              tmp_load_variant_instr;
-            ]
-          } in
-
-          (mir_ctxt, bb, tmp_load_variant_lval)
 
       | RMatchExpr(t, matched_exp, patts_to_exps) ->
           let (mir_ctxt, bb, matched_lval) =
@@ -1526,177 +1409,53 @@ and rpattern_to_mir
 
         (mir_ctxt, bb_patt, is_match_lval)
 
-    | RCtor(v_t, ctor_name, ctor_patts) ->
-        (* Assign the variant tag (first field in aggregate), based on the
-        specific constructor we're building. *)
-        let ctor_idx_expected = get_tag_index_by_variant_ctor v_t ctor_name in
-        let (mir_ctxt, bb_patt, tag_expected_lval) =
-          ValU8(ctor_idx_expected) |> literal_to_instr mir_ctxt bb_patt U8
-        in
+    | RPCastThen(target_t, Bitwise, interior_patt) ->
+        (* If and only if the target type and the source type are not actually
+        already the same type (with respect to bitwise behavior), then cast our
+        provided matchee lval into the target type, and then proceed with the
+        pattern against the casted value. *)
 
-        (* Extract the variant tag, that we know is at index 0 of a variant
-        constructor "struct". *)
-        let (mir_ctxt, tag_actual_lname) = get_varname mir_ctxt in
-        let tag_actual_lval = {t=U8; kind=Tmp; lname=tag_actual_lname} in
-        let tag_actual_instr =
-          FromAggregate(tag_actual_lval, 0, matched_lval)
-        in
+        let (mir_ctxt, bb_patt, target_lval) = begin
+          if (is_bitwise_same_type matched_t target_t) then
+            (mir_ctxt, bb_patt, matched_lval)
 
-        (* Compare the expected tag (to match) with the extracted tag from the
-        actual variant constructor object. *)
-        let (mir_ctxt, tag_match_lname) = get_varname mir_ctxt in
-        let tag_match_lval = {t=U8; kind=Tmp; lname=tag_match_lname} in
-        let tag_match_instr =
-          BinOp(tag_match_lval, Eq, tag_actual_lval, tag_expected_lval)
-        in
-
-        (* Make a new bb for considering the sub-pattern of the ctor. *)
-        let (mir_ctxt, bb_ctor_subpatt_name) = get_bbname mir_ctxt in
-        let bb_ctor_subpatt = {name=bb_ctor_subpatt_name; instrs=[]} in
-
-        (* If the tag matches, we'll continue to match against the sub-patterns.
-        Else, we didn't match this pattern, so skip. *)
-        let cond_br_instr = CondBr(tag_match_lval, bb_ctor_subpatt, bb_else) in
-
-        let bb_patt = {
-          bb_patt with instrs=bb_patt.instrs @ [
-            tag_actual_instr;
-            tag_match_instr;
-            cond_br_instr
-          ]
-        } in
-
-        let mir_ctxt = update_bb mir_ctxt bb_patt in
-
-        (* We need to extract the values out of the constructor, if there are
-        any, so we can continue the match. *)
-        let v_ctor_fields_ts = get_v_ctor_fields_ts v_t ctor_name in
-
-        (* Sanity check that the count of patterns we expect to match, and the
-        count of fields in the variant constructor, agree with each other. *)
-        let _ =
-          begin if List.length ctor_patts = List.length v_ctor_fields_ts then
-            ()
           else
-            failwith "Mismatch between variant ctor fields and patterns"
-          end
-        in
+            (* Store the matchee into an alloca so we have a pointer to it. *)
+            let (mir_ctxt, alloc_lname) = get_varname mir_ctxt in
+            let alloc_lval = {t=Ptr(matched_t); kind=Tmp; lname=alloc_lname} in
+            let alloc_instr = Alloca(alloc_lval, matched_t) in
+            let generic_store_instr = Store(alloc_lval, matched_lval) in
 
-        let (mir_ctxt, bb_ctor_subpatt, is_match_lval) = begin
-          match v_ctor_fields_ts with
-          | [] ->
-              (* This variant constructor has no fields, so there's nothing else
-              to further match against, and we simply return a `true` to
-              indicate a successful match. *)
+            (* Bitwise-cast our alloca pointer to the target type. *)
+            let (mir_ctxt, cast_lname) = get_varname mir_ctxt in
+            let cast_lval = {t=Ptr(target_t); kind=Tmp; lname=cast_lname} in
+            let cast_instr = Cast(cast_lval, Bitwise, alloc_lval) in
 
-              let (mir_ctxt, bb_ctor_subpatt, unconditional_match_lval) =
-                rexpr_to_mir mir_ctxt bb_ctor_subpatt (RValBool(true))
-              in
+            (* Load our matchee "as if" it were the target type. *)
+            let (mir_ctxt, target_load_lname) = get_varname mir_ctxt in
+            let target_lval = {t=target_t; kind=Tmp; lname=target_load_lname} in
+            let target_load_instr = Load(target_lval, cast_lval) in
 
-              (mir_ctxt, bb_ctor_subpatt, unconditional_match_lval)
+            let bb_patt = {
+              bb_patt with instrs=bb_patt.instrs @ [
+                alloc_instr;
+                generic_store_instr;
+                cast_instr;
+                target_load_instr;
+              ]
+            } in
 
-          | _ ->
-              Printf.printf "Matched_t: [[ %s ]]\n" (fmt_type matched_t) ;
+            let mir_ctxt = update_bb mir_ctxt bb_patt in
 
-              (* We have in-hand the "generic" variant type, meaning what we
-              pull out of "index 1" of the variant aggregate is a byte-array
-              sized to whatever the largest constructor in the variant is. So,
-              we will pull that max-size aggregate of data out, dump it into
-              an alloca so we can bitcast the pointer to the actual/expected
-              constructor fields aggregate, load the "real" data in, and
-              continue with our match.
-
-              TODO: Really, this should be owned by backend codegen. Need to
-              determine a suitable mechanism of abstraction to "delay" needing
-              to know this size/type until during codegen. *)
-              let largest_ctor_tuple =
-                get_largest_ctor_tuple_of_variant v_t
-              in
-              let generic_max_ctor_val_t = ByteArray(largest_ctor_tuple) in
-
-
-              (* This will be the generic [N * i8] array aggregate form of the
-              largest constructor. *)
-              let (mir_ctxt, generic_max_ctor_val_lname) =
-                get_varname mir_ctxt
-              in
-              let generic_max_ctor_val_lval =
-                {
-                  t=generic_max_ctor_val_t;
-                  kind=Tmp;
-                  lname=generic_max_ctor_val_lname
-                }
-              in
-              let generic_ctor_val_instr =
-                FromAggregate(generic_max_ctor_val_lval, 1, matched_lval)
-              in
-
-              (* At this point we have an [N x i8] array aggregate, but we need
-              to be able to bitcast it to the type we actually need it to be.
-              Since LLVM does not allow bitcasting non-pointers, we need to
-              "pointlessly" push our generic data array into an alloca, so we
-              can bitcast the ptr to the alloca and then extract the data back
-              out in the right type. *)
-
-              let (mir_ctxt, ctor_val_alloca_lname) = get_varname mir_ctxt in
-              let generic_ctor_val_alloca_lval = {
-                  t=Ptr(generic_max_ctor_val_t);
-                  kind=Tmp;
-                  lname=ctor_val_alloca_lname
-              } in
-              let generic_ctor_val_alloca_instr =
-                Alloca(generic_ctor_val_alloca_lval, generic_max_ctor_val_t)
-              in
-
-              let generic_ctor_val_store_instr =
-                Store(generic_ctor_val_alloca_lval, generic_max_ctor_val_lval)
-              in
-
-              (* As an implementation detail, the accessible elements of a
-              target variant constructor are represented as a tuple. *)
-              let ctor_val_t = Tuple(v_ctor_fields_ts) in
-
-              let (mir_ctxt, ctor_val_bitcast_lname) = get_varname mir_ctxt in
-              let ctor_val_bitcast_lval =
-                {t=Ptr(ctor_val_t); kind=Tmp; lname=ctor_val_bitcast_lname}
-              in
-              let ctor_val_bitcast_instr =
-                Cast(
-                  ctor_val_bitcast_lval, Bitwise, generic_ctor_val_alloca_lval
-                )
-              in
-
-              let (mir_ctxt, ctor_val_load_lname) = get_varname mir_ctxt in
-              let ctor_val_lval =
-                {t=ctor_val_t; kind=Tmp; lname=ctor_val_load_lname}
-              in
-              let ctor_val_load_instr =
-                Load(ctor_val_lval, ctor_val_bitcast_lval)
-              in
-
-              let bb_ctor_subpatt = {
-                bb_ctor_subpatt with instrs=bb_ctor_subpatt.instrs @ [
-                  generic_ctor_val_instr;
-                  generic_ctor_val_alloca_instr;
-                  generic_ctor_val_store_instr;
-                  ctor_val_bitcast_instr;
-                  ctor_val_load_instr;
-                ]
-              } in
-
-              let mir_ctxt = update_bb mir_ctxt bb_ctor_subpatt in
-
-              let ctor_tuple_patt = RPTuple(ctor_val_t, ctor_patts) in
-
-              let (mir_ctxt, bb_ctor_subpatt, is_match_lval) =
-                pattern_breakdown_mir
-                  mir_ctxt bb_ctor_subpatt bb_else ctor_val_lval ctor_tuple_patt
-              in
-
-              (mir_ctxt, bb_ctor_subpatt, is_match_lval)
+            (mir_ctxt, bb_patt, target_lval)
         end in
 
-        (mir_ctxt, bb_ctor_subpatt, is_match_lval)
+        (* Recurse on applying the interior pattern to the matchee "as if" it
+        were the target type. *)
+        pattern_breakdown_mir mir_ctxt bb_patt bb_else target_lval interior_patt
+
+    | RPCastThen(_, _, _) ->
+        failwith "Unimplemented: RPCastThen(_, !Bitwise, _)"
 
     end in
 
@@ -1952,7 +1711,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
               | _ ->
                   failwith (
                     Printf.sprintf "Cannot index into unexpected type: [%s]"
-                      (fmt_type var_alloca_t)
+                      (fmt_rtype var_alloca_t)
                   )
           end
         in
@@ -2072,7 +1831,7 @@ let rfunc_to_mir {rf_decl={rf_name; rf_params; rf_ret_t}; rf_stmts} =
   let mir_ctxt = {
     f_name = rf_name;
     f_params = rf_params;
-    f_ret_t = rf_ret_t;
+    f_ret_rt = rf_ret_t;
     name_gen = 0;
     lvars = StrMap.empty;
     bbs = StrMap.empty
@@ -2124,7 +1883,7 @@ let rfunc_decl_to_mir {rf_name; rf_params; rf_ret_t} =
   let mir_ctxt = {
     f_name = rf_name;
     f_params = rf_params;
-    f_ret_t = rf_ret_t;
+    f_ret_rt = rf_ret_t;
     name_gen = 0;
     lvars = StrMap.empty;
     bbs = StrMap.empty
