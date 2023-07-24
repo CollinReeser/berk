@@ -10,6 +10,10 @@ type module_gen_context = {
   data_layout_mod: Llvm_target.DataLayout.t;
   berk_t_to_llvm_t: berk_t -> Llvm.lltype;
   llvm_sizeof: Llvm.lltype -> int;
+  (* Whether to validate generated LLVM IR for static correctness. *)
+  validate: bool;
+  (* Whether to apply optimizations on generated LLVM IR. *)
+  optimize: bool;
 }
 
 type func_gen_context = {
@@ -632,10 +636,16 @@ let codegen_func_mir
       end
   end in
 
-  (* Optimize the function. *)
-  let did_fpm_do = Llvm.PassManager.run_function new_func the_fpm in
-  Printf.printf "Did the FPM do function-level opts on [%s]? [%B]\n"
-    mir_ctxt.f_name did_fpm_do ;
+  let _ = begin
+    if mod_ctxt.optimize then
+      (* Optimize the function. *)
+      let did_fpm_do = Llvm.PassManager.run_function new_func the_fpm in
+      Printf.printf "Did the FPM do function-level opts on [%s]? [%B]\n"
+        mir_ctxt.f_name did_fpm_do ;
+      ()
+    else
+      ()
+  end in
 
   mod_ctxt
 ;;
@@ -662,19 +672,34 @@ let codegen_func_mirs
     ) mod_gen_ctxt mir_ctxts
   in
 
-  Llvm_analysis.assert_valid_module mod_gen_ctxt.llvm_mod ;
+  let _ = begin
+    if mod_gen_ctxt.validate then
+      let _ = Llvm_analysis.assert_valid_module mod_gen_ctxt.llvm_mod in
+      ()
+    else
+      ()
+  end in
 
-  let did_mpm_do = Llvm.PassManager.run_module mod_gen_ctxt.llvm_mod the_mpm in
-  Printf.printf "Did the MPM do module-level opts? [%B]\n" did_mpm_do ;
+  let _ = begin
+    if mod_gen_ctxt.optimize then
+      let did_mpm_do =
+        Llvm.PassManager.run_module mod_gen_ctxt.llvm_mod the_mpm
+      in
+      Printf.printf "Did the MPM do module-level opts? [%B]\n" did_mpm_do ;
 
-  (* Re-apply function optimizations on all functions. Once module-level
-  optimizations are performed, certain function-level optimizations can go
-  further (eg, module-level opts can annotate functions with read-only
-  attributes, allowing function-level opts to merge multiple calls to these
-  "pure" functions). *)
+      (* Re-apply function optimizations on all functions. Once module-level
+      optimizations are performed, certain function-level optimizations can go
+      further (eg, module-level opts can annotate functions with read-only
+      attributes, allowing function-level opts to merge multiple calls to these
+      "pure" functions). *)
 
-  Llvm.iter_functions (
-    fun f -> Llvm.PassManager.run_function f the_fpm |> ignore
-  ) mod_gen_ctxt.llvm_mod ;
+      Llvm.iter_functions (
+        fun f -> Llvm.PassManager.run_function f the_fpm |> ignore
+      ) mod_gen_ctxt.llvm_mod ;
+
+      ()
+    else
+      ()
+  end in
 
   ()
