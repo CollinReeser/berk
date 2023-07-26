@@ -31,7 +31,14 @@ let hfunc_def_to_mir {hf_decl; hf_scope} =
   (* Collect all internal declarations and move them to the top-level scope. *)
   let toplevel_decl_hfscope = rewrite_hscope_to_only_toplevel_decls hf_scope in
 
-  (* Generate MIR for all variable declarations. *)
+  (* Generate MIR for all variable declarations. We do this because:
+
+  - This simplifies handling of generating the instructions themselves. Simply
+  assume any relevant variables already exist, and use them accordingly.
+
+  - This ensures we don't end up with non-optimal codegen like stack allocas
+  within loops that can exhaust the stack despite not actually needing a
+  separate stack allocation for each run through the loop. *)
   let mir_ctxt =
     hscope_decls_to_mir
       mir_ctxt
