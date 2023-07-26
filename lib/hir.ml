@@ -60,12 +60,7 @@ type hir_instr =
   list. *)
   | HArrayExpr of hir_variable * hir_variable list
 
-  (* ??? *)
-  | HMatchExpr of hir_variable * (rpattern * hir_instr) list
 
-
-
-(* ??? *)
 and rpattern =
   | HWild of rast_t
   | HVarBind of rast_t * string
@@ -102,11 +97,9 @@ and hir_scope_instr =
   | CondLoopScope of hir_scope * hir_variable * hir_scope
 
 
-(* ??? *)
-and hf_param = (string * rast_t)
+type hf_param = (string * rast_t)
 
 
-(* ??? *)
 type hfunc_decl_t = {
   hf_name: string;
   hf_params: hf_param list;
@@ -114,7 +107,6 @@ type hfunc_decl_t = {
 }
 
 
-(* ??? *)
 type hfunc_def_t = {
   hf_decl: hfunc_decl_t;
   hf_scope: hir_scope;
