@@ -759,6 +759,31 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
       (hctxt, hscope, decl)
 
+  | RPCastThen(target_t, op, casted_patt) ->
+      (* Create an instruction to compare the matchee against the boolean. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (target_t, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HValCast(decl, op, hmatchee)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      rpattern_to_hir hctxt hscope decl casted_patt
+
+  | RPIntLit(t, i) ->
+      (* Create a temporary containing the boolean to match against. *)
+      let (hctxt, hscope, hint) = rexpr_to_hir hctxt hscope (RValInt(t, i)) in
+
+      (* Create an instruction to compare the matchee against the boolean. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (Bool, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HBinOp(decl, Eq, hmatchee, hint)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
   | RPTuple(tup_t, patts) ->
       (* Declare a boolean, defaulting to true but assignable to false in the
       case that any of the tuple elems don't match the pattern. *)
