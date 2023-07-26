@@ -703,6 +703,13 @@ let rec rexpr_to_hir hctxt hscope rexpr
 indicating whether the match arm should be evaluated. *)
 and rpattern_to_hir hctxt hscope hmatchee patt =
   begin match patt with
+  | RPNil ->
+      (* Create a temporary containing an unconditionally-true boolean,
+      indicating this match pattern always succeeds. *)
+      let (hctxt, hscope, htrue) = rexpr_to_hir hctxt hscope (RValBool(true)) in
+
+      (hctxt, hscope, htrue)
+
   | RWild(_) ->
       (* Create a temporary containing an unconditionally-true boolean,
       indicating this match pattern always succeeds. *)
@@ -760,7 +767,8 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       (hctxt, hscope, decl)
 
   | RPCastThen(target_t, op, casted_patt) ->
-      (* Create an instruction to compare the matchee against the boolean. *)
+      (* Cast the matchee to the target type, then descend into the sub
+      pattern. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (target_t, tmp) in
       let decls = decl :: hscope.declarations in
@@ -771,10 +779,10 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       rpattern_to_hir hctxt hscope decl casted_patt
 
   | RPIntLit(t, i) ->
-      (* Create a temporary containing the boolean to match against. *)
+      (* Create a temporary containing the int to match against. *)
       let (hctxt, hscope, hint) = rexpr_to_hir hctxt hscope (RValInt(t, i)) in
 
-      (* Create an instruction to compare the matchee against the boolean. *)
+      (* Create an instruction to compare the matchee against the int. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (Bool, tmp) in
       let decls = decl :: hscope.declarations in
@@ -783,6 +791,75 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       let hscope = {declarations = decls; instructions = instrs} in
 
       (hctxt, hscope, decl)
+
+  | RPIntFrom(t, i) ->
+      (* Create a temporary containing the int to compare against. *)
+      let (hctxt, hscope, hint) = rexpr_to_hir hctxt hscope (RValInt(t, i)) in
+
+      (* Create an instruction to compare the matchee against the int. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (Bool, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HBinOp(decl, Ge, hmatchee, hint)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
+  | RPIntUntil(t, i) ->
+      (* Create a temporary containing the int to compare against. *)
+      let (hctxt, hscope, hint) = rexpr_to_hir hctxt hscope (RValInt(t, i)) in
+
+      (* Create an instruction to compare the matchee against the int. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (Bool, tmp) in
+      let decls = decl :: hscope.declarations in
+      let instr = Instr(HBinOp(decl, Lt, hmatchee, hint)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
+      (hctxt, hscope, decl)
+
+  | RPIntRange(t, i, j) ->
+      (* Create a temporary containing the first to compare against. *)
+      let (hctxt, hscope, hlhs) = rexpr_to_hir hctxt hscope (RValInt(t, i)) in
+      (* Create a temporary containing the second to compare against. *)
+      let (hctxt, hscope, hrhs) = rexpr_to_hir hctxt hscope (RValInt(t, j)) in
+
+      (* Create an instruction to compare the matchee against the first int. *)
+      let (hctxt, hscope, hlhs_cmp) = begin
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (Bool, tmp) in
+        let decls = decl :: hscope.declarations in
+        let instr = Instr(HBinOp(decl, Ge, hmatchee, hlhs)) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
+        (hctxt, hscope, decl)
+      end in
+
+      (* Create an instruction to compare the matchee against the second int. *)
+      let (hctxt, hscope, hrhs_cmp) = begin
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (Bool, tmp) in
+        let decls = decl :: hscope.declarations in
+        let instr = Instr(HBinOp(decl, Lt, hmatchee, hrhs)) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
+        (hctxt, hscope, decl)
+      end in
+
+      (* Create an instruction to confirm the int was within the range . *)
+      let (hctxt, hscope, hwithin_range) = begin
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (Bool, tmp) in
+        let decls = decl :: hscope.declarations in
+        let instr = Instr(HBinOp(decl, Eq, hlhs_cmp, hrhs_cmp)) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
+        (hctxt, hscope, decl)
+      end in
+
+      (hctxt, hscope, hwithin_range)
 
   | RPTuple(tup_t, patts) ->
       (* Declare a boolean, defaulting to true but assignable to false in the
@@ -806,7 +883,6 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
             let dead_scope = empty_scope in
 
             (hctxt, dead_scope)
-
 
         | patt :: patts_rest ->
             let (hctxt, cur_scope, helem) = begin
@@ -864,13 +940,6 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, hoverall_bool)
-
-  | _ ->
-    failwith (
-      Printf.sprintf
-        "rpattern_to_hir, patt unimplemented: %s"
-        (fmt_rpattern patt)
-    )
   end
 
 
