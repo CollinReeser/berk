@@ -496,7 +496,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         begin match op with
         | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
         | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
-        | LOr | LAnd -> Llvm.build_or lhs_val rhs_val lname builder
+        | LOr | LAnd -> failwith "Logic ops &&, || should have been lowered"
         | _ -> failwith "Non-equality binop not supported for bool"
         end
 

@@ -223,8 +223,6 @@ let fmt_hir_instr hir_instr : string =
       sprintf "%s = [%s]"
         (fmt_hir_variable h_var_res)
         elems_fmt
-
-  | _ -> failwith "fmt_hir_instr(): Unimplemented"
   end
 ;;
 
