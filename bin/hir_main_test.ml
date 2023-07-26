@@ -5,7 +5,9 @@ open Berk.Type_check
 open Berk.Ast
 open Berk.Rast
 open Berk.Rast_to_hir
+open Berk.Rast_to_mir
 open Berk.Hir
+open Berk.Hir_to_mir
 open Berk.Mir
 open Berk.Codegen_mir
 open Berk.Llvm_utility
@@ -322,6 +324,14 @@ let () =
               let hfunc_def = rfunc_def_t_to_hfunc_def_t rfunc_def in
 
               Printf.printf "HIR:\n%s\n" (fmt_hfunc_def_t hfunc_def) ;
+
+              let _ = begin
+                let mir_ctxt = hfunc_def_to_mir hfunc_def in
+                Printf.printf
+                  "HIR-generated MIR:\n%s\n"
+                  (fmt_mir_ctxt mir_ctxt) ;
+                ()
+              end in
 
               let mir_ctxt = rfunc_to_mir rfunc_def in
               Some(mir_ctxt)
