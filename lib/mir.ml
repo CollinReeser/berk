@@ -1,5 +1,6 @@
-open Rast
 open Ir
+open Rast
+open Rast_typing
 open Utility
 
 module StrMap = Map.Make(String)
@@ -400,7 +401,7 @@ let lval_to_alloca mir_ctxt bb lval expected_t =
   (* Allocate stack space for the value *)
   let (mir_ctxt, alloca_varname) = get_varname mir_ctxt in
   let alloca_lval =
-    {t=Ptr(expected_t); kind=Tmp; lname=alloca_varname}
+    {t=RPtr(expected_t); kind=Tmp; lname=alloca_varname}
   in
   let alloca_instr = Alloca(alloca_lval, expected_t) in
 
@@ -425,36 +426,36 @@ let literal_to_instr mir_ctxt bb t ctor =
 (* Get a "default value" expr for the given type. *)
 let rec default_expr_for_t mir_ctxt (t : rast_t) : (mir_ctxt * rexpr) =
   begin match t with
-  | VarArgSentinel
-  | ByteArray(_)
-  | Ptr(_)
-  | SuperTuple(_)
-  | Function(_, _) ->
+  | RVarArgSentinel
+  | RByteArray(_)
+  | RPtr(_)
+  | RSuperTuple(_)
+  | RFunction(_, _) ->
       failwith (
         Printf.sprintf
           "Nonsense attempt to generate default expr value for type [%s]"
           (fmt_rtype t)
       )
 
-  | Nil  -> (mir_ctxt, RValNil)
+  | RNil  -> (mir_ctxt, RValNil)
 
-  | Bool -> (mir_ctxt, RValBool(false))
+  | RBool -> (mir_ctxt, RValBool(false))
 
-  | U64  -> (mir_ctxt, RValInt(U64, 0))
-  | U32  -> (mir_ctxt, RValInt(U32, 0))
-  | U16  -> (mir_ctxt, RValInt(U16, 0))
-  | U8   -> (mir_ctxt, RValInt(U8,  0))
-  | I64  -> (mir_ctxt, RValInt(I64, 0))
-  | I32  -> (mir_ctxt, RValInt(I32, 0))
-  | I16  -> (mir_ctxt, RValInt(I16, 0))
-  | I8   -> (mir_ctxt, RValInt(I8,  0))
-  | F32  -> (mir_ctxt, RValF32 (0.0))
-  | F64  -> (mir_ctxt, RValF64 (0.0))
-  | F128 -> (mir_ctxt, RValF128("0.0"))
+  | RU64  -> (mir_ctxt, RValInt(RU64, 0))
+  | RU32  -> (mir_ctxt, RValInt(RU32, 0))
+  | RU16  -> (mir_ctxt, RValInt(RU16, 0))
+  | RU8   -> (mir_ctxt, RValInt(RU8,  0))
+  | RI64  -> (mir_ctxt, RValInt(RI64, 0))
+  | RI32  -> (mir_ctxt, RValInt(RI32, 0))
+  | RI16  -> (mir_ctxt, RValInt(RI16, 0))
+  | RI8   -> (mir_ctxt, RValInt(RI8,  0))
+  | RF32  -> (mir_ctxt, RValF32    (0.0))
+  | RF64  -> (mir_ctxt, RValF64    (0.0))
+  | RF128 -> (mir_ctxt, RValF128 ("0.0"))
 
-  | String -> (mir_ctxt, RValStr(""))
+  | RString -> (mir_ctxt, RValStr(""))
 
-  | Tuple(tuple_ts) ->
+  | RTuple(tuple_ts) ->
       let (mir_ctxt, default_ts_exprs) =
         List.fold_left_map (
           fun mir_ctxt tuple_t -> default_expr_for_t mir_ctxt tuple_t
@@ -462,7 +463,7 @@ let rec default_expr_for_t mir_ctxt (t : rast_t) : (mir_ctxt * rexpr) =
       in
       (mir_ctxt, RTupleExpr(t, default_ts_exprs))
 
-  | Array(_, _) ->
+  | RArray(_, _) ->
       failwith (
         Printf.sprintf (
           "Error: Do not attempt to generate default array. " ^^
@@ -480,7 +481,7 @@ let rec type_to_default_lval mir_ctxt bb (t : rast_t) : (mir_ctxt * bb * lval) =
     indexing, rather than initializing via individual aggregate initialization,
     as the latter will generate a line of MIR per index in the array (which
     could be millions). *)
-    | Array(_, _) ->
+    | RArray(_, _) ->
         (* This may be a multidimensional array. Calculate the total "flattened"
         size of the array, and determine what the "base" array element type is.
         If this is a one-dimensional array, this should degrade to simply
@@ -488,10 +489,10 @@ let rec type_to_default_lval mir_ctxt bb (t : rast_t) : (mir_ctxt * bb * lval) =
         let arr_elem_and_total_sz (cur_t : rast_t) =
           let rec _arr_elem_and_total_sz (cur_t : rast_t) sz_so_far =
             begin match cur_t with
-            | Array(Array(_) as next_t, cur_sz) ->
+            | RArray(RArray(_) as next_t, cur_sz) ->
                 _arr_elem_and_total_sz next_t (sz_so_far * cur_sz)
 
-            | Array(elem_t, cur_sz) ->
+            | RArray(elem_t, cur_sz) ->
                 (elem_t, sz_so_far * cur_sz)
 
             | _ -> failwith "Unexpected non-array type when determining arr sz"
@@ -502,7 +503,7 @@ let rec type_to_default_lval mir_ctxt bb (t : rast_t) : (mir_ctxt * bb * lval) =
         in
 
         let (base_elem_t, total_arr_sz) = arr_elem_and_total_sz t in
-        let flattened_arr_t : rast_t = Array(base_elem_t, total_arr_sz) in
+        let flattened_arr_t = RArray(base_elem_t, total_arr_sz) in
 
         (* Generate MIR for the mini-AST that initializes the array. Our
         "output" of this mini-AST is the temporary variable holding the
@@ -518,17 +519,17 @@ let rec type_to_default_lval mir_ctxt bb (t : rast_t) : (mir_ctxt * bb * lval) =
           );
           RExprStmt(
             RWhileExpr(
-              Nil, [RDeclStmt(idx_varname, U64, RValInt(U64, 0))],
+              RNil, [RDeclStmt(idx_varname, RU64, RValInt(RU64, 0))],
               RBinOp(
-                Bool, Lt,
-                RValVar(U64, idx_varname), RValInt(U64, total_arr_sz)
+                RBool, Lt,
+                RValVar(RU64, idx_varname), RValInt(RU64, total_arr_sz)
               ),
               [
                 (* Initialize this index of the array. *)
                 RAssignStmt(
                   arr_varname,
                   flattened_arr_t,
-                  [RALIndex(base_elem_t, RValVar(U64, idx_varname))],
+                  [RALIndex(base_elem_t, RValVar(RU64, idx_varname))],
                   begin
                     let (_, exp) = default_expr_for_t mir_ctxt base_elem_t in
                     exp
@@ -537,9 +538,14 @@ let rec type_to_default_lval mir_ctxt bb (t : rast_t) : (mir_ctxt * bb * lval) =
                 (* Increment the indexing variable. *)
                 RAssignStmt(
                   idx_varname,
-                  U64,
+                  RU64,
                   [],
-                  RBinOp(U64, Add, RValVar(U64, idx_varname), RValInt(U64, 1))
+                  RBinOp(
+                    RU64,
+                    Add,
+                    RValVar(RU64, idx_varname),
+                    RValInt(RU64, 1)
+                  )
                 );
               ]
             )
@@ -567,7 +573,7 @@ let rec type_to_default_lval mir_ctxt bb (t : rast_t) : (mir_ctxt * bb * lval) =
         we need to bitcast our array pointer back into the original expected
         type. *)
 
-        let ptr_to_unflattened_t : rast_t = Ptr(t) in
+        let ptr_to_unflattened_t : rast_t = RPtr(t) in
 
         begin if ptr_to_unflattened_t = array_lval_t then
           (mir_ctxt, bb, array_lval)
@@ -609,18 +615,18 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
     (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) : (mir_ctxt * bb * lval)
   =
     let (mir_ctxt, bb, instr) = begin match exp with
-      | RValNil -> ValNil |> literal_to_instr mir_ctxt bb Nil
+      | RValNil -> ValNil |> literal_to_instr mir_ctxt bb RNil
 
-      | RValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb Bool
+      | RValBool(b) -> ValBool(b) |> literal_to_instr mir_ctxt bb RBool
 
-      | RValInt(U8,  x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb U8
-      | RValInt(U16, x) -> ValU16(x) |> literal_to_instr mir_ctxt bb U16
-      | RValInt(U32, x) -> ValU32(x) |> literal_to_instr mir_ctxt bb U32
-      | RValInt(U64, x) -> ValU64(x) |> literal_to_instr mir_ctxt bb U64
-      | RValInt(I8,  x) -> ValI8(x)  |> literal_to_instr mir_ctxt bb I8
-      | RValInt(I16, x) -> ValI16(x) |> literal_to_instr mir_ctxt bb I16
-      | RValInt(I32, x) -> ValI32(x) |> literal_to_instr mir_ctxt bb I32
-      | RValInt(I64, x) -> ValI64(x) |> literal_to_instr mir_ctxt bb I64
+      | RValInt(RU8,  x) -> ValU8(x)  |> literal_to_instr mir_ctxt bb RU8
+      | RValInt(RU16, x) -> ValU16(x) |> literal_to_instr mir_ctxt bb RU16
+      | RValInt(RU32, x) -> ValU32(x) |> literal_to_instr mir_ctxt bb RU32
+      | RValInt(RU64, x) -> ValU64(x) |> literal_to_instr mir_ctxt bb RU64
+      | RValInt(RI8,  x) -> ValI8(x)  |> literal_to_instr mir_ctxt bb RI8
+      | RValInt(RI16, x) -> ValI16(x) |> literal_to_instr mir_ctxt bb RI16
+      | RValInt(RI32, x) -> ValI32(x) |> literal_to_instr mir_ctxt bb RI32
+      | RValInt(RI64, x) -> ValI64(x) |> literal_to_instr mir_ctxt bb RI64
 
       | RValInt(t, x) ->
           failwith (
@@ -628,11 +634,11 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
               (fmt_rtype t) x
           )
 
-      | RValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb F32
-      | RValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb F64
-      | RValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb F128
+      | RValF32(f) -> ValF32(f) |> literal_to_instr mir_ctxt bb RF32
+      | RValF64(f) -> ValF64(f) |> literal_to_instr mir_ctxt bb RF64
+      | RValF128(str) -> ValF128(str) |> literal_to_instr mir_ctxt bb RF128
 
-      | RValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb String
+      | RValStr(str) -> ValStr(str) |> literal_to_instr mir_ctxt bb RString
 
       | RValFunc(func_t, func_name) ->
           ValFunc(func_name) |> literal_to_instr mir_ctxt bb func_t
@@ -660,7 +666,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
       | RValRawArray(t) ->
           (* Generate a raw, uninitialized stack-allocated static array. *)
           let (mir_ctxt, alloca_arr_varname) = get_varname mir_ctxt in
-          let alloca_arr_lval = {t=Ptr(t); kind=Tmp; lname=alloca_arr_varname} in
+          let alloca_arr_lval = {t=RPtr(t); kind=Tmp; lname=alloca_arr_varname} in
           let alloca_arr_instr = Alloca(alloca_arr_lval, t) in
           let bb = {bb with instrs = bb.instrs @ [alloca_arr_instr]} in
 
@@ -704,7 +710,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
           in
 
           let (mir_ctxt, bb, lval, call_instr) = begin match t with
-            | Nil ->
+            | RNil ->
                 let (mir_ctxt, bb, nil_lval) =
                   _rexpr_to_mir mir_ctxt bb RValNil
                 in
@@ -830,7 +836,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
           (* Where to store the result of the logical-or operation. *)
           let (mir_ctxt, result_alloca_name) = get_varname mir_ctxt in
           let result_alloca_lval =
-            {t=Ptr(Bool); kind=Tmp; lname=result_alloca_name}
+            {t=RPtr(RBool); kind=Tmp; lname=result_alloca_name}
           in
           let alloca_instr = Alloca(result_alloca_lval, t) in
 
@@ -870,7 +876,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
 
           (* Load the result of the logical op. *)
           let (mir_ctxt, result_varname) = get_varname mir_ctxt in
-          let result_lval = {t=Bool; kind=Tmp; lname=result_varname} in
+          let result_lval = {t=RBool; kind=Tmp; lname=result_varname} in
           let result_instr = Load(result_lval, result_alloca_lval) in
           let done_bb =
             {done_bb with instrs = done_bb.instrs @ [result_instr]}
@@ -967,7 +973,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
             match_res_lval
           ) =
             begin match t with
-              | Nil ->
+              | RNil ->
                   let (mir_ctxt, bb, nil_lval) =
                     _rexpr_to_mir mir_ctxt bb RValNil
                   in
@@ -980,7 +986,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
                   (* Alloca for the match expr result to be written into. *)
                   let (mir_ctxt, match_alloca_name) = get_varname mir_ctxt in
                   let match_alloca_lval =
-                    {t=Ptr(t); kind=Tmp; lname=match_alloca_name}
+                    {t=RPtr(t); kind=Tmp; lname=match_alloca_name}
                   in
                   let maybe_alloca = [Alloca(match_alloca_lval, t)] in
 
@@ -1065,7 +1071,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
 
           (mir_ctxt, bb_end, match_res_lval)
 
-      | RWhileExpr(Nil, init_stmts, cond_expr, then_stmts) ->
+      | RWhileExpr(RNil, init_stmts, cond_expr, then_stmts) ->
           let (mir_ctxt, init_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, cond_bb_name) = get_bbname mir_ctxt in
           let (mir_ctxt, then_bb_name) = get_bbname mir_ctxt in
@@ -1152,7 +1158,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
           element if it is an aggregate itself.  *)
           let deref_t = unwrap_ptr pointer_t in
           let elem_t = unwrap_indexable deref_t in
-          let pointer_to_elem_t = Ptr(elem_t) in
+          let pointer_to_elem_t = RPtr(elem_t) in
 
           let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
           let ptr_to_elem_lval = {t=pointer_to_elem_t; kind=Tmp; lname=ptrto_varname} in
@@ -1180,7 +1186,7 @@ and rexpr_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (exp : Rast.rexpr) =
           further index into. *)
           let (mir_ctxt, bb, ret_lval) =
             begin match elem_t with
-            | Array(_, _) ->
+            | RArray(_, _) ->
                 (mir_ctxt, bb, ptr_to_elem_lval)
 
             | _ ->
@@ -1261,7 +1267,7 @@ and rpattern_to_mir
         in
 
         let (mir_ctxt, bool_patt_lname) = get_varname mir_ctxt in
-        let is_match_lval = {t=Bool; kind=Tmp; lname=bool_patt_lname} in
+        let is_match_lval = {t=RBool; kind=Tmp; lname=bool_patt_lname} in
         let instr = BinOp(is_match_lval, Eq, b_lval, matched_lval) in
 
         let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [instr]} in
@@ -1274,7 +1280,7 @@ and rpattern_to_mir
         in
 
         let (mir_ctxt, int_patt_lname) = get_varname mir_ctxt in
-        let is_match_lval = {t=Bool; kind=Tmp; lname=int_patt_lname} in
+        let is_match_lval = {t=RBool; kind=Tmp; lname=int_patt_lname} in
         let instr = BinOp(is_match_lval, Eq, matched_lval, i_lval) in
 
         let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [instr]} in
@@ -1291,17 +1297,17 @@ and rpattern_to_mir
 
         (* Is the matched value >= the lower bound? *)
         let (mir_ctxt, ge_i_lname) = get_varname mir_ctxt in
-        let ge_i_lval = {t=Bool; kind=Tmp; lname=ge_i_lname} in
+        let ge_i_lval = {t=RBool; kind=Tmp; lname=ge_i_lname} in
         let ge_i_instr = BinOp(ge_i_lval, Ge, matched_lval, i_lval) in
 
         (* Is the matched value < the upper bound? *)
         let (mir_ctxt, lt_j_lname) = get_varname mir_ctxt in
-        let lt_j_lval = {t=Bool; kind=Tmp; lname=lt_j_lname} in
+        let lt_j_lval = {t=RBool; kind=Tmp; lname=lt_j_lname} in
         let lt_j_instr = BinOp(lt_j_lval, Lt, matched_lval, j_lval) in
 
         (* Did the matched value satisfy both bounds? *)
         let (mir_ctxt, ge_and_lt_lname) = get_varname mir_ctxt in
-        let ge_and_lt_lval = {t=Bool; kind=Tmp; lname=ge_and_lt_lname} in
+        let ge_and_lt_lval = {t=RBool; kind=Tmp; lname=ge_and_lt_lname} in
         let ge_and_lt_instr = BinOp(ge_and_lt_lval, Eq, ge_i_lval, lt_j_lval) in
 
         let bb_patt = {
@@ -1319,7 +1325,7 @@ and rpattern_to_mir
 
         (* Is the matched value >= the lower bound? *)
         let (mir_ctxt, ge_i_lname) = get_varname mir_ctxt in
-        let ge_i_lval = {t=Bool; kind=Tmp; lname=ge_i_lname} in
+        let ge_i_lval = {t=RBool; kind=Tmp; lname=ge_i_lname} in
         let ge_i_instr = BinOp(ge_i_lval, Ge, matched_lval, i_lval) in
 
         let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [ge_i_instr]} in
@@ -1333,7 +1339,7 @@ and rpattern_to_mir
 
         (* Is the matched value < the upper bound? *)
         let (mir_ctxt, lt_j_lname) = get_varname mir_ctxt in
-        let lt_j_lval = {t=Bool; kind=Tmp; lname=lt_j_lname} in
+        let lt_j_lval = {t=RBool; kind=Tmp; lname=lt_j_lname} in
         let lt_j_instr = BinOp(lt_j_lval, Lt, matched_lval, j_lval) in
 
         let bb_patt = {bb_patt with instrs=bb_patt.instrs @ [lt_j_instr ]} in
@@ -1343,7 +1349,7 @@ and rpattern_to_mir
     | RPTuple(t, patts) ->
         (* Extract the types out so we can deconstruct the tuple. *)
         let tuple_elem_ts = begin match t with
-          | Tuple(ts) -> ts
+          | RTuple(ts) -> ts
           | _ -> failwith "Typecheck failure deconstructing aggr in MIR"
         end in
 
@@ -1422,13 +1428,13 @@ and rpattern_to_mir
           else
             (* Store the matchee into an alloca so we have a pointer to it. *)
             let (mir_ctxt, alloc_lname) = get_varname mir_ctxt in
-            let alloc_lval = {t=Ptr(matched_t); kind=Tmp; lname=alloc_lname} in
+            let alloc_lval = {t=RPtr(matched_t); kind=Tmp; lname=alloc_lname} in
             let alloc_instr = Alloca(alloc_lval, matched_t) in
             let generic_store_instr = Store(alloc_lval, matched_lval) in
 
             (* Bitwise-cast our alloca pointer to the target type. *)
             let (mir_ctxt, cast_lname) = get_varname mir_ctxt in
-            let cast_lval = {t=Ptr(target_t); kind=Tmp; lname=cast_lname} in
+            let cast_lval = {t=RPtr(target_t); kind=Tmp; lname=cast_lname} in
             let cast_instr = Cast(cast_lval, Bitwise, alloc_lval) in
 
             (* Load our matchee "as if" it were the target type. *)
@@ -1497,7 +1503,7 @@ and assign_rhs_to_decl mir_ctxt bb lhs_name rhs_lval expected_t =
     lval_to_alloca mir_ctxt bb rhs_lval expected_t
   in
 
-  let lval = {t=Ptr(expected_t); kind=Var; lname=lhs_name} in
+  let lval = {t=RPtr(expected_t); kind=Var; lname=lhs_name} in
   let assign_instr = Assign(lval, RVar(alloca_lval)) in
 
   let mir_ctxt = {
@@ -1597,7 +1603,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
 
               let deref_t = unwrap_ptr idxable_t in
               let elem_t = unwrap_indexable deref_t in
-              let pointer_to_elem_t = Ptr(elem_t) in
+              let pointer_to_elem_t = RPtr(elem_t) in
 
               let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
               let ptr_to_next_elem_lval =
@@ -1624,7 +1630,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
               unwrapping function should be named accordingly. *)
               let deref_t = unwrap_ptr idxable_t in
               let elem_t = unwrap_aggregate_indexable deref_t i in
-              let pointer_to_elem_t = Ptr(elem_t) in
+              let pointer_to_elem_t = RPtr(elem_t) in
 
               let (mir_ctxt, ptrto_varname) = get_varname mir_ctxt in
               let ptr_to_next_elem_lval =
@@ -1676,7 +1682,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
               variable is a single layer of indirection to the element, even
               if the element is a (non-array) aggregate. *)
               match var_alloca_t with
-              | Ptr(Ptr(Array(_))) ->
+              | RPtr(RPtr(RArray(_))) ->
                   (* We need to "unwrap" the ptr to the named variable alloca,
                   to get the indexable ptr-to-array lval itself. *)
 
@@ -1697,7 +1703,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
 
                   (mir_ctxt, bb, to_store_lval)
 
-              | Ptr(_) ->
+              | RPtr(_) ->
                   (* We do not unwrap the pointer prior to indexing, because
                   this pointer points directly to the (aggregate of) elements
                   we need to index. ie, this could be a ptr to a tuple. *)
@@ -1731,7 +1737,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
         let t = rexpr_type exp in
 
         begin match t with
-        | Nil ->
+        | RNil ->
             let bb = {bb with instrs = bb.instrs @ [RetVoid]} in
             let mir_ctxt = update_bb mir_ctxt bb in
 
@@ -1862,7 +1868,7 @@ let rfunc_to_mir {rf_decl={rf_name; rf_params; rf_ret_t}; rf_stmts} =
 
     | []
     | _ :: _ ->
-        if rf_ret_t = Nil then
+        if rf_ret_t = RNil then
           let (mir_ctxt, _) =
             rstmt_to_mir mir_ctxt cur_bb (RReturnStmt(RValNil))
           in

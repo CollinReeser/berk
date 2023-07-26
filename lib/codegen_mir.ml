@@ -1,6 +1,6 @@
 open Ir
 open Mir
-open Rast
+open Rast_typing
 
 module StrMap = Map.Make(String)
 
@@ -68,7 +68,7 @@ let codegen_constant
 
   begin match constant with
   | ValNil ->
-      let llvm_nil_typ = func_ctxt.mod_ctxt.rast_t_to_llvm_t Nil in
+      let llvm_nil_typ = func_ctxt.mod_ctxt.rast_t_to_llvm_t RNil in
       Llvm.undef llvm_nil_typ
 
   | ValU64(n) | ValI64(n) -> Llvm.const_int i64_t n
@@ -386,11 +386,11 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Bitwise -> Llvm.build_bitcast op_val llvm_t lname builder
         | Extend ->
             begin match t with
-            | U8 | U16 | U32 | U64 ->
+            | RU8 | RU16 | RU32 | RU64 ->
               Llvm.build_zext op_val llvm_t lname builder
-            | I8 | I16 | I32 | I64 ->
+            | RI8 | RI16 | RI32 | RI64 ->
               Llvm.build_sext op_val llvm_t lname builder
-            | F32 | F64 | F128 ->
+            | RF32 | RF64 | RF128 ->
               Llvm.build_fpext op_val llvm_t lname builder
             | _ -> failwith "Cannot extend non-numeric type"
             end
@@ -443,7 +443,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
       in
 
       let bin_op_val = begin match (lhs_t, rhs_t) with
-      | ((U8 | U16 | U32 | U64), (U8 | U16 | U32 | U64)) ->
+      | ((RU8 | RU16 | RU32 | RU64), (RU8 | RU16 | RU32 | RU64)) ->
         begin match op with
         | Add -> Llvm.build_add lhs_val rhs_val lname builder
         | Sub -> Llvm.build_sub lhs_val rhs_val lname builder
@@ -459,7 +459,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | LOr | LAnd -> failwith "Operation not supported for types."
         end
 
-      | ((I8 | I16 | I32 | I64), (I8 | I16 | I32 | I64)) ->
+      | ((RI8 | RI16 | RI32 | RI64), (RI8 | RI16 | RI32 | RI64)) ->
         begin match op with
         | Add -> Llvm.build_add lhs_val rhs_val lname builder
         | Sub -> Llvm.build_sub lhs_val rhs_val lname builder
@@ -475,7 +475,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | LOr | LAnd -> failwith "Operation not supported for types."
         end
 
-      | ((F128 | F64 | F32), (F128 | F64 | F32)) ->
+      | ((RF128 | RF64 | RF32), (RF128 | RF64 | RF32)) ->
         begin match op with
         | Add -> Llvm.build_fadd lhs_val rhs_val lname builder
         | Sub -> Llvm.build_fsub lhs_val rhs_val lname builder
@@ -492,7 +492,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         end
 
 
-      | (Bool, Bool) ->
+      | (RBool, RBool) ->
         begin match op with
         | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
         | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
@@ -576,8 +576,8 @@ let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_rt; _} =
   let rec get_static_f_params f_params =
     begin match f_params with
     | [] -> ([], false)
-    | [(_, VarArgSentinel)] -> ([], true)
-    | (_, VarArgSentinel)::_ ->
+    | [(_, RVarArgSentinel)] -> ([], true)
+    | (_, RVarArgSentinel)::_ ->
         failwith "Variadic arguments may exist only once, at end of param list"
     | (_, x)::xs ->
         let (rest, is_vararg) = get_static_f_params xs in

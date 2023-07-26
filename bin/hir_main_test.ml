@@ -4,6 +4,7 @@ open Berk.Parser
 open Berk.Type_check
 open Berk.Ast
 open Berk.Rast
+open Berk.Rast_to_hir
 open Berk.Hir
 open Berk.Mir
 open Berk.Codegen_mir

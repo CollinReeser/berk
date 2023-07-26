@@ -1,32 +1,32 @@
-open Rast
+open Rast_typing
 
 let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
   let rec _rast_t_to_llvm_t (typ : rast_t) : Llvm.lltype =
     begin match typ with
-    | Nil -> Llvm.void_type llvm_ctxt
+    | RNil -> Llvm.void_type llvm_ctxt
 
-    | U64 | I64 -> Llvm.i64_type llvm_ctxt
-    | U32 | I32 -> Llvm.i32_type llvm_ctxt
-    | U16 | I16 -> Llvm.i16_type llvm_ctxt
-    | U8  | I8  -> Llvm.i8_type  llvm_ctxt
+    | RU64 | RI64 -> Llvm.i64_type llvm_ctxt
+    | RU32 | RI32 -> Llvm.i32_type llvm_ctxt
+    | RU16 | RI16 -> Llvm.i16_type llvm_ctxt
+    | RU8  | RI8  -> Llvm.i8_type  llvm_ctxt
 
-    | F128 -> Llvm.fp128_type  llvm_ctxt
-    | F64  -> Llvm.double_type llvm_ctxt
-    | F32  -> Llvm.float_type  llvm_ctxt
+    | RF128 -> Llvm.fp128_type  llvm_ctxt
+    | RF64  -> Llvm.double_type llvm_ctxt
+    | RF32  -> Llvm.float_type  llvm_ctxt
 
-    | Bool -> Llvm.i1_type llvm_ctxt
+    | RBool -> Llvm.i1_type llvm_ctxt
 
-    | String ->
+    | RString ->
         let llvm_char_t = Llvm.i8_type llvm_ctxt in
         let llvm_str_t = Llvm.pointer_type llvm_char_t in
         llvm_str_t
 
-    | Array(elem_typ, sz) ->
+    | RArray(elem_typ, sz) ->
         let llvm_elem_t = _rast_t_to_llvm_t elem_typ in
         let llvm_arr_t = Llvm.array_type llvm_elem_t sz in
         llvm_arr_t
 
-    | Tuple(types) ->
+    | RTuple(types) ->
         let llvm_t_lst = List.map (_rast_t_to_llvm_t) types in
         let llvm_t_arr = Array.of_list llvm_t_lst in
 
@@ -54,14 +54,14 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
 
         llvm_tuple_t
 
-    | SuperTuple(tss) ->
+    | RSuperTuple(tss) ->
         (* The size/layout of a supertuple is the size/layout of the largest
         superimposed tuple.
 
         TODO: This should take alignment into consideration. For now, it assumes
         a packed aggregate type. *)
 
-        let tuples = List.map (fun ts -> Tuple(ts)) tss in
+        let tuples = List.map (fun ts -> RTuple(ts)) tss in
         let size_to_tuple =
           List.map (
             fun tuple ->
@@ -80,28 +80,28 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
                 else
                   (max_sz_so_far, max_tup_so_far)
               end
-          ) (0, Tuple([])) size_to_tuple
+          ) (0, RTuple([])) size_to_tuple
         in
 
         _rast_t_to_llvm_t largest_tuple
 
-    | Ptr(pointed_t) -> Llvm.pointer_type (_rast_t_to_llvm_t pointed_t)
+    | RPtr(pointed_t) -> Llvm.pointer_type (_rast_t_to_llvm_t pointed_t)
 
-    | ByteArray(actual_t) ->
+    | RByteArray(actual_t) ->
         let llvm_actual_t = _rast_t_to_llvm_t actual_t in
         let sizeof = llvm_sizeof llvm_actual_t in
-        let byte_array_t = Array(U8, sizeof) in
+        let byte_array_t = RArray(RU8, sizeof) in
         _rast_t_to_llvm_t byte_array_t
 
-    | Function(ret_t, args_t_lst) ->
+    | RFunction(ret_t, args_t_lst) ->
         let llvm_ret_t = _rast_t_to_llvm_t ret_t in
 
         let args_to_llvm args_t_lst =
           let rec _args_to_rev_llvm llvm_t_lst_so_far args_t_lst =
             begin match args_t_lst with
             | [] -> (llvm_t_lst_so_far, false)
-            | [VarArgSentinel] -> (llvm_t_lst_so_far, true)
-            | VarArgSentinel::_ ->
+            | [RVarArgSentinel] -> (llvm_t_lst_so_far, true)
+            | RVarArgSentinel::_ ->
                 failwith "VarArgSentinel must be alone and last."
             | x::xs ->
                 let llvm_t = _rast_t_to_llvm_t x in
@@ -126,7 +126,8 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
         as raw LLVM function types are sizeless and can't be allocated for. *)
         Llvm.pointer_type func_t
 
-    | VarArgSentinel -> failwith "Should not need to determine type for var arg"
+    | RVarArgSentinel ->
+        failwith "Should not need to determine type for var arg"
   end in
 
   _rast_t_to_llvm_t
