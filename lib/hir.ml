@@ -332,22 +332,75 @@ let fmt_hfunc_def_t {hf_decl; hf_scope} =
 ;;
 
 
-type hir_ctxt = {
-  func_vars: (rast_t * int) StrMap.t;
-  seen_vars: hir_variable StrMap.t;
-  tmp_counter: int;
-}
+(* Given an hir_scope that may have some arbitrary tree of internal subscopes,
+rewrite the scope tree so that all declarations within the tree are moved to the
+top-level scope, leaving all sub-scopes with zero declarations. *)
+let rewrite_hscope_to_only_toplevel_decls hscope =
+  (* Given an hir_scope_instr, yield the full list of all declarations made
+  within any child scopes, and a version of that instruction with all of those
+declarations stripped. *)
+  let rec _strip_instruction
+    scope_instr : (hir_variable list * hir_scope_instr)
+  =
+    begin match scope_instr with
+    | Instr(instr) ->
+        ([], Instr(instr))
 
-let default_hir_ctxt : hir_ctxt = {
-  func_vars = StrMap.empty;
-  seen_vars = StrMap.empty;
-  tmp_counter = 0;
-}
+    | Scope(inner_scope) ->
+        let (inner_decls, inner_scope_stripped) = _strip_scope inner_scope in
+        (
+          inner_decls,
+          Scope(inner_scope_stripped)
+        )
 
+    | CondScope(hvar, then_scope, else_scope) ->
+        let (then_decls, then_scope_stripped) = _strip_scope then_scope in
+        let (else_decls, else_scope_stripped) = _strip_scope else_scope in
+        (
+          then_decls @ else_decls,
+          CondScope(hvar, then_scope_stripped, else_scope_stripped)
+        )
 
-let get_tmp_name hir_ctxt : (hir_ctxt * string) =
-  (
-    {hir_ctxt with tmp_counter = hir_ctxt.tmp_counter + 1},
-    "__hir_tmp_" ^ (Printf.sprintf "%d" hir_ctxt.tmp_counter)
-  )
-;;
+    | CondLoopScope(eval_scope, hvar, body_scope) ->
+        let (eval_decls, eval_scope_stripped) = _strip_scope eval_scope in
+        let (body_decls, body_scope_stripped) = _strip_scope body_scope in
+        (
+          eval_decls @ body_decls,
+          CondLoopScope(eval_scope_stripped, hvar, body_scope_stripped)
+        )
+    end
+
+  (* Take an hir_scope, and return that scope with both its own declarations
+  pulled out, and any declarations in child scopes also pulled out, returning
+  the stripped declarations as a separate list, and the stripped version of the
+  scope-tree itself. *)
+  and _strip_scope
+    ({declarations; instructions} : hir_scope) :
+    (hir_variable list * hir_scope)
+  =
+    let (decls_inner, instrs_stripped) =
+      List.fold_left (
+        fun (decls_acc, instrs_stripped_acc) instr ->
+          let (decls, instr_stripped) = _strip_instruction instr in
+          (
+            decls_acc @ decls,
+            instrs_stripped_acc @ [instr_stripped]
+          )
+      ) ([], []) instructions
+    in
+
+    (
+      declarations @ decls_inner,
+      {
+        declarations = [];
+        instructions = instrs_stripped
+      }
+    )
+  in
+
+  let (all_decls, {instructions=instrs_stripped; _}) = _strip_scope hscope in
+
+  {
+    declarations = all_decls;
+    instructions = instrs_stripped
+  }

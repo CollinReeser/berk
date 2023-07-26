@@ -4,6 +4,27 @@ open Rast
 open Rast_typing
 
 
+type hir_ctxt = {
+  func_vars: (rast_t * int) StrMap.t;
+  seen_vars: hir_variable StrMap.t;
+  tmp_counter: int;
+}
+
+let default_hir_ctxt : hir_ctxt = {
+  func_vars = StrMap.empty;
+  seen_vars = StrMap.empty;
+  tmp_counter = 0;
+}
+
+
+let get_tmp_name hir_ctxt : (hir_ctxt * string) =
+  (
+    {hir_ctxt with tmp_counter = hir_ctxt.tmp_counter + 1},
+    "__hir_tmp_" ^ (Printf.sprintf "%d" hir_ctxt.tmp_counter)
+  )
+;;
+
+
 let rec rexpr_to_hir hctxt hscope rexpr
   : (hir_ctxt * hir_scope * hir_variable)
 =

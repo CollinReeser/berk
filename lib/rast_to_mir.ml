@@ -1332,7 +1332,7 @@ and rstmt_to_mir (mir_ctxt : mir_ctxt) (bb : bb) (stmt : Rast.rstmt) =
 ;;
 
 
-let rfunc_to_mir {rf_decl={rf_name; rf_params; rf_ret_t}; rf_stmts} =
+let rfunc_decl_to_mir {rf_name; rf_params; rf_ret_t} =
   let mir_ctxt = {
     f_name = rf_name;
     f_params = rf_params;
@@ -1341,6 +1341,13 @@ let rfunc_to_mir {rf_decl={rf_name; rf_params; rf_ret_t}; rf_stmts} =
     lvars = StrMap.empty;
     bbs = StrMap.empty
   } in
+
+  mir_ctxt
+;;
+
+
+let rfunc_to_mir {rf_decl={rf_name; rf_ret_t; _} as rf_decl; rf_stmts} =
+  let mir_ctxt = rfunc_decl_to_mir rf_decl in
 
   let bb_entry = {name="entry"; instrs=[]} in
 
@@ -1380,20 +1387,6 @@ let rfunc_to_mir {rf_decl={rf_name; rf_params; rf_ret_t}; rf_stmts} =
   end in
 
   let mir_ctxt = clean_up_mir mir_ctxt in
-
-  mir_ctxt
-;;
-
-
-let rfunc_decl_to_mir {rf_name; rf_params; rf_ret_t} =
-  let mir_ctxt = {
-    f_name = rf_name;
-    f_params = rf_params;
-    f_ret_rt = rf_ret_t;
-    name_gen = 0;
-    lvars = StrMap.empty;
-    bbs = StrMap.empty
-  } in
 
   mir_ctxt
 ;;
