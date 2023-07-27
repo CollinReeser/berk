@@ -239,9 +239,9 @@ let () =
     }
 
     fn main(): i8 {
-      let a = 5;
-      let b = 10;
-      return 15;
+      let a: i8 = 5;
+      let b: i8 = 10;
+      return a + b;
     }
   |} in
 

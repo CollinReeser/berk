@@ -79,6 +79,28 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
       let mir_ctxt = update_bb mir_ctxt bb in
       (mir_ctxt, bb)
 
+  | HValueStore(target_var, source_var) ->
+      let target_lval = lval_from_hvar Tmp target_var in
+      let source_lval = lval_from_hvar Tmp source_var in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [Store(target_lval, source_lval)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HValueLoad(result_var, source_var) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let source_lval = lval_from_hvar Tmp source_var in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [Load(result_lval, source_lval)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
   | HAggregate(result_var, elem_vars) ->
       let result_lval = lval_from_hvar Tmp result_var in
 

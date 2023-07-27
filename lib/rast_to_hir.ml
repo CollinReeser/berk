@@ -36,79 +36,76 @@ let rec rexpr_to_hir hctxt hscope rexpr
           (* This name refers to a function argument. *)
           let (hctxt, tmp) = get_tmp_name hctxt in
           let decl = (t, tmp) in
-          let decls = decl :: hscope.declarations in
           let instr = Instr(HArgToVar(decl, name, i)) in
           let instrs = instr :: hscope.instructions in
-          let hscope = {declarations = decls; instructions = instrs} in
+          let hscope = {hscope with instructions = instrs} in
           (hctxt, hscope, decl)
 
       | None ->
           (* This was not a function argument. *)
-          let decl = (t, name) in
+          let (hctxt, tmp) = get_tmp_name hctxt in
+          let decl = (t, tmp) in
+          let var = (RPtr(t), name) in
+          let instr = Instr(HValueLoad(decl, var)) in
+          let instrs = instr :: hscope.instructions in
+          let hscope = {hscope with instructions = instrs} in
           (hctxt, hscope, decl)
       end
 
   | RValFunc(func_t, func_name) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (func_t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValFunc(func_name))) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValNil ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RNil, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValNil)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValBool(b) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RBool, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValBool(b))) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValStr(s) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RString, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValStr(s))) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValF32(f) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RF32, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValF32(f))) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValF64(f) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RF64, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValF64(f))) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValF128(s) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RF128, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValF128(s))) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValInt(t, x) ->
@@ -132,10 +129,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, hval)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RUnOp(t, op, exp) ->
@@ -143,10 +139,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HUnOp(decl, op, rhs_var)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RValCast(t, op, exp) ->
@@ -154,10 +149,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValCast(decl, op, rhs_var)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RBinOp(t, op, lhs, rhs) ->
@@ -166,33 +160,45 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HBinOp(decl, op, lhs_var, rhs_var)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   (* Declare an outer variable, create an inner scope, evaluate an initial
   statement within that inner scope, evaluate an expr within that inner scope
   and assign the result to the declared outer variable. *)
   | RBlockExpr(t, rstmt, rexpr) ->
-      let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
+      let (hctxt, hscope, decl_store, decl_load) = begin
+        let (hctxt, tmp_store) = get_tmp_name hctxt in
+        let decl_store = (RPtr(t), tmp_store) in
+        let decls = decl_store :: hscope.declarations in
+        let hscope = {hscope with declarations = decls} in
 
-      let inner_scope = empty_scope in
-      let (hctxt, inner_scope) = rstmt_to_hir hctxt inner_scope rstmt in
-      let (hctxt, inner_scope, hvar) = rexpr_to_hir hctxt inner_scope rexpr in
+        let (hctxt, tmp_load) = get_tmp_name hctxt in
+        let decl_load = (t, tmp_load) in
 
-      let inner_instr = Instr(HValueAssign(decl, HValVar(hvar))) in
-      let inner_instrs = inner_instr :: inner_scope.instructions in
-      let inner_scope = {inner_scope with instructions = inner_instrs} in
+        (hctxt, hscope, decl_store, decl_load)
+      end in
 
-      let instr = Scope(inner_scope) in
-      let instrs = instr :: hscope.instructions in
+      let (hctxt, inner_scope) = begin
+        let inner_scope = empty_scope in
+        let (hctxt, inner_scope) = rstmt_to_hir hctxt inner_scope rstmt in
+        let (hctxt, inner_scope, hvar) = rexpr_to_hir hctxt inner_scope rexpr in
 
-      let hscope = {declarations = decls; instructions = instrs} in
-      (hctxt, hscope, decl)
+        let inner_instr = Instr(HValueStore(decl_store, hvar)) in
+        let inner_instrs = inner_instr :: inner_scope.instructions in
+        let inner_scope = {inner_scope with instructions = inner_instrs} in
+
+        (hctxt, inner_scope)
+      end in
+
+      let instr_scope = Scope(inner_scope) in
+      let instr_load = Instr(HValueLoad(decl_load, decl_store)) in
+      let instrs = instr_load :: instr_scope :: hscope.instructions in
+
+      let hscope = {hscope with instructions = instrs} in
+      (hctxt, hscope, decl_load)
 
   | RTupleExpr(t, rexprs) ->
       let ((hctxt, hscope), hvars) =
@@ -205,10 +211,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HAggregate(decl, hvars)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RTupleIndexExpr(_, idx, tuple_exp) ->
@@ -219,10 +224,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (elem_t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HAggregateIndex(decl, idx, tup_var)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RIndexExpr(_, idx_expr, idxable_expr) ->
@@ -235,10 +239,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (elem_t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HDynamicIndex(decl, idx, idxable)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
   | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
@@ -280,16 +283,15 @@ let rec rexpr_to_hir hctxt hscope rexpr
       support yielding a result value. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RNil, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValueAssign(decl, HValNil)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
 
   | RValRawArray(t) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl = (t, tmp) in
+      let decl = (RPtr(t), tmp) in
       let decls = decl :: hscope.declarations in
       let hscope = {hscope with declarations = decls} in
 
@@ -306,10 +308,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HAggregate(decl, hvars)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
 
@@ -333,10 +334,9 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (ret_t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(get_invoke_instr ret_t decl hfunc hargs) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
 
@@ -347,22 +347,26 @@ let rec rexpr_to_hir hctxt hscope rexpr
       the match-arm result value. This will be used as the overall match-expr
       result value. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl = (t, tmp) in
-      let decls = decl :: hscope.declarations in
+      let decl_store = (RPtr(t), tmp) in
+      let decls = decl_store :: hscope.declarations in
       let hscope = {hscope with declarations = decls} in
 
       (* Create an inner scope within which we'll generate the match arms. *)
       let match_scope = empty_scope in
 
       let (hctxt, match_scope) =
-        rmatch_arms_to_hir hctxt match_scope hmatchee decl patts_to_exprs
+        rmatch_arms_to_hir hctxt match_scope hmatchee decl_store patts_to_exprs
       in
 
+      (* Load the result of the match expr after the end of the match scope. *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl_load = (t, tmp) in
       let instr = Scope(match_scope) in
-      let instrs = instr :: hscope.instructions in
+      let instr_load = Instr(HValueLoad(decl_load, decl_store)) in
+      let instrs = instr_load :: instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
 
-      (hctxt, hscope, decl)
+      (hctxt, hscope, decl_load)
   end
 
 
@@ -393,9 +397,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
       TODO: Later: this should be a transparent reference to the actual matched
       value. *)
-      let decl = (t, name) in
+      let decl = (RPtr(t), name) in
       let decls = decl :: hscope.declarations in
-      let instr = Instr(HValueAssign(decl, HValVar(hmatchee))) in
+      let instr = Instr(HValueStore(decl, hmatchee)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {declarations = decls; instructions = instrs} in
 
@@ -406,9 +410,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
       TODO: Later: this should be a transparent reference to the actual matched
       value. *)
-      let decl = (t, name) in
+      let decl = (RPtr(t), name) in
       let decls = decl :: hscope.declarations in
-      let instr = Instr(HValueAssign(decl, HValVar(hmatchee))) in
+      let instr = Instr(HValueStore(decl, hmatchee)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {declarations = decls; instructions = instrs} in
 
@@ -426,10 +430,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       (* Create an instruction to compare the matchee against the boolean. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RBool, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HBinOp(decl, Eq, hmatchee, hbool)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
 
@@ -438,10 +441,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       pattern. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (target_t, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HValCast(decl, op, hmatchee)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       rpattern_to_hir hctxt hscope decl casted_patt
 
@@ -452,10 +454,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       (* Create an instruction to compare the matchee against the int. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RBool, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HBinOp(decl, Eq, hmatchee, hint)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
 
@@ -466,10 +467,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       (* Create an instruction to compare the matchee against the int. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RBool, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HBinOp(decl, Ge, hmatchee, hint)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
 
@@ -480,10 +480,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       (* Create an instruction to compare the matchee against the int. *)
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (RBool, tmp) in
-      let decls = decl :: hscope.declarations in
       let instr = Instr(HBinOp(decl, Lt, hmatchee, hint)) in
       let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
 
@@ -497,10 +496,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       let (hctxt, hscope, hlhs_cmp) = begin
         let (hctxt, tmp) = get_tmp_name hctxt in
         let decl = (RBool, tmp) in
-        let decls = decl :: hscope.declarations in
         let instr = Instr(HBinOp(decl, Ge, hmatchee, hlhs)) in
         let instrs = instr :: hscope.instructions in
-        let hscope = {declarations = decls; instructions = instrs} in
+        let hscope = {hscope with instructions = instrs} in
         (hctxt, hscope, decl)
       end in
 
@@ -508,10 +506,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       let (hctxt, hscope, hrhs_cmp) = begin
         let (hctxt, tmp) = get_tmp_name hctxt in
         let decl = (RBool, tmp) in
-        let decls = decl :: hscope.declarations in
         let instr = Instr(HBinOp(decl, Lt, hmatchee, hrhs)) in
         let instrs = instr :: hscope.instructions in
-        let hscope = {declarations = decls; instructions = instrs} in
+        let hscope = {hscope with instructions = instrs} in
         (hctxt, hscope, decl)
       end in
 
@@ -519,10 +516,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       let (hctxt, hscope, hwithin_range) = begin
         let (hctxt, tmp) = get_tmp_name hctxt in
         let decl = (RBool, tmp) in
-        let decls = decl :: hscope.declarations in
         let instr = Instr(HBinOp(decl, Eq, hlhs_cmp, hrhs_cmp)) in
         let instrs = instr :: hscope.instructions in
-        let hscope = {declarations = decls; instructions = instrs} in
+        let hscope = {hscope with instructions = instrs} in
         (hctxt, hscope, decl)
       end in
 
@@ -531,14 +527,16 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
   | RPTuple(tup_t, patts) ->
       (* Declare a boolean, defaulting to true but assignable to false in the
       case that any of the tuple elems don't match the pattern. *)
-      let (hctxt, hscope, hoverall_bool) = begin
+      let (hctxt, hscope, decl_store) = begin
         let (hctxt, tmp) = get_tmp_name hctxt in
-        let decl = (RBool, tmp) in
-        let decls = decl :: hscope.declarations in
-        let instr = Instr(HValueAssign(decl, HValBool(true))) in
-        let instrs = instr :: hscope.instructions in
+        let decl_assign = (RBool, tmp) in
+        let decl_store = (RPtr(RBool), tmp) in
+        let decls = decl_store :: hscope.declarations in
+        let instr_assign = Instr(HValueAssign(decl_assign, HValBool(true))) in
+        let instr_store = Instr(HValueStore(decl_store, decl_assign)) in
+        let instrs = instr_assign :: instr_store :: hscope.instructions in
         let hscope = {declarations = decls; instructions = instrs} in
-        (hctxt, hscope, decl)
+        (hctxt, hscope, decl_store)
       end in
 
       (* Descend into the patterns for each of the elements of the tuple,
@@ -557,10 +555,9 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
               let (hctxt, tmp) = get_tmp_name hctxt in
               let decl = (elem_t, tmp) in
-              let decls = decl :: cur_scope.declarations in
               let instr = Instr(HAggregateIndex(decl, idx, hmatchee)) in
               let instrs = instr :: cur_scope.instructions in
-              let cur_scope = {declarations = decls; instructions = instrs} in
+              let cur_scope = {hscope with instructions = instrs} in
               (hctxt, cur_scope, decl)
             end in
 
@@ -579,14 +576,15 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
             (* In the event the sub-pattern did not match, assign "no-match"
             to our top-level whole-tuple match/no-match boolean. *)
-            let else_scope = begin
+            let (hctxt, else_scope) = begin
               let else_scope = empty_scope in
-              let instr =
-                Instr(HValueAssign(hoverall_bool, HValBool(false)))
-              in
-              let instrs = instr :: else_scope.instructions in
+              let (hctxt, tmp) = get_tmp_name hctxt in
+              let decl_as = (RBool, tmp) in
+              let instr_as = Instr(HValueAssign(decl_as, HValBool(false))) in
+              let instr_st = Instr(HValueStore(decl_store, decl_as)) in
+              let instrs = instr_as :: instr_st :: else_scope.instructions in
               let else_scope = {else_scope with instructions = instrs} in
-              else_scope
+              (hctxt, else_scope)
             end in
 
             let instr = CondScope(elem_res, rest_scope, else_scope) in
@@ -603,10 +601,13 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
         _rptuple_patt_deconstruct hctxt empty_scope 0 patts
       in
 
-      let instr = Scope(tuple_match_scope) in
-      let instrs = instr :: hscope.instructions in
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl_load = (RBool, tmp) in
+      let instr_scope = Scope(tuple_match_scope) in
+      let instr_load = Instr(HValueLoad(decl_load, decl_store)) in
+      let instrs = instr_load :: instr_scope :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
-      (hctxt, hscope, hoverall_bool)
+      (hctxt, hscope, decl_load)
   end
 
 
@@ -644,7 +645,7 @@ and rmatch_arms_to_hir hctxt hscope hmatchee hresult patts_to_exprs
               rexpr_to_hir hctxt arm_exp_scope expr
             in
 
-            let instr = Instr(HValueAssign(hresult, HValVar(arm_result))) in
+            let instr = Instr(HValueStore(hresult, arm_result)) in
             let instrs = instr :: arm_exp_scope.instructions in
             let arm_exp_scope = {arm_exp_scope with instructions = instrs} in
 
@@ -701,9 +702,9 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
       let hvar_t = hir_variable_type hvar in
 
-      let decl = (hvar_t, name) in
-      let decls = decl :: hscope.declarations in
-      let instr = Instr(HValueAssign(decl, HValVar(hvar))) in
+      let decl_store = (RPtr(hvar_t), name) in
+      let decls = decl_store :: hscope.declarations in
+      let instr = Instr(HValueStore(decl_store, hvar)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {declarations = decls; instructions = instrs} in
       (hctxt, hscope)
@@ -716,7 +717,7 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       would lower any higher-level types into. *)
       List.fold_left (
         fun (hctxt, hscope) (name, t) ->
-          let decl = (t, name) in
+          let decl = (RPtr(t), name) in
           let decls = decl :: hscope.declarations in
           let hscope = {hscope with declarations = decls} in
           (hctxt, hscope)
@@ -741,7 +742,7 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
   | RAssignStmt(name, named_t, rassign_idx_lvals, rexpr) ->
       let (hctxt, hscope, rhs_hvar) = rexpr_to_hir hctxt hscope rexpr in
 
-      let named_hvar = (named_t, name) in
+      let named_hvar = (RPtr(named_t), name) in
 
       (* Possibly-zero indexing operations, yielding a resultant lvalue. *)
       let (hctxt, hscope, indexed_hvar) =
@@ -750,11 +751,12 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
             begin match rassign_idx_lval with
             | RALStaticIndex(t, i) ->
                 let (hctxt, tmp) = get_tmp_name hctxt in
+                let decl_load = (named_t, tmp) in
                 let decl = (t, tmp) in
-                let decls = decl :: hscope.declarations in
-                let instr = Instr(HAggregateIndex(decl, i, hvar)) in
-                let instrs = instr :: hscope.instructions in
-                let hscope = {declarations = decls; instructions = instrs} in
+                let instr_load = Instr(HValueLoad(decl_load, hvar)) in
+                let instr_idx = Instr(HAggregateIndex(decl, i, decl_load)) in
+                let instrs = instr_idx :: instr_load :: hscope.instructions in
+                let hscope = {hscope with instructions = instrs} in
                 (hctxt, hscope, decl)
 
             | RALIndex(t, e) ->
@@ -762,16 +764,15 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
 
                 let (hctxt, tmp) = get_tmp_name hctxt in
                 let decl = (t, tmp) in
-                let decls = decl :: hscope.declarations in
                 let instr = Instr(HDynamicIndex(decl, i_hvar, hvar)) in
                 let instrs = instr :: hscope.instructions in
-                let hscope = {declarations = decls; instructions = instrs} in
+                let hscope = {hscope with instructions = instrs} in
                 (hctxt, hscope, decl)
             end
         ) (hctxt, hscope, named_hvar) rassign_idx_lvals
       in
 
-      let instr = Instr(HValueAssign(indexed_hvar, HValVar(rhs_hvar))) in
+      let instr = Instr(HValueStore(indexed_hvar, rhs_hvar)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
 

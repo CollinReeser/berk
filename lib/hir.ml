@@ -27,6 +27,12 @@ type hir_instr =
   (* Return from the function using the given variable. *)
   | HReturn of hir_variable
 
+  (* Store a value onto the stack at the given variable location. *)
+  | HValueStore of hir_variable * hir_variable
+
+  (* Load a value from the stack at the given variable location. *)
+  | HValueLoad of hir_variable * hir_variable
+
   (* The LHS is a variable representing an aggregation of other variables
   provided by the RHS. *)
   | HAggregate of hir_variable * hir_variable list
@@ -156,6 +162,16 @@ let fmt_hir_instr hir_instr : string =
 
   | HReturn(h_var_res) ->
       sprintf "return %s" (fmt_hir_variable h_var_res)
+
+  | HValueStore(h_var_target, h_var_source) ->
+      sprintf "%s ->[store]-> %s"
+        (fmt_hir_variable h_var_source)
+        (fmt_hir_variable h_var_target)
+
+  | HValueLoad(h_var_res, h_var_source) ->
+      sprintf "%s <-[load]<- %s"
+        (fmt_hir_variable h_var_res)
+        (fmt_hir_variable h_var_source)
 
   | HAggregate(h_var_res, h_var_elems) ->
       let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
