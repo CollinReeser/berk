@@ -202,7 +202,26 @@ let rec hscope_instr_to_mir mir_ctxt bb scope_instr =
       hir_instr_to_mir mir_ctxt bb instr
 
   | Scope({instructions; _}) ->
-      hscope_instrs_to_mir mir_ctxt bb instructions
+      let (mir_ctxt, scope_bb_name) = get_bbname mir_ctxt in
+      let (mir_ctxt, end_bb_name) = get_bbname mir_ctxt in
+      let scope_bb = {name=scope_bb_name; instrs=[]} in
+      let end_bb = {name=end_bb_name; instrs=[]} in
+
+      let bb = {bb with instrs = bb.instrs @ [Br(scope_bb)]} in
+
+      let (mir_ctxt, scope_bb) = begin
+        let (mir_ctxt, scope_bb) =
+          hscope_instrs_to_mir mir_ctxt scope_bb instructions
+        in
+
+        (mir_ctxt, {scope_bb with instrs = scope_bb.instrs @ [Br(end_bb)]})
+      end in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      let mir_ctxt = update_bb mir_ctxt scope_bb in
+      let mir_ctxt = update_bb mir_ctxt end_bb in
+
+      (mir_ctxt, end_bb)
 
   | CondScope(
       cond_var, {instructions=then_instrs; _}, {instructions=else_instrs; _}
