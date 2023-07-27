@@ -59,10 +59,6 @@ type hir_instr =
   (* As HExprInvoke but there is no resultant hvar. *)
   | HExprInvokeVoid of hir_variable * hir_variable list
 
-  (* The resultant hir_variable is an array-expr composed of the hir_variable
-  list. *)
-  | HArrayExpr of hir_variable * hir_variable list
-
 
 and rpattern =
   | HWild of rast_t
@@ -226,13 +222,6 @@ let fmt_hir_instr hir_instr : string =
       sprintf "(void) = (%s)(%s)"
         (fmt_hir_variable h_var_func)
         args_fmt
-
-  | HArrayExpr(h_var_res, h_var_elems) ->
-      let elem_fmt_xs = List.map fmt_hir_variable h_var_elems in
-      let elems_fmt = fmt_join_strs ", " elem_fmt_xs in
-      sprintf "%s = [%s]"
-        (fmt_hir_variable h_var_res)
-        elems_fmt
   end
 ;;
 

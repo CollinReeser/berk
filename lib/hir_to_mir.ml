@@ -191,11 +191,6 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
       idx_var |> ignore;
       array_var |> ignore;
       (mir_ctxt, bb)
-
-  | HArrayExpr(result_var, elem_vars) ->
-      result_var |> ignore;
-      elem_vars |> ignore;
-      (mir_ctxt, bb)
   end
 ;;
 
