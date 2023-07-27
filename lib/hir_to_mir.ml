@@ -308,10 +308,12 @@ let rec hscope_instr_to_mir mir_ctxt bb scope_instr =
 
 
 and hscope_instrs_to_mir mir_ctxt bb scope_instrs =
-  scope_instrs |> ignore;
-
-  let bb = {bb with instrs = bb.instrs @ [RetVoid]} in
-  let mir_ctxt = update_bb mir_ctxt bb in
+  let (mir_ctxt, bb) =
+    List.fold_left (
+      fun (mir_ctxt, bb) scope_instr ->
+        hscope_instr_to_mir mir_ctxt bb scope_instr
+    ) (mir_ctxt, bb) scope_instrs
+  in
 
   (mir_ctxt, bb)
 ;;

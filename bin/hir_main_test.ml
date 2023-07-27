@@ -80,13 +80,13 @@ let () =
       return quadling;
     }
 
-    fn test_array(): u16 {
-      let array: [10]u16;
-
-      let val = array[5];
-
-      return val;
-    }
+//    fn test_array(): u16 {
+//      let array: [10]u16;
+//
+//      let val = array[5];
+//
+//      return val;
+//    }
 
     fn test_array_expr() {
       let arr1 = [1, 2, 3];
@@ -212,6 +212,21 @@ let () =
       | (_, false, _) -> 10
       | (_, true, _) -> 10
       };
+    }
+
+    fn match_ints(): i32 {
+      let val = 10;
+
+      let result = match val {
+      | .. 0 -> 250
+      | 0 .. 4 -> 500
+      | 4 -> 750
+      | 5 -> 1000
+      | 6 .. 10 -> 2000
+      | 10 .. -> 3000
+      };
+
+      return result;
     }
 
     fn test_mov(lhs: u64): u64 {

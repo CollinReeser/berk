@@ -245,7 +245,7 @@ let fmt_bb ({name; instrs} : bb) =
 (* Given an MIR context, yield a list of the bbs the MIR context knows about,
 in such an order that a block will not be encountered in the list before it
 is branched to from a previous block. *)
-let control_flow_list mir_ctxt : bb list =
+let control_flow_list ?(allow_malformed=false) mir_ctxt : bb list =
   if StrMap.is_empty mir_ctxt.bbs then
     []
   else
@@ -278,11 +278,14 @@ let control_flow_list mir_ctxt : bb list =
       | Ret(_) -> []
       | RetVoid -> []
       | _ ->
-          failwith (
-            Printf.sprintf
-              "Expected terminator, got: [%s]"
-              (fmt_instr terminator)
-          )
+          if allow_malformed then
+            []
+          else
+            failwith (
+              Printf.sprintf
+                "Expected terminator, got: [%s]"
+                (fmt_instr terminator)
+            )
       end
     in
 
@@ -316,7 +319,7 @@ let fmt_mir_ctxt
   let open Printf in
   let bbs =
     begin if sorted then
-      let bbs = control_flow_list mir_ctxt in
+      let bbs = control_flow_list ~allow_malformed:true mir_ctxt in
       bbs
     else
       let bbs = List.map (fun (_, bb) -> bb) (StrMap.bindings bbs_map) in
