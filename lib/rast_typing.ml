@@ -163,11 +163,11 @@ let rec sizeof_rtype (t : rast_t) =
   (* FIXME: Not true yet, but will be if/when function ptrs become fat ptrs. *)
   | RF128 -> 16
   | RPtr(_) -> 8
+  | RString -> 8
   | RU64 | RI64 | RF64 -> 8
   | RU32 | RI32 | RF32 -> 4
   | RU16 | RI16 -> 2
   | RU8  | RI8 -> 1
-  | RString -> 4
   | RBool -> 1
   | RNil -> 0
 

@@ -8,12 +8,19 @@ declarations = hir_variable list *)
 (* Given a list of variable declarations, generate MIR for allocating stack
 space for those variables in the given basic block.
 
-TODO: This could be improved by attempting to group the declarations based on
-their type, so that they may end up being more space-efficient on the stack.
-It may be that the lower-level codegen (eg, LLVM) does this optimization for us,
-but it could make sense to do it here to ensure the optimization is performed.
+Allocas are sorted to minimize stack usage/minimize padding bytes between
+variables, while still respecting alignment.
 *)
 let hscope_decls_to_mir mir_ctxt bb decls =
+  let decls_sorted =
+    List.stable_sort (
+      fun (lhs_ptr_t, _) (rhs_ptr_t, _) ->
+        let lhs_t = unwrap_ptr lhs_ptr_t in
+        let rhs_t = unwrap_ptr rhs_ptr_t in
+        compare (sizeof_rtype rhs_t) (sizeof_rtype lhs_t)
+    ) decls
+  in
+
   let alloca_instrs_rev =
     List.fold_left (
       fun alloca_instrs_rev (t, name) ->
@@ -22,7 +29,7 @@ let hscope_decls_to_mir mir_ctxt bb decls =
         let alloca_lval = {t=ptr_t; kind=Tmp; lname=name} in
         let alloca_instr = Alloca(alloca_lval, elem_t) in
         (alloca_instr :: alloca_instrs_rev)
-    ) [] decls
+    ) [] decls_sorted
   in
 
   (* Try to ensure the MIR allocas the variables in roughly their order of
