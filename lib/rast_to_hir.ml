@@ -291,9 +291,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (t, tmp) in
       let decls = decl :: hscope.declarations in
-      let instr = Instr(HValRawArray(decl)) in
-      let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      let hscope = {hscope with declarations = decls} in
 
       (hctxt, hscope, decl)
 

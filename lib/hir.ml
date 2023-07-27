@@ -46,9 +46,6 @@ type hir_instr =
   (* Assign to a resultant variable a given "value". *)
   | HValueAssign of hir_variable * hir_value
 
-  (* Create a raw array with the type of the given resultant variable. *)
-  | HValRawArray of hir_variable
-
   (* Perform an operation on the target variable(s), producing the resultant
   variable. *)
   | HValCast of hir_variable * cast_op * hir_variable
@@ -193,10 +190,6 @@ let fmt_hir_instr hir_instr : string =
       sprintf "%s = %s"
         (fmt_hir_variable h_var_res)
         (fmt_hir_value h_val)
-
-  | HValRawArray(h_var_res) ->
-      sprintf "ARRAY where %s"
-        (fmt_hir_variable h_var_res)
 
   | HValCast(h_var_res, cast_op, h_var_orig) ->
       sprintf "%s = %s (%s)"

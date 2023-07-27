@@ -186,10 +186,6 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
       let mir_ctxt = update_bb mir_ctxt bb in
       (mir_ctxt, bb)
 
-  | HValRawArray(result_var) ->
-      result_var |> ignore;
-      (mir_ctxt, bb)
-
   | HDynamicIndex(result_var, idx_var, array_var) ->
       result_var |> ignore;
       idx_var |> ignore;
