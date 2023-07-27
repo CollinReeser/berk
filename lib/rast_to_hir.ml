@@ -818,6 +818,10 @@ let rfunc_def_t_to_hfunc_def_t {rf_decl; rf_stmts} : hfunc_def_t =
     ) (hctxt, empty_scope) rf_stmts
   in
 
+  (* The declarations and instructions in an HIR scope are populated in reverse.
+  We now need to reverse them again, so that they're in the right order. *)
+  let hf_scope = unreverse_hscope_decls_instrs hf_scope in
+
   {
     hf_decl = hf_decl;
     hf_scope = hf_scope;

@@ -233,15 +233,13 @@ let rec fmt_hir_scope ?(ind = "") {declarations; instructions} : string =
       Printf.sprintf "%s%s" (ind ^ "    ")
     ) declaration_fmt_xs
   in
-  let declaration_fmt_prefix_xs_rev = List.rev declaration_fmt_prefix_xs in
-  let declarations_fmt = fmt_join_strs "\n" declaration_fmt_prefix_xs_rev in
+  let declarations_fmt = fmt_join_strs "\n" declaration_fmt_prefix_xs in
 
   let instruction_fmt_xs =
     List.map (
       fmt_hir_scope_instr ~ind:(ind ^ "    ")
     ) instructions in
-  let instruction_fmt_xs_rev = List.rev instruction_fmt_xs in
-  let instructions_fmt = fmt_join_strs "\n" instruction_fmt_xs_rev in
+  let instructions_fmt = fmt_join_strs "\n" instruction_fmt_xs in
 
   Printf.sprintf (
     "%sscope {\n" ^^
@@ -328,6 +326,48 @@ let fmt_hfunc_def_t {hf_decl; hf_scope} =
   )
     (fmt_hfunc_decl_t hf_decl)
     (fmt_hir_scope ~ind:"    " hf_scope)
+;;
+
+
+(* The declarations and instructions in an HIR scope are populated in reverse.
+This function recursively fixes the contents of the given scope so that they're
+un-reversed. *)
+let rec unreverse_hscope_decls_instrs hscope =
+  let rec _reverse_hscope_instrs instrs instrs_rev =
+    begin match instrs with
+    | [] ->
+        instrs_rev
+
+    | (Instr(_) as instr) :: rest ->
+        _reverse_hscope_instrs rest (instr :: instrs_rev)
+
+    | Scope(inner_scope) :: rest ->
+        let reversed_inner_scope = unreverse_hscope_decls_instrs inner_scope in
+        let reversed_scope = Scope(reversed_inner_scope) in
+        _reverse_hscope_instrs rest (reversed_scope :: instrs_rev)
+
+    | CondScope(hvar, then_scope, else_scope) :: rest ->
+        let reversed_then_scope = unreverse_hscope_decls_instrs then_scope in
+        let reversed_else_scope = unreverse_hscope_decls_instrs else_scope in
+        let reversed_scope =
+          CondScope(hvar, reversed_then_scope, reversed_else_scope)
+        in
+        _reverse_hscope_instrs rest (reversed_scope :: instrs_rev)
+
+    | CondLoopScope(cond_scope, hvar, body_scope) :: rest ->
+        let reversed_cond_scope = unreverse_hscope_decls_instrs cond_scope in
+        let reversed_body_scope = unreverse_hscope_decls_instrs body_scope in
+        let reversed_scope =
+          CondLoopScope(reversed_cond_scope, hvar, reversed_body_scope)
+        in
+        _reverse_hscope_instrs rest (reversed_scope :: instrs_rev)
+    end
+  in
+
+  let decls_rev = List.rev hscope.declarations in
+  let instrs_rev = _reverse_hscope_instrs hscope.instructions [] in
+
+  {declarations=decls_rev; instructions=instrs_rev}
 ;;
 
 
