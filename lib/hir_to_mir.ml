@@ -295,7 +295,7 @@ let rec hscope_instr_to_mir mir_ctxt bb scope_instr =
           hscope_instrs_to_mir mir_ctxt then_bb then_instrs
         in
 
-        (mir_ctxt, {then_bb with instrs = then_bb.instrs @ [Br(end_bb)]})
+        (mir_ctxt, {then_bb with instrs = then_bb.instrs @ [Br(cond_bb)]})
       end in
 
       let mir_ctxt = update_bb mir_ctxt bb in
