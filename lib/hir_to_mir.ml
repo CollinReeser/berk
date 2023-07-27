@@ -1,5 +1,6 @@
 open Hir
 open Mir
+open Rast_typing
 
 (* type hir_variable = rast_t * string
 declarations = hir_variable list *)
@@ -16,8 +17,10 @@ let hscope_decls_to_mir mir_ctxt bb decls =
   let alloca_instrs_rev =
     List.fold_left (
       fun alloca_instrs_rev (t, name) ->
-        let alloca_lval = {t=RPtr(t); kind=Tmp; lname=name} in
-        let alloca_instr = Alloca(alloca_lval, t) in
+        let ptr_t = t in
+        let elem_t = unwrap_ptr ptr_t in
+        let alloca_lval = {t=ptr_t; kind=Tmp; lname=name} in
+        let alloca_instr = Alloca(alloca_lval, elem_t) in
         (alloca_instr :: alloca_instrs_rev)
     ) [] decls
   in
