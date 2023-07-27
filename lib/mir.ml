@@ -144,17 +144,17 @@ let fmt_instr instr =
         (fmt_rtype pointed_t)
 
   | Store(lval, rhs_lval) ->
-      sprintf "  store %s into %s\n"
+      sprintf "  %s ->[store]-> %s\n"
         (fmt_lval rhs_lval)
         (fmt_lval lval)
 
   | Load(lval, rhs_lval) ->
-      sprintf "  %s = load %s\n"
+      sprintf "  %s <-[load]<- %s\n"
         (fmt_lval lval)
         (fmt_lval rhs_lval)
 
   | Assign(lval, rval) ->
-      sprintf "  assign %s = %s\n"
+      sprintf "  %s = %s\n"
         (fmt_lval lval)
         (fmt_rval rval)
 
