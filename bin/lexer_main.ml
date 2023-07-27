@@ -857,6 +857,9 @@ let () =
               Printf.printf "RAST:\n%s\n" (fmt_rfunc_decl_t rfunc_decl) ;
 
               let mir_ctxt = rfunc_decl_to_mir rfunc_decl in
+
+              Printf.printf "MIR:\n%s\n" (fmt_mir_ctxt mir_ctxt) ;
+
               Some(mir_ctxt)
           | FuncDef(func_def) ->
               let rfunc_def = func_def_t_to_rfunc_def_t func_def in
@@ -864,19 +867,15 @@ let () =
               Printf.printf "RAST:\n%s\n" (fmt_rfunc_def_t rfunc_def) ;
 
               let mir_ctxt = rfunc_to_mir rfunc_def in
+
+              Printf.printf "MIR:\n%s\n" (fmt_mir_ctxt mir_ctxt) ;
+
               Some(mir_ctxt)
         end
     ) mod_decls_tc_rewritten
   in
 
   let timing_ast_to_rast_to_hir_to_mir_end = Unix.gettimeofday () in
-
-  (* Print MIR. *)
-  let _ =
-    List.iter (
-      fun mir_ctxt -> Printf.printf "%s%!" (fmt_mir_ctxt mir_ctxt)
-    ) mir_ctxts
-  in
 
   let timing_llvm_init_start = Unix.gettimeofday () in
 
