@@ -190,7 +190,9 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
       result_var |> ignore;
       idx_var |> ignore;
       array_var |> ignore;
-      (mir_ctxt, bb)
+
+      failwith "hir_to_mir@hir_instr_to_mir: Unimplemented"
+      (* (mir_ctxt, bb) *)
   end
 ;;
 
