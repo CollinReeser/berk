@@ -315,7 +315,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       (hctxt, hscope, decl)
 
-  | RExprInvoke(t, func_rexpr, arg_rexprs) ->
+  | RExprInvoke(ret_t, func_rexpr, arg_rexprs) ->
       let (hctxt, hscope, hfunc) = rexpr_to_hir hctxt hscope func_rexpr in
 
       let ((hctxt, hscope), hargs) =
@@ -326,10 +326,17 @@ let rec rexpr_to_hir hctxt hscope rexpr
         ) (hctxt, hscope) arg_rexprs
       in
 
+      let get_invoke_instr t decl hfunc hargs =
+        begin match t with
+        | RNil -> HExprInvokeVoid(hfunc, hargs)
+        | _ -> HExprInvoke(decl, hfunc, hargs)
+        end
+      in
+
       let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl = (t, tmp) in
+      let decl = (ret_t, tmp) in
       let decls = decl :: hscope.declarations in
-      let instr = Instr(HExprInvoke(decl, hfunc, hargs)) in
+      let instr = Instr(get_invoke_instr ret_t decl hfunc hargs) in
       let instrs = instr :: hscope.instructions in
       let hscope = {declarations = decls; instructions = instrs} in
 
@@ -718,9 +725,15 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       ) (hctxt, hscope) name_t_pairs
 
   | RReturnStmt(rexpr) ->
-      let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
+      let (hctxt, hscope, ((t, _) as hvar)) = rexpr_to_hir hctxt hscope rexpr in
 
-      let instr = Instr(HReturn(hvar)) in
+      let ret_instr =
+        begin match t with
+        | RNil -> HRetVoid
+        | _ -> HReturn(hvar)
+      end in
+
+      let instr = Instr(ret_instr) in
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope)

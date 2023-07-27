@@ -32,8 +32,271 @@ let hscope_decls_to_mir mir_ctxt bb decls =
   (mir_ctxt, bb)
 ;;
 
-let hscope_instrs_to_mir mir_ctxt bb instrs =
-  instrs |> ignore;
+let lval_from_hvar kind (t, lname) =
+  {t; kind; lname}
+;;
+
+let rval_from_hval hval : rval =
+  begin match hval with
+  | HValNil     -> Constant(ValNil)
+  | HValU8(i)   -> Constant(ValU8(i))
+  | HValU16(i)  -> Constant(ValU16(i))
+  | HValU32(i)  -> Constant(ValU32(i))
+  | HValU64(i)  -> Constant(ValU64(i))
+  | HValI8(i)   -> Constant(ValI8(i))
+  | HValI16(i)  -> Constant(ValI16(i))
+  | HValI32(i)  -> Constant(ValI32(i))
+  | HValI64(i)  -> Constant(ValI64(i))
+  | HValF32(f)  -> Constant(ValF32(f))
+  | HValF64(f)  -> Constant(ValF64(f))
+  | HValF128(s) -> Constant(ValF128(s))
+  | HValBool(b) -> Constant(ValBool(b))
+  | HValStr(s)  -> Constant(ValStr(s))
+  | HValFunc(s) -> Constant(ValFunc(s))
+
+  | HValVar(hvar) ->
+      let lval = lval_from_hvar Var hvar in
+      RVar(lval)
+  end
+;;
+
+let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
+  mir_ctxt |> ignore;
+  bb |> ignore;
+
+  begin match instr with
+  | HRetVoid ->
+      let bb = {bb with instrs = bb.instrs @ [RetVoid]} in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HReturn(ret_var) ->
+      let ret_lval = lval_from_hvar Tmp ret_var in
+
+      let bb = {bb with instrs = bb.instrs @ [Ret(ret_lval)]} in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HAggregate(result_var, elem_vars) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+
+      let elem_lvals = List.map (lval_from_hvar Tmp) elem_vars in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [
+          ConstructAggregate(result_lval, elem_lvals)
+        ]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HAggregateIndex(result_var, idx, aggregate_var) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let aggregate_lval = lval_from_hvar Tmp aggregate_var in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [
+          FromAggregate(result_lval, idx, aggregate_lval)
+        ]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HArgToVar(result_var, _, arg_idx) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [GetArg(result_lval, arg_idx)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HValueAssign(result_var, rhs_val) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let rhs_rval = rval_from_hval rhs_val in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [Assign(result_lval, rhs_rval)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HValCast(result_var, op, source_var) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let source_lval = lval_from_hvar Tmp source_var in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [Cast(result_lval, op, source_lval)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HUnOp(result_var, op, rhs_var) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let rhs_lval = lval_from_hvar Tmp rhs_var in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [UnOp(result_lval, op, rhs_lval)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HBinOp(result_var, op, lhs_var, rhs_var) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let lhs_lval = lval_from_hvar Tmp lhs_var in
+      let rhs_lval = lval_from_hvar Tmp rhs_var in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [
+          BinOp(result_lval, op, lhs_lval, rhs_lval)
+        ]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HExprInvokeVoid(func_var, arg_vars) ->
+      let func_lval = lval_from_hvar Tmp func_var in
+      let arg_lvals = List.map (lval_from_hvar Tmp) arg_vars in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [CallVoid(func_lval, arg_lvals)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HExprInvoke(result_var, func_var, arg_vars) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let func_lval = lval_from_hvar Tmp func_var in
+      let arg_lvals = List.map (lval_from_hvar Tmp) arg_vars in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [Call(result_lval, func_lval, arg_lvals)]
+      } in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
+
+  | HValRawArray(result_var) ->
+      result_var |> ignore;
+      (mir_ctxt, bb)
+
+  | HDynamicIndex(result_var, idx_var, array_var) ->
+      result_var |> ignore;
+      idx_var |> ignore;
+      array_var |> ignore;
+      (mir_ctxt, bb)
+
+  | HArrayExpr(result_var, elem_vars) ->
+      result_var |> ignore;
+      elem_vars |> ignore;
+      (mir_ctxt, bb)
+  end
+;;
+
+let rec hscope_instr_to_mir mir_ctxt bb scope_instr =
+  begin match scope_instr with
+  | Instr(instr) ->
+      hir_instr_to_mir mir_ctxt bb instr
+
+  | Scope({instructions; _}) ->
+      hscope_instrs_to_mir mir_ctxt bb instructions
+
+  | CondScope(
+      cond_var, {instructions=then_instrs; _}, {instructions=else_instrs; _}
+    ) ->
+      let cond_lval = lval_from_hvar Tmp cond_var in
+
+      let (mir_ctxt, then_bb_name) = get_bbname mir_ctxt in
+      let (mir_ctxt, else_bb_name) = get_bbname mir_ctxt in
+      let (mir_ctxt, end_bb_name) = get_bbname mir_ctxt in
+      let then_bb = {name=then_bb_name; instrs=[]} in
+      let else_bb = {name=else_bb_name; instrs=[]} in
+      let end_bb = {name=end_bb_name; instrs=[]} in
+
+      let bb = {
+        bb with instrs = bb.instrs @ [CondBr(cond_lval, then_bb, else_bb)]
+      } in
+
+      let (mir_ctxt, then_bb) = begin
+        let (mir_ctxt, then_bb) =
+          hscope_instrs_to_mir mir_ctxt then_bb then_instrs
+        in
+
+        (mir_ctxt, {then_bb with instrs = then_bb.instrs @ [Br(end_bb)]})
+      end in
+
+      let (mir_ctxt, else_bb) =
+        let (mir_ctxt, else_bb) =
+          hscope_instrs_to_mir mir_ctxt else_bb else_instrs
+        in
+
+        (mir_ctxt, {else_bb with instrs = else_bb.instrs @ [Br(end_bb)]})
+      in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      let mir_ctxt = update_bb mir_ctxt then_bb in
+      let mir_ctxt = update_bb mir_ctxt else_bb in
+      let mir_ctxt = update_bb mir_ctxt end_bb in
+
+      (mir_ctxt, end_bb)
+
+  | CondLoopScope(
+      {instructions=cond_instrs; _}, cond_var, {instructions=then_instrs; _}
+    ) ->
+      let cond_lval = lval_from_hvar Tmp cond_var in
+
+      let (mir_ctxt, cond_bb_name) = get_bbname mir_ctxt in
+      let (mir_ctxt, then_bb_name) = get_bbname mir_ctxt in
+      let (mir_ctxt, end_bb_name) = get_bbname mir_ctxt in
+      let cond_bb = {name=cond_bb_name; instrs=[]} in
+      let then_bb = {name=then_bb_name; instrs=[]} in
+      let end_bb = {name=end_bb_name; instrs=[]} in
+
+      let bb = {bb with instrs = bb.instrs @ [Br(cond_bb)]} in
+
+      let (mir_ctxt, cond_bb) =
+        let (mir_ctxt, cond_bb) =
+          hscope_instrs_to_mir mir_ctxt cond_bb cond_instrs
+        in
+
+        (
+          mir_ctxt,
+          {
+            cond_bb with
+              instrs = cond_bb.instrs @ [CondBr(cond_lval, then_bb, end_bb)]
+          }
+        )
+      in
+
+      let (mir_ctxt, then_bb) = begin
+        let (mir_ctxt, then_bb) =
+          hscope_instrs_to_mir mir_ctxt then_bb then_instrs
+        in
+
+        (mir_ctxt, {then_bb with instrs = then_bb.instrs @ [Br(end_bb)]})
+      end in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      let mir_ctxt = update_bb mir_ctxt cond_bb in
+      let mir_ctxt = update_bb mir_ctxt then_bb in
+      let mir_ctxt = update_bb mir_ctxt end_bb in
+
+      (mir_ctxt, end_bb)
+  end
+
+
+and hscope_instrs_to_mir mir_ctxt bb scope_instrs =
+  scope_instrs |> ignore;
 
   let bb = {bb with instrs = bb.instrs @ [RetVoid]} in
   let mir_ctxt = update_bb mir_ctxt bb in

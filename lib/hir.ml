@@ -21,6 +21,9 @@ type hir_value =
 the instruction. The remaining hir_variables are the argument(s) to the
 instruction. *)
 type hir_instr =
+  (* Return void. *)
+  | HRetVoid
+
   (* Return from the function using the given variable. *)
   | HReturn of hir_variable
 
@@ -55,6 +58,9 @@ type hir_instr =
   (* The resultant variable is the result of invoking the function in the middle
   hir_variable on the argument list. *)
   | HExprInvoke of hir_variable * hir_variable * hir_variable list
+
+  (* As HExprInvoke but there is no resultant hvar. *)
+  | HExprInvokeVoid of hir_variable * hir_variable list
 
   (* The resultant hir_variable is an array-expr composed of the hir_variable
   list. *)
@@ -152,6 +158,9 @@ let fmt_hir_value hir_value : string =
 let fmt_hir_instr hir_instr : string =
   let open Printf in
   begin match hir_instr with
+  | HRetVoid ->
+      sprintf "return (void)"
+
   | HReturn(h_var_res) ->
       sprintf "return %s" (fmt_hir_variable h_var_res)
 
@@ -214,6 +223,14 @@ let fmt_hir_instr hir_instr : string =
 
       sprintf "%s = (%s)(%s)"
         (fmt_hir_variable h_var_res)
+        (fmt_hir_variable h_var_func)
+        args_fmt
+
+  | HExprInvokeVoid(h_var_func, h_var_args) ->
+      let arg_fmt_xs = List.map fmt_hir_variable h_var_args in
+      let args_fmt = fmt_join_strs ", " arg_fmt_xs in
+
+      sprintf "(void) = (%s)(%s)"
         (fmt_hir_variable h_var_func)
         args_fmt
 
