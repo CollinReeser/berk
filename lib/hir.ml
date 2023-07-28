@@ -169,7 +169,7 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_target)
 
   | HValueLoad(h_var_res, h_var_source) ->
-      sprintf "%s <-[load]<- %s"
+      sprintf "%s <-[load.]<- %s"
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_source)
 

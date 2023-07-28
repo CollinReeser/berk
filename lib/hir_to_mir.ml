@@ -26,9 +26,17 @@ let hscope_decls_to_mir mir_ctxt bb decls =
       fun alloca_instrs_rev (t, name) ->
         let ptr_t = t in
         let elem_t = unwrap_ptr ptr_t in
-        let alloca_lval = {t=ptr_t; kind=Tmp; lname=name} in
-        let alloca_instr = Alloca(alloca_lval, elem_t) in
-        (alloca_instr :: alloca_instrs_rev)
+
+        (* Do not generate allocas for zero-size types. *)
+        begin match elem_t with
+        | RNil ->
+            alloca_instrs_rev
+
+        | _ ->
+            let alloca_lval = {t=ptr_t; kind=Tmp; lname=name} in
+            let alloca_instr = Alloca(alloca_lval, elem_t) in
+            (alloca_instr :: alloca_instrs_rev)
+        end
     ) [] decls_sorted
   in
 
@@ -88,22 +96,38 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
 
   | HValueStore(target_var, source_var) ->
       let target_lval = lval_from_hvar Tmp target_var in
-      let source_lval = lval_from_hvar Tmp source_var in
+      let {t=source_t; _} as source_lval = lval_from_hvar Tmp source_var in
 
-      let bb = {
-        bb with instrs = bb.instrs @ [Store(target_lval, source_lval)]
-      } in
+      (* Do not generate a store into a pointer to a zero-size type. *)
+      let bb =
+        begin match source_t with
+        | RNil ->
+            bb
+
+        | _ ->
+            {bb with instrs = bb.instrs @ [Store(target_lval, source_lval)]}
+        end
+      in
 
       let mir_ctxt = update_bb mir_ctxt bb in
       (mir_ctxt, bb)
 
   | HValueLoad(result_var, source_var) ->
-      let result_lval = lval_from_hvar Tmp result_var in
+      let {t=result_t; _} as result_lval = lval_from_hvar Tmp result_var in
       let source_lval = lval_from_hvar Tmp source_var in
 
-      let bb = {
-        bb with instrs = bb.instrs @ [Load(result_lval, source_lval)]
-      } in
+      (* Don't generate a load from a pointer to a zero-size type, instead just
+      grabbing a placeholder instance of that type. *)
+      let bb =
+        begin match result_t with
+        | RNil ->
+            let nil_rval = Constant(ValNil) in
+            {bb with instrs = bb.instrs @ [Assign(result_lval, nil_rval)]}
+
+        | _ ->
+            {bb with instrs = bb.instrs @ [Load(result_lval, source_lval)]}
+        end
+      in
 
       let mir_ctxt = update_bb mir_ctxt bb in
       (mir_ctxt, bb)
