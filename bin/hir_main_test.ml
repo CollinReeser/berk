@@ -208,6 +208,8 @@ let () =
       | (_, false, _) -> 10
       | (_, true, _) -> 10
       };
+
+      return;
     }
 
     fn match_ints(): i32 {
