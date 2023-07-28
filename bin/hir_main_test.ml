@@ -224,7 +224,7 @@ let () =
       return result;
     }
 
-    fn test_mov(lhs: u64): u64 {
+    fn test_block_expr(lhs: u64): u64 {
       let new_lhs = lhs + 5;
       let arg_result = lhs + new_lhs;
 
@@ -237,7 +237,7 @@ let () =
       return arg_result + scope_result;
     }
 
-    fn test_alloca() {
+    fn test_alloca(): string {
       let a: i64 = -64;
       let b: i16 = -16;
       let c: i32 = -32;
@@ -249,19 +249,53 @@ let () =
       let i: u16 = 16;
       let j: u64 = 64;
 
-      return;
+      return f.1;
     }
 
-    fn main(): i8 {
+    fn basic_arith(): i8 {
       let a: i8 = 5;
       let b: i8 = 10;
       return a + b;
     }
 
-    fn func_var() {
-      let fvar = test_alloca;
+    fn arg_arith(a: i8, b: i8): i8 {
+      return a + b;
+    }
 
-      return;
+    fn func_var(a: i8, b: i8): i8 {
+      let arg_arith_func_var = arg_arith;
+      let arg_result = arg_arith_func_var.(a, b);
+
+      return arg_result;
+    }
+
+    fn main(): i8 {
+      {
+        let test_block_expr_result = test_block_expr(20);
+        ignore printf("Got [%d] | [%d] Expected\n", test_block_expr_result, 70);
+      }
+      {
+        let test_alloca_str = test_alloca();
+        ignore printf("Got [%s] | [%s] Expected\n", test_alloca_str, "hello");
+      }
+      {
+        let basic_arith_result = basic_arith();
+        ignore printf("Got [%d] | [%d] Expected\n", basic_arith_result, 15);
+      }
+      {
+        let arg_arith_result: i8 = arg_arith(-15, 10);
+        let arg_arith_expected: i8 = -5;
+        ignore printf(
+          "Got [%hhd] | [%hhd] Expected\n",
+          arg_arith_result, arg_arith_expected
+        );
+      }
+      {
+        let func_var_result = func_var(1, 2);
+        ignore printf("Got [%d] | [%d] Expected\n", func_var_result, 3);
+      }
+
+      return 0;
     }
   |} in
 
