@@ -542,13 +542,14 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       (* Declare a boolean, defaulting to true but assignable to false in the
       case that any of the tuple elems don't match the pattern. *)
       let (hctxt, hscope, decl_store) = begin
-        let (hctxt, tmp) = get_tmp_name hctxt in
-        let decl_assign = (RBool, tmp) in
-        let decl_store = (RPtr(RBool), tmp) in
+        let (hctxt, tmp_assign) = get_tmp_name hctxt in
+        let (hctxt, tmp_store) = get_tmp_name hctxt in
+        let decl_assign = (RBool, tmp_assign) in
+        let decl_store = (RPtr(RBool), tmp_store) in
         let decls = decl_store :: hscope.declarations in
         let instr_assign = Instr(HValueAssign(decl_assign, HValBool(true))) in
         let instr_store = Instr(HValueStore(decl_store, decl_assign)) in
-        let instrs = instr_assign :: instr_store :: hscope.instructions in
+        let instrs = instr_store :: instr_assign :: hscope.instructions in
         let hscope = {declarations = decls; instructions = instrs} in
         (hctxt, hscope, decl_store)
       end in
@@ -571,7 +572,7 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
               let decl = (elem_t, tmp) in
               let instr = Instr(HAggregateIndex(decl, idx, hmatchee)) in
               let instrs = instr :: cur_scope.instructions in
-              let cur_scope = {hscope with instructions = instrs} in
+              let cur_scope = {cur_scope with instructions = instrs} in
               (hctxt, cur_scope, decl)
             end in
 
@@ -596,7 +597,7 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
               let decl_as = (RBool, tmp) in
               let instr_as = Instr(HValueAssign(decl_as, HValBool(false))) in
               let instr_st = Instr(HValueStore(decl_store, decl_as)) in
-              let instrs = instr_as :: instr_st :: else_scope.instructions in
+              let instrs = instr_st :: instr_as :: else_scope.instructions in
               let else_scope = {else_scope with instructions = instrs} in
               (hctxt, else_scope)
             end in
