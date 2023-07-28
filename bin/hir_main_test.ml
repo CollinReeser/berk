@@ -216,12 +216,9 @@ let () =
       let val = 10;
 
       let result = match val {
-      | .. 0 -> 250
-      | 0 .. 4 -> 500
-      | 4 -> 750
+      | .. 5 -> 250
       | 5 -> 1000
-      | 6 .. 10 -> 2000
-      | 10 .. -> 3000
+      | 6 .. -> 2000
       };
 
       return result;
@@ -240,10 +237,31 @@ let () =
       return arg_result + scope_result;
     }
 
+    fn test_alloca() {
+      let a: i64 = -64;
+      let b: i16 = -16;
+      let c: i32 = -32;
+      let d: i8 = -8;
+      let e: bool = true;
+      let f: (bool, string, i8) = (true, "hello", 6);
+      let g: u32 = 32;
+      let h: u8 = 8;
+      let i: u16 = 16;
+      let j: u64 = 64;
+
+      return;
+    }
+
     fn main(): i8 {
       let a: i8 = 5;
       let b: i8 = 10;
       return a + b;
+    }
+
+    fn func_var() {
+      let fvar = test_alloca;
+
+      return;
     }
   |} in
 
