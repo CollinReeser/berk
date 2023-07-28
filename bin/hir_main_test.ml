@@ -212,16 +212,28 @@ let () =
       return;
     }
 
-    fn match_ints(): i32 {
+    fn match_ints(): (i32, i32, i32) {
       let val = 10;
 
-      let result = match val {
+      let result_one = match val {
       | .. 5 -> 250
       | 5 -> 1000
       | 6 .. -> 2000
       };
 
-      return result;
+      let result_two = match 5 {
+      | .. 5 -> 250
+      | 5 -> 1000
+      | 6 .. -> 2000
+      };
+
+      let result_three = match -10 {
+      | .. 5 -> 250
+      | 5 -> 1000
+      | 6 .. -> 2000
+      };
+
+      return (result_one, result_two, result_three);
     }
 
     fn test_block_expr(lhs: u64): u64 {
@@ -270,6 +282,14 @@ let () =
     }
 
     fn main(): i8 {
+      {
+        let match_ints_res = match_ints();
+        ignore printf(
+          "Got [%d, %d, %d] | [%d, %d, %d] Expected\n",
+          match_ints_res.0, match_ints_res.1, match_ints_res.2,
+          2000, 1000, 250
+        );
+      }
       {
         let test_block_expr_result = test_block_expr(20);
         ignore printf("Got [%d] | [%d] Expected\n", test_block_expr_result, 70);
