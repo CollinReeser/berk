@@ -41,8 +41,8 @@ type hir_instr =
   yielding the value in the resultant LHS variable. ie: `tmp = tup.3;` *)
   | HAggregateIndex of hir_variable * int * hir_variable
 
-  (* LHS is resultant variable. Middle is indexing variable. RHS is indexed
-  variable. *)
+  (* LHS is resultant variable. Middle is indexing variable. RHS is a pointer
+  to an indexable value. *)
   | HDynamicIndex of hir_variable * hir_variable * hir_variable
 
   (* LHS is a new variable that represents the function argument indicated by

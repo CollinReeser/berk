@@ -237,9 +237,23 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
       let elem_t = unwrap_ptr arr_t in
 
+      let ptr_to_arr_t = RPtr(arr_t) in
+
+      (* Store the literal array we have in-hand in a "register" back into a
+      stack-allocated area, so we have a pointer we can dereference instead.
+
+      FIXME: This is horrible, and we may only hope that this is optimized
+      away at a lower level. *)
+      let (hctxt, tmp_ptr_to_arr) = get_tmp_name hctxt in
+      let decl_ptr_to_arr = (ptr_to_arr_t, tmp_ptr_to_arr) in
+      let decls = decl_ptr_to_arr :: hscope.declarations in
+      let instr = Instr(HValueStore(decl_ptr_to_arr, idxable)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {declarations = decls; instructions = instrs} in
+
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl = (elem_t, tmp) in
-      let instr = Instr(HDynamicIndex(decl, idx, idxable)) in
+      let instr = Instr(HDynamicIndex(decl, idx, decl_ptr_to_arr)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)

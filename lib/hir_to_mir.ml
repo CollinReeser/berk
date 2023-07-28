@@ -71,9 +71,6 @@ let rval_from_hval hval : rval =
 ;;
 
 let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
-  mir_ctxt |> ignore;
-  bb |> ignore;
-
   begin match instr with
   | HRetVoid ->
       let bb = {bb with instrs = bb.instrs @ [RetVoid]} in
@@ -218,13 +215,27 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
       let mir_ctxt = update_bb mir_ctxt bb in
       (mir_ctxt, bb)
 
-  | HDynamicIndex(result_var, idx_var, array_var) ->
-      result_var |> ignore;
-      idx_var |> ignore;
-      array_var |> ignore;
+  | HDynamicIndex(result_var, idx_var, ptr_to_arr_var) ->
+      let result_lval = lval_from_hvar Tmp result_var in
+      let idx_lval = lval_from_hvar Tmp idx_var in
+      let ptr_to_arr_lval = lval_from_hvar Tmp ptr_to_arr_var in
 
-      failwith "hir_to_mir@hir_instr_to_mir: Unimplemented"
-      (* (mir_ctxt, bb) *)
+      let ptrto_instr =
+        PtrTo(
+          result_lval, [
+            (* Start at "index 0" of this "one-elem array of arrays". *)
+            Static(0);
+            (* Second index is into the arr-index of the pointed-to array. *)
+            Dynamic(idx_lval)
+          ],
+          ptr_to_arr_lval
+        )
+      in
+
+      let bb = {bb with instrs = bb.instrs @ [ptrto_instr]} in
+
+      let mir_ctxt = update_bb mir_ctxt bb in
+      (mir_ctxt, bb)
   end
 ;;
 
