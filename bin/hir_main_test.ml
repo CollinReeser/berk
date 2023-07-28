@@ -349,35 +349,44 @@ let () =
           | FuncExternDecl(func_decl) ->
               let rfunc_decl = func_decl_t_to_rfunc_decl_t func_decl in
 
-              Printf.printf "RAST:\n%s\n" (fmt_rfunc_decl_t rfunc_decl) ;
+              Printf.printf "RAST:\n%s\n%!" (fmt_rfunc_decl_t rfunc_decl) ;
 
               let mir_ctxt = rfunc_decl_to_mir rfunc_decl in
 
-              Printf.printf "RAST-generated MIR:\n%s\n" (fmt_mir_ctxt mir_ctxt);
+              Printf.printf
+                "RAST-generated MIR:\n%s\n%!"
+                (fmt_mir_ctxt mir_ctxt);
 
               Some(mir_ctxt)
           | FuncDef(func_def) ->
               let rfunc_def = func_def_t_to_rfunc_def_t func_def in
 
-              Printf.printf "RAST:\n%s\n" (fmt_rfunc_def_t rfunc_def) ;
+              Printf.printf "RAST:\n%s\n%!" (fmt_rfunc_def_t rfunc_def) ;
 
-              let mir_ctxt = rfunc_to_mir rfunc_def in
-
-              Printf.printf "RAST-generated MIR:\n%s\n" (fmt_mir_ctxt mir_ctxt);
+              let mir_ctxt_from_rast = begin
+                let mir_ctxt = rfunc_to_mir rfunc_def in
+                Printf.printf
+                  "RAST-generated MIR:\n%s\n%!"
+                  (fmt_mir_ctxt mir_ctxt) ;
+                mir_ctxt
+              end in
 
               let hfunc_def = rfunc_def_t_to_hfunc_def_t rfunc_def in
 
-              Printf.printf "HIR:\n%s\n" (fmt_hfunc_def_t hfunc_def) ;
+              Printf.printf "HIR:\n%s\n%!" (fmt_hfunc_def_t hfunc_def) ;
 
-              let _ = begin
+              let mir_ctxt_from_hir = begin
                 let mir_ctxt = hfunc_def_to_mir hfunc_def in
                 Printf.printf
-                  "HIR-generated MIR:\n%s\n"
+                  "HIR-generated MIR:\n%s\n%!"
                   (fmt_mir_ctxt mir_ctxt) ;
-                ()
+                mir_ctxt
               end in
 
-              Some(mir_ctxt)
+              mir_ctxt_from_rast |> ignore;
+              mir_ctxt_from_hir |> ignore;
+
+              Some(mir_ctxt_from_rast)
         end
     ) mod_decls_tc_rewritten
   in
