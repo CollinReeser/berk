@@ -365,12 +365,14 @@ let () =
         mut decl_many_4: bool
       ) = (1, 2, 3, true);
 
-      ignore printf("decl_test_1: [%d]\n", decl_test_1);
-      ignore printf("decl_test_2: [%d] [%d]\n", decl_test_2.0, decl_test_2.1);
-      ignore printf("decl_many_1: [%d]\n", decl_many_1);
-      ignore printf("decl_many_2: [%d]\n", decl_many_2);
-      ignore printf("decl_many_3: [%d]\n", decl_many_3);
-      ignore printf("decl_many_4: [%d]\n", decl_many_4);
+      ignore printf("decl_test_1: [%d] (3)\n", decl_test_1);
+      ignore printf(
+        "decl_test_2: [%hhd] [%d] (1, 22)\n", decl_test_2.0, decl_test_2.1
+      );
+      ignore printf("decl_many_1: [%d] (1)\n", decl_many_1);
+      ignore printf("decl_many_2: [%d] (2)\n", decl_many_2);
+      ignore printf("decl_many_3: [%d] (3)\n", decl_many_3);
+      ignore printf("decl_many_4: [%hhd] (1)\n", decl_many_4);
 
       let sanity_true = true;
       let sanity_false = false;
@@ -575,31 +577,31 @@ let () =
       let quad_some = Some((true, false, true, true));
       match quad_some {
       | Some((quad_b1, _, _, _) as quad_tup) -> {
-          ignore printf("as-matching: quad_b1: [%d](1)\n", quad_b1);
+          ignore printf("as-matching: quad_b1: [%hhd](1)\n", quad_b1);
 
           match quad_tup {
           | (_, _ as quad_ex_false, _, quad_b4) as quad_tup_2 -> {
-              ignore printf("as-matching: quad_b4: [%d](1)\n", quad_b4);
+              ignore printf("as-matching: quad_b4: [%hhd](1)\n", quad_b4);
 
               match (quad_ex_false, quad_tup_2) {
               | (false, (_, false, quad_b3, _)) -> {
                   ignore printf(
-                    "Expected match: quad_b3: [%d]\n", quad_b3
+                    "Expected match: quad_b3: [%hhd]\n", quad_b3
                   );
                 }
               | (true, (_, false, quad_b3, _)) -> {
                   ignore printf(
-                    "UN-expected match 1: quad_b3: [%d]\n", quad_b3
+                    "UN-expected match 1: quad_b3: [%hhd]\n", quad_b3
                   );
                 }
               | (false, (_, true, quad_b3, _)) -> {
                   ignore printf(
-                    "UN-expected match 2: quad_b3: [%d]\n", quad_b3
+                    "UN-expected match 2: quad_b3: [%hhd]\n", quad_b3
                   );
                 }
               | (_, (_, _, quad_b3, _)) -> {
                   ignore printf(
-                    "UN-expected match 3: quad_b3: [%d]\n", quad_b3
+                    "UN-expected match 3: quad_b3: [%hhd]\n", quad_b3
                   );
                 }
               }
