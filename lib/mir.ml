@@ -63,10 +63,6 @@ always a pointer type. *)
 (* Turn a list of separate values into a struct containing those values, whose
 members are in the same order as the given list. *)
 | ConstructAggregate of lval * lval list
-(* Where `lval-result`, `index`, lval-orig-aggregate`, `lval-element`, yield
-a new aggregate lval that matches the original aggregate lval, save for the
-element at the given index being replaced by the given element. *)
-| IntoAggregate of lval * int * lval * lval
 (* Yield the lval element at the given index in the given aggregate value. *)
 | FromAggregate of lval * int * lval
 (* The first lval is the return value, and the second lval is the function to be
@@ -195,13 +191,6 @@ let fmt_instr instr =
       sprintf "  %s = aggregate of (%s)\n"
         (fmt_lval lval)
         (fmt_join_strs "; "(List.map fmt_lval elems))
-
-  | IntoAggregate(lval_res, i, lval_aggregate, lval_elem) ->
-      sprintf "  %s = %s but %s inserted at index %d\n"
-        (fmt_lval lval_res)
-        (fmt_lval lval_aggregate)
-        (fmt_lval lval_elem)
-        i
 
   | FromAggregate(lval, i, lval_aggregate) ->
       sprintf "  %s = extract index %d from %s\n"
@@ -389,7 +378,6 @@ let instr_lval instr =
   | Cast(lval, _, _) -> lval
   | PtrTo(lval, _, _) -> lval
   | ConstructAggregate(lval, _) -> lval
-  | IntoAggregate(lval, _, _, _) -> lval
   | FromAggregate(lval, _, _) -> lval
   | Call(lval, _, _) -> lval
   | CallVoid(_, _) -> failwith "No resultant lval for void call"

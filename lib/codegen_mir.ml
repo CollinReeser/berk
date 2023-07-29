@@ -274,25 +274,6 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | IntoAggregate(
-      {lname=new_agg_name; _}, idx, {lname=orig_agg_name; _},
-      {lname=elem_name; _}
-    ) ->
-      let elem_val = StrMap.find elem_name func_ctxt.cur_vars in
-      let orig_agg_val = StrMap.find orig_agg_name func_ctxt.cur_vars in
-
-      let new_agg_val =
-        Llvm.build_insertvalue orig_agg_val elem_val idx new_agg_name builder |>
-        enforce_mir_llvm_name_agreement new_agg_name
-      in
-
-      let func_ctxt = {
-        func_ctxt with
-          cur_vars = StrMap.add new_agg_name new_agg_val func_ctxt.cur_vars
-      } in
-
-      func_ctxt
-
   | FromAggregate({lname; _}, elem_idx, {lname=agg_name; _}) ->
       let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
 
