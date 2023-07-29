@@ -832,12 +832,13 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
           fun (hctxt, hscope, hvar) rassign_idx_lval ->
             begin match rassign_idx_lval with
             | RALStaticIndex(t, i) ->
+                let (hctxt, tmp_idx) = get_tmp_name hctxt in
+                let decl_idx = (RI32, tmp_idx) in
                 let (hctxt, tmp) = get_tmp_name hctxt in
-                let decl_load = (named_t, tmp) in
                 let decl = (t, tmp) in
-                let instr_load = Instr(HValueLoad(decl_load, hvar)) in
-                let instr_idx = Instr(HAggregateIndex(decl, i, decl_load)) in
-                let instrs = instr_idx :: instr_load :: hscope.instructions in
+                let instr_init_idx = Instr(HValueAssign(decl_idx, HValI32(i))) in
+                let instr_idx = Instr(HDynamicIndex(decl, [decl_idx], hvar)) in
+                let instrs = instr_idx :: instr_init_idx :: hscope.instructions in
                 let hscope = {hscope with instructions = instrs} in
                 (hctxt, hscope, decl)
 

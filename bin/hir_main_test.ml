@@ -307,7 +307,7 @@ let () =
       return arg_result;
     }
 
-    fn test_static_array_dyn(a: i32, b: i32, c: u16, d: u16, e: i32): u16 {
+    fn test_static_array(a: i32, b: i32, c: u16, d: u16, e: i32): u16 {
       let mut array: [3]u16;
 
       array[a] = c;
@@ -318,22 +318,18 @@ let () =
       return val;
     }
 
-    fn test_static_array_multi() {
-      let mut array: [3][7](i32, i32);
+    fn test_static_array_multi(
+      a: i32, b: i32, c: i32, d: i32,
+      e: i16, f: i16, g: i32, h: i32
+    ): i16 {
+      let mut array: [3][7](i16, i16);
 
-      //array[1][4].1 = 10;
-      let val = array[1][4].1;
+      array[a][b].1 = e;
+      array[c][d].1 = f;
+      let val = array[g][h].1;
 
-      return;
+      return val;
     }
-
-//    fn test_array() {
-//      let array = [0, 1, 2];
-//
-//      let val = array[1];
-//
-//      return;
-//    }
 
     fn main(): i8 {
       {
@@ -403,14 +399,29 @@ let () =
         ignore printf("Got [%d] | [%d] Expected\n", func_var_result, 3);
       }
       {
-        let test_static_array_result_1 = test_static_array_dyn(1, 2, 17, 19, 1);
+        let test_static_array_result_1 = test_static_array(1, 2, 17, 19, 1);
         ignore printf(
           "Got [%hd] | [%hd] Expected\n", test_static_array_result_1, 17
         );
 
-        let test_static_array_result_2 = test_static_array_dyn(1, 2, 17, 19, 2);
+        let test_static_array_result_2 = test_static_array(1, 2, 17, 19, 2);
         ignore printf(
           "Got [%hd] | [%hd] Expected\n", test_static_array_result_2, 19
+        );
+      }
+      {
+        let test_static_array_multi_result_1 = test_static_array_multi(
+          1, 2, 3, 4, 27, 29, 1, 2
+        );
+        ignore printf(
+          "Got [%hd] | [%hd] Expected\n", test_static_array_multi_result_1, 27
+        );
+
+        let test_static_array_multi_result_2 = test_static_array_multi(
+          1, 2, 3, 4, 27, 29, 3, 4
+        );
+        ignore printf(
+          "Got [%hd] | [%hd] Expected\n", test_static_array_multi_result_2, 29
         );
       }
 
