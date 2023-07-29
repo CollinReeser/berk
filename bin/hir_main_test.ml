@@ -331,6 +331,14 @@ let () =
       return val;
     }
 
+    fn test_static_complex(): i16 {
+      let mut array: [3][7]([4]i16, [5]i16);
+
+      let val = array[1][2].1[3];
+
+      return val;
+    }
+
     fn main(): i8 {
       {
         let if_or_result = if_or();

@@ -260,10 +260,8 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
                 (* Yield a _pointer to_ an indexable type. *)
                 let decl = (RPtr(t), name) in
-                (* Unwrap the _indexable type_ to get its component element
-                type. *)
-                let elem_t = unwrap_ptr t in
-                (hctxt, hscope, decl, [], elem_t)
+
+                (hctxt, hscope, decl, [], t)
             end
 
         (* An inner indexing operation means we have another layer of the target
@@ -274,14 +272,35 @@ let rec rexpr_to_hir hctxt hscope rexpr
             let (hctxt, hscope, inner_idx) =
               rexpr_to_hir hctxt hscope inner_idx_expr
             in
-            let (hctxt, hscope, inner_idxable, idxs_rev, ptr_to_elem_t) =
+            let (hctxt, hscope, inner_idxable, idxs_rev, aggregate_t) =
               _indexable_expr_to_hir hctxt hscope inner_idxable_expr
             in
             (* Since we're doing another index operation, the element type we
             got back from our recursive call is itself some
             dereferenceable/indexable type, so unwrap that type further to get
             the element type at this level of indexing. *)
-            let elem_t = unwrap_ptr ptr_to_elem_t in
+            let elem_t = unwrap_ptr aggregate_t in
+
+            (hctxt, hscope, inner_idxable, inner_idx :: idxs_rev, elem_t)
+
+        | RTupleIndexExpr(t, i, inner_idxable_expr) ->
+            let (hctxt, tmp_idx) = get_tmp_name hctxt in
+
+            let inner_idx = (RI32, tmp_idx) in
+            let instr_idx = Instr(HValueAssign(inner_idx, HValI32(i))) in
+            let instrs = instr_idx :: hscope.instructions in
+            let hscope = {hscope with instructions = instrs} in
+
+            let (hctxt, hscope, inner_idxable, idxs_rev, aggregate_t) =
+              _indexable_expr_to_hir hctxt hscope inner_idxable_expr
+            in
+
+            (* Since we're doing another index operation, the element type we
+            got back from our recursive call is itself some
+            dereferenceable/indexable type, so unwrap that type further to get
+            the element type at this level of indexing. *)
+            let elem_t = unwrap_aggregate_indexable aggregate_t i in
+
             (hctxt, hscope, inner_idxable, inner_idx :: idxs_rev, elem_t)
 
         | _ ->
@@ -309,6 +328,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let idxs_rev = idx :: inner_idxs_rev in
       let idxs = List.rev idxs_rev in
 
+      let elem_t = unwrap_indexable elem_t in
       let ptr_to_elem_t = RPtr(elem_t) in
 
 
