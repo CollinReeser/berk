@@ -169,7 +169,7 @@ let () =
     }
 
     fn basic_match_expr(): i32 {
-      let cond = true;
+      let cond = false;
 
       let result = match cond {
       | true -> 10
@@ -180,7 +180,7 @@ let () =
     }
 
     fn var_bind_match_expr(): i32 {
-      let cond = true;
+      let cond = false;
 
       let result = match cond {
       | true -> 10
@@ -201,15 +201,13 @@ let () =
       return result;
     }
 
-    fn tup_match_simple() {
+    fn tup_match_simple(): i32 {
       let tup = (true, false, true);
 
-      let result = match tup {
-      | (_, false, _) -> 10
-      | (_, true, _) -> 10
+      return match tup {
+      | (_, false, _) -> 5
+      | (_, true, _) -> 20
       };
-
-      return;
     }
 
     fn match_ints(): (i32, i32, i32) {
@@ -282,6 +280,32 @@ let () =
     }
 
     fn main(): i8 {
+      {
+        let if_else_if_else_expr_result = if_else_if_else_expr();
+        ignore printf(
+          "Got [%d] | [%d] Expected\n", if_else_if_else_expr_result, 1000
+        );
+      }
+      {
+        let basic_match_expr_result = basic_match_expr();
+        ignore printf(
+          "Got [%d] | [%d] Expected\n", basic_match_expr_result, 20
+        );
+      }
+      {
+        let var_bind_match_expr_result = var_bind_match_expr();
+        ignore printf(
+          "Got [%d] | [%d] Expected\n", var_bind_match_expr_result, 20
+        );
+      }
+      {
+        let as_match_expr_result = as_match_expr();
+        ignore printf("Got [%d] | [%d] Expected\n", as_match_expr_result, 10);
+      }
+      {
+        let tup_match_simple_result = tup_match_simple();
+        ignore printf("Got [%d] | [%d] Expected\n", tup_match_simple_result, 5);
+      }
       {
         let match_ints_res = match_ints();
         ignore printf(
