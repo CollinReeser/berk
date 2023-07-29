@@ -508,7 +508,7 @@ let () =
               mir_ctxt_from_rast |> ignore;
               mir_ctxt_from_hir |> ignore;
 
-              Some(mir_ctxt_from_rast)
+              Some(mir_ctxt_from_hir)
         end
     ) mod_decls_tc_rewritten
   in
