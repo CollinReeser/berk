@@ -228,34 +228,79 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
-  | RIndexExpr(_, idx_expr, idxable_expr) ->
+  | RIndexExpr(t, idx_expr, idxable_expr) ->
+      Printf.printf
+        "RIndexExpr(%s, %s, %s)\n"
+        (fmt_rtype t)
+        (fmt_rexpr idx_expr)
+        (fmt_rexpr idxable_expr) ;
+
+     (* Generate HIR for indexing arbitrarily deeply into some indexable, in
+     one shot. *)
+      let rec _indexable_expr_to_hir hctxt hscope idxable =
+        begin match idxable with
+        | RValVar(t, name) ->
+            (* Check whether the given name represents a function argument. *)
+            begin match (StrMap.find_opt name hctxt.func_vars) with
+            | Some((t, i)) ->
+                (* This name refers to a function argument. *)
+                failwith (
+                  Printf.sprintf (
+                    "RAST->HIR: RIndexExpr: indexing into func-arg " ^^
+                    "unimplemented: %s: %s # %d"
+                  ) name (fmt_rtype t) i
+                )
+
+            | None ->
+                (* This is a named, non-function-arg variable. *)
+                let decl = (RPtr(t), name) in
+                (hctxt, hscope, decl, [])
+            end
+
+        | RIndexExpr(_, inner_idx_expr, inner_idxable_expr) ->
+            let (hctxt, hscope, inner_idx) =
+              rexpr_to_hir hctxt hscope inner_idx_expr
+            in
+            let (hctxt, hscope, inner_idxable, idxs) =
+              _indexable_expr_to_hir hctxt hscope inner_idxable_expr
+            in
+            (hctxt, hscope, inner_idxable, inner_idx :: idxs)
+
+        | _ ->
+            failwith (
+              Printf.sprintf (
+                "RAST->HIR: RIndexExpr: Idxing unimplemented " ^^
+                "for [[ %s ]]"
+              ) (fmt_rexpr idxable)
+            )
+        end
+      in
+
       let (hctxt, hscope, idx) = rexpr_to_hir hctxt hscope idx_expr in
-      let (hctxt, hscope, idxable) = rexpr_to_hir hctxt hscope idxable_expr in
+      let (hctxt, hscope, ((ptr_to_arr_t, _) as idxable), inner_idxs) =
+        _indexable_expr_to_hir hctxt hscope idxable_expr
+      in
 
-      let (arr_t, _) = idxable in
+      let idxs = idx :: inner_idxs in
 
-      let elem_t = unwrap_ptr arr_t in
+      let arr_t = unwrap_ptr ptr_to_arr_t in
+      let elem_t = unwrap_indexable arr_t in
 
-      let ptr_to_arr_t = RPtr(arr_t) in
-
-      (* Store the literal array we have in-hand in a "register" back into a
-      stack-allocated area, so we have a pointer we can dereference instead.
-
-      FIXME: This is horrible, and we may only hope that this is optimized
-      away at a lower level. *)
-      let (hctxt, tmp_ptr_to_arr) = get_tmp_name hctxt in
-      let decl_ptr_to_arr = (ptr_to_arr_t, tmp_ptr_to_arr) in
-      let decls = decl_ptr_to_arr :: hscope.declarations in
-      let instr = Instr(HValueStore(decl_ptr_to_arr, idxable)) in
-      let instrs = instr :: hscope.instructions in
-      let hscope = {declarations = decls; instructions = instrs} in
+      Printf.printf "ptr_to_arr_t: [ %s ], arr_t: [ %s ], elem_t: [ %s ]\n%!"
+        (fmt_rtype ptr_to_arr_t) (fmt_rtype arr_t) (fmt_rtype elem_t);
 
       let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl = (elem_t, tmp) in
-      let instr = Instr(HDynamicIndex(decl, idx, decl_ptr_to_arr)) in
+      let decl_ptr = (ptr_to_arr_t, tmp) in
+      let instr = Instr(HDynamicIndex(decl_ptr, idxs, idxable)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
-      (hctxt, hscope, decl)
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl_result = (elem_t, tmp) in
+      let instr = Instr(HValueLoad(decl_result, decl_ptr)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+      (hctxt, hscope, decl_result)
 
   | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
       (* Evaluate the initializing statements. *)
@@ -777,8 +822,8 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
                 let (hctxt, hscope, i_hvar) = rexpr_to_hir hctxt hscope e in
 
                 let (hctxt, tmp) = get_tmp_name hctxt in
-                let decl = (t, tmp) in
-                let instr = Instr(HDynamicIndex(decl, i_hvar, hvar)) in
+                let decl = (RPtr(t), tmp) in
+                let instr = Instr(HDynamicIndex(decl, [i_hvar], hvar)) in
                 let instrs = instr :: hscope.instructions in
                 let hscope = {hscope with instructions = instrs} in
                 (hctxt, hscope, decl)

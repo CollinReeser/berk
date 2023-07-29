@@ -307,29 +307,29 @@ let () =
       return arg_result;
     }
 
-    fn test_static_array() {
-      let array: [3]u16;
-
-      let val = array[1];
-
-      return;
-    }
-
-//    fn test_static_array_dyn(a: u16, b: u16, c: u16): u16 {
+//    fn test_static_array() {
 //      let array: [3]u16;
 //
-//      array[a] = 10;
-//      array[b] = 20;
+//      let val = array[1];
 //
-//      let val = array[c];
-//
-//      return val;
+//      return;
 //    }
 
+    fn test_static_array_dyn(a: i32, b: i32, c: u16, d: u16, e: i32): u16 {
+      let mut array: [3]u16;
+
+      array[a] = c;
+      array[b] = d;
+
+      let val = array[e];
+
+      return val;
+    }
+
 //    fn test_static_array_multi() {
-//      let array: [3][7]u16;
+//      let array: [3][7](i32, i32);
 //
-//      let val = array[1][4];
+//      let val = array[1][4].1;
 //
 //      return;
 //    }
@@ -408,6 +408,17 @@ let () =
       {
         let func_var_result = func_var(1, 2);
         ignore printf("Got [%d] | [%d] Expected\n", func_var_result, 3);
+      }
+      {
+        let test_static_array_result_1 = test_static_array_dyn(1, 2, 17, 19, 1);
+        ignore printf(
+          "Got [%hd] | [%hd] Expected\n", test_static_array_result_1, 17
+        );
+
+        let test_static_array_result_2 = test_static_array_dyn(1, 2, 17, 19, 2);
+        ignore printf(
+          "Got [%hd] | [%hd] Expected\n", test_static_array_result_2, 19
+        );
       }
 
       return 0;

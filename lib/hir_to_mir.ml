@@ -239,9 +239,10 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
       let mir_ctxt = update_bb mir_ctxt bb in
       (mir_ctxt, bb)
 
-  | HDynamicIndex(result_var, idx_var, ptr_to_arr_var) ->
+  | HDynamicIndex(result_var, idx_vars, ptr_to_arr_var) ->
       let result_lval = lval_from_hvar Tmp result_var in
-      let idx_lval = lval_from_hvar Tmp idx_var in
+      let idx_lvals = List.map (lval_from_hvar Tmp) idx_vars in
+      let dynamic_idx_lvals = List.map (fun lval -> Dynamic(lval)) idx_lvals in
       let ptr_to_arr_lval = lval_from_hvar Tmp ptr_to_arr_var in
 
       let ptrto_instr =
@@ -249,9 +250,9 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
           result_lval, [
             (* Start at "index 0" of this "one-elem array of arrays". *)
             Static(0);
-            (* Second index is into the arr-index of the pointed-to array. *)
-            Dynamic(idx_lval)
-          ],
+
+            (* Second+ indices index into the actual array. *)
+          ] @ dynamic_idx_lvals,
           ptr_to_arr_lval
         )
       in

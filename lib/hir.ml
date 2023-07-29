@@ -41,9 +41,10 @@ type hir_instr =
   yielding the value in the resultant LHS variable. ie: `tmp = tup.3;` *)
   | HAggregateIndex of hir_variable * int * hir_variable
 
-  (* LHS is resultant variable. Middle is indexing variable. RHS is a pointer
-  to an indexable value. *)
-  | HDynamicIndex of hir_variable * hir_variable * hir_variable
+  (* LHS is resultant variable, that is a _pointer to_ the indexed element (that
+  would then still need to be loaded). Middle is one or more indexing variables.
+  RHS is a pointer to an indexable value. *)
+  | HDynamicIndex of hir_variable * hir_variable list * hir_variable
 
   (* LHS is a new variable that represents the function argument indicated by
   the given name and func-arg-index. *)
@@ -186,11 +187,11 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_variable h_var_tup)
         i
 
-  | HDynamicIndex(h_var_res, h_var_idx, h_var_arr) ->
+  | HDynamicIndex(h_var_res, h_var_idxs, h_var_arr) ->
       sprintf "%s = IDX (%s)[%s]"
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_arr)
-        (fmt_hir_variable h_var_idx)
+        (fmt_join_strs ", " (List.map fmt_hir_variable h_var_idxs))
 
   | HArgToVar(h_var_res, func_arg_name, func_arg_idx) ->
       sprintf "%s = arg(%d) # %s"
