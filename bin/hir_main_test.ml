@@ -331,10 +331,15 @@ let () =
       return val;
     }
 
-    fn test_static_complex(): i16 {
+    fn test_static_complex(
+      a: i32, b: i32, c: i32,
+      d: i32, e: i32, f: i32,
+      g: i16
+    ): i16 {
       let mut array: [3][7]([4]i16, [5]i16);
 
-      let val = array[1][2].1[3];
+      array[a][b].1[c] = g;
+      let val = array[d][e].1[f];
 
       return val;
     }
@@ -430,6 +435,16 @@ let () =
         );
         ignore printf(
           "Got [%hd] | [%hd] Expected\n", test_static_array_multi_result_2, 29
+        );
+      }
+      {
+        let test_static_complex_result = test_static_complex(
+          1, 2, 3,
+          1, 2, 3,
+          99
+        );
+        ignore printf(
+          "Got [%hd] | [%hd] Expected\n", test_static_complex_result, 99
         );
       }
 
