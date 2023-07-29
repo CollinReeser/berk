@@ -37,7 +37,7 @@ type rexpr =
 
   | RValCast of rast_t * cast_op * rexpr
   | RUnOp of rast_t * un_op * rexpr
-  | RBinOp of rast_t * bin_op * rexpr * rexpr
+  | RBinOp of rast_t * rbin_op * rexpr * rexpr
 
   | RBlockExpr of rast_t * rstmt * rexpr
 
@@ -178,11 +178,34 @@ let rec expr_to_rexpr expr : rexpr =
       let re = expr_to_rexpr e in
       RUnOp(rt, op, re)
 
-  | BinOp(t, op, e_lhs, e_rhs) ->
+  | BinOp(t, LOr, e_lhs, e_rhs) ->
       let rt = berk_t_to_rast_t t in
       let re_lhs = expr_to_rexpr e_lhs in
       let re_rhs = expr_to_rexpr e_rhs in
-      RBinOp(rt, op, re_lhs, re_rhs)
+      RMatchExpr(
+        rt, re_lhs, [
+          (RPBool(true), RValBool(true));
+          (RWild(RBool), re_rhs);
+        ]
+      )
+
+  | BinOp(t, LAnd, e_lhs, e_rhs) ->
+      let rt = berk_t_to_rast_t t in
+      let re_lhs = expr_to_rexpr e_lhs in
+      let re_rhs = expr_to_rexpr e_rhs in
+      RMatchExpr(
+        rt, re_lhs, [
+          (RPBool(false), RValBool(false));
+          (RWild(RBool), re_rhs);
+        ]
+      )
+
+  | BinOp(t, op, e_lhs, e_rhs) ->
+      let rt = berk_t_to_rast_t t in
+      let rop = op_to_rop op in
+      let re_lhs = expr_to_rexpr e_lhs in
+      let re_rhs = expr_to_rexpr e_rhs in
+      RBinOp(rt, rop, re_lhs, re_rhs)
 
   | BlockExpr(t, stmts, e) ->
       let rt = berk_t_to_rast_t t in
@@ -511,7 +534,7 @@ let rec fmt_rexpr ?(init_ind=false) ?(ind="") ?(print_typ = false) re : string =
       Printf.sprintf "%s(%s %s %s)%s"
         init_ind
         (fmt_rexpr ~print_typ:print_typ lh)
-        (fmt_bin_op op)
+        (fmt_rbin_op op)
         (fmt_rexpr ~print_typ:print_typ rh)
         typ_s
 

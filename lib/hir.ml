@@ -56,7 +56,7 @@ type hir_instr =
   variable. *)
   | HValCast of hir_variable * cast_op * hir_variable
   | HUnOp of hir_variable * un_op * hir_variable
-  | HBinOp of hir_variable * bin_op * hir_variable * hir_variable
+  | HBinOp of hir_variable * rbin_op * hir_variable * hir_variable
 
   (* The resultant variable is the result of invoking the function in the middle
   hir_variable on the argument list. *)
@@ -219,7 +219,7 @@ let fmt_hir_instr hir_instr : string =
       sprintf "%s = (%s) %s (%s)"
         (fmt_hir_variable h_var_res)
         (fmt_hir_variable h_var_lhs)
-        (fmt_bin_op bin_op)
+        (fmt_rbin_op bin_op)
         (fmt_hir_variable h_var_rhs)
 
   | HExprInvoke(h_var_res, h_var_func, h_var_args) ->

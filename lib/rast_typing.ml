@@ -1,5 +1,6 @@
 open Typing
 open Utility
+open Ir
 
 type rast_t =
   | RU64
@@ -30,7 +31,21 @@ type rast_t =
   lowering to indicate "the type of this data is actually the [N x i8] raw
   form of this type. " *)
   | RByteArray of rast_t
+;;
 
+type rbin_op =
+  | Add
+  | Sub
+  | Mul
+  | Div
+  | Mod
+  | Eq
+  | Ne
+  | Lt
+  | Le
+  | Gt
+  | Ge
+;;
 
 let variant_tag_rt = RU8;;
 
@@ -95,6 +110,45 @@ the prefixed implicit constructor tag. *)
 and v_ctor_as_tagged_type_list {fields; _} : rast_t list =
   let fields_ts = List.map (fun {t} -> berk_t_to_rast_t t) fields in
   variant_tag_rt :: fields_ts
+;;
+
+let op_to_rop (op : bin_op) : rbin_op =
+  begin match op with
+  | Add -> Add
+  | Sub -> Sub
+  | Mul -> Mul
+  | Div -> Div
+  | Mod -> Mod
+  | Eq -> Eq
+  | Ne -> Ne
+  | Lt -> Lt
+  | Le -> Le
+  | Gt -> Gt
+  | Ge -> Ge
+
+  | LOr
+  | LAnd ->
+      failwith (
+        Printf.sprintf "op_to_rop: No conversion for op [ %s ] to rop."
+        (fmt_bin_op op)
+      )
+  end
+;;
+
+let fmt_rbin_op op =
+  begin match op with
+  | Add -> "+"
+  | Sub -> "-"
+  | Mul -> "*"
+  | Div -> "/"
+  | Mod -> "%%"
+  | Eq -> "=="
+  | Ne -> "!="
+  | Lt -> "<"
+  | Le -> "<="
+  | Gt -> ">"
+  | Ge -> ">="
+  end
 ;;
 
 let rec fmt_join_types delim types =

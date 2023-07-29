@@ -168,6 +168,42 @@ let () =
       return result;
     }
 
+    fn if_or(): i32 {
+      let mut val = 0;
+
+      if val == 0 || val == 10 {
+        val = val + 10;
+      }
+
+      if val == 0 || val == 10 {
+        val = val + 10;
+      }
+
+      if val == 0 || val == 10 {
+        val = val + 10;
+      }
+
+      return val;
+    }
+
+    fn if_and(): i32 {
+      let mut val = 0;
+
+      if val > 0 && val < 10 {
+        val = val + 10;
+      }
+
+      if val == 0 && val == 10 {
+        val = val + 20;
+      }
+
+      if val == 0 && val != 10 {
+        val = val + 30;
+      }
+
+      return val;
+    }
+
     fn basic_match_expr(): i32 {
       let cond = false;
 
@@ -280,6 +316,14 @@ let () =
     }
 
     fn main(): i8 {
+      {
+        let if_or_result = if_or();
+        ignore printf("Got [%d] | [%d] Expected\n", if_or_result, 20);
+      }
+      {
+        let if_and_result = if_and();
+        ignore printf("Got [%d] | [%d] Expected\n", if_and_result, 30);
+      }
       {
         let if_else_if_else_expr_result = if_else_if_else_expr();
         ignore printf(

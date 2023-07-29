@@ -52,7 +52,7 @@ type instr =
 | Load of lval * lval
 | Assign of lval * rval
 | UnOp of lval * un_op * lval
-| BinOp of lval * bin_op * lval * lval
+| BinOp of lval * rbin_op * lval * lval
 (* Cast the RHS value by the cast_op into the LHS. *)
 | Cast of lval * cast_op * lval
 (* Yields an lval of some ptr type, that when loaded yields a value of the type
@@ -168,7 +168,7 @@ let fmt_instr instr =
       sprintf "  %s = %s %s %s\n"
         (fmt_lval lval)
         (fmt_lval lhs_lval)
-        (fmt_bin_op op)
+        (fmt_rbin_op op)
         (fmt_lval rhs_lval)
 
   | Cast({t=target_t; _} as lval, un_op, rhs_lval) ->

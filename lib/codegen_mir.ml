@@ -456,7 +456,6 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Le -> Llvm.build_icmp Llvm.Icmp.Ule lhs_val rhs_val lname builder
         | Gt -> Llvm.build_icmp Llvm.Icmp.Ugt lhs_val rhs_val lname builder
         | Ge -> Llvm.build_icmp Llvm.Icmp.Uge lhs_val rhs_val lname builder
-        | LOr | LAnd -> failwith "Operation not supported for types."
         end
 
       | ((RI8 | RI16 | RI32 | RI64), (RI8 | RI16 | RI32 | RI64)) ->
@@ -472,7 +471,6 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Le -> Llvm.build_icmp Llvm.Icmp.Sle lhs_val rhs_val lname builder
         | Gt -> Llvm.build_icmp Llvm.Icmp.Sgt lhs_val rhs_val lname builder
         | Ge -> Llvm.build_icmp Llvm.Icmp.Sge lhs_val rhs_val lname builder
-        | LOr | LAnd -> failwith "Operation not supported for types."
         end
 
       | ((RF128 | RF64 | RF32), (RF128 | RF64 | RF32)) ->
@@ -488,7 +486,6 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         | Le -> Llvm.build_fcmp Llvm.Fcmp.Ule lhs_val rhs_val lname builder
         | Gt -> Llvm.build_fcmp Llvm.Fcmp.Ugt lhs_val rhs_val lname builder
         | Ge -> Llvm.build_fcmp Llvm.Fcmp.Uge lhs_val rhs_val lname builder
-        | LOr | LAnd -> failwith "Operation not supported for types."
         end
 
 
@@ -496,7 +493,6 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         begin match op with
         | Eq -> Llvm.build_icmp Llvm.Icmp.Eq lhs_val rhs_val lname builder
         | Ne -> Llvm.build_icmp Llvm.Icmp.Ne lhs_val rhs_val lname builder
-        | LOr | LAnd -> failwith "Logic ops &&, || should have been lowered"
         | _ -> failwith "Non-equality binop not supported for bool"
         end
 

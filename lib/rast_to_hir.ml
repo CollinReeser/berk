@@ -1,5 +1,4 @@
 open Hir
-open Ir
 open Rast
 open Rast_typing
 
