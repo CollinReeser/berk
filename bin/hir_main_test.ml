@@ -76,14 +76,6 @@ let () =
       return quadling;
     }
 
-//    fn test_array(): u16 {
-//      let array: [10]u16;
-//
-//      let val = array[5];
-//
-//      return val;
-//    }
-
     fn test_array_expr() {
       let arr1 = [1, 2, 3];
       let arr2 = ["one", "two", "three"];
@@ -314,6 +306,41 @@ let () =
 
       return arg_result;
     }
+
+    fn test_static_array() {
+      let array: [3]u16;
+
+      let val = array[1];
+
+      return;
+    }
+
+//    fn test_static_array_dyn(a: u16, b: u16, c: u16): u16 {
+//      let array: [3]u16;
+//
+//      array[a] = 10;
+//      array[b] = 20;
+//
+//      let val = array[c];
+//
+//      return val;
+//    }
+
+//    fn test_static_array_multi() {
+//      let array: [3][7]u16;
+//
+//      let val = array[1][4];
+//
+//      return;
+//    }
+
+//    fn test_array() {
+//      let array = [0, 1, 2];
+//
+//      let val = array[1];
+//
+//      return;
+//    }
 
     fn main(): i8 {
       {
@@ -563,16 +590,23 @@ let () =
   in
 
   let timing_llvm_codegen_end = Unix.gettimeofday () in
-  let timing_output_gen_start = Unix.gettimeofday () in
-  let timing_output_ll_start = Unix.gettimeofday () in
 
   (* Dump various output files from populated LLVM context. *)
+
+  let timing_output_gen_start = Unix.gettimeofday () in
+
+  Printf.printf "Generating human-readable LLVM *.ll file...\n%!";
+
+  let timing_output_ll_start = Unix.gettimeofday () in
 
   (* Dump LLVM human-readable IR. *)
   let filename_ll = "output.ll" in
   dump_llvm_ir filename_ll the_module ;
 
   let timing_output_ll_end = Unix.gettimeofday () in
+
+  Printf.printf "Generating human-readable ASM *.s file...\n%!";
+
   let timing_output_s_start = Unix.gettimeofday () in
 
   (* Dump human-readable assembly. *)
@@ -581,6 +615,9 @@ let () =
   dump_to_file file_type filename_asm the_fpm the_module ;
 
   let timing_output_s_end = Unix.gettimeofday () in
+
+  Printf.printf "Generating machine-readable object *.o file...\n%!";
+
   let timing_output_o_start = Unix.gettimeofday () in
 
   (* Dump machine-readable object file. *)
@@ -589,6 +626,9 @@ let () =
   dump_to_file file_type filename_obj the_fpm the_module ;
 
   let timing_output_o_end = Unix.gettimeofday () in
+
+  Printf.printf "Generating executable file...\n%!";
+
   let timing_output_exe_start = Unix.gettimeofday () in
 
   (* Dump executable. *)
@@ -599,6 +639,8 @@ let () =
   let timing_output_gen_end = Unix.gettimeofday () in
 
   let timing_program_end = Unix.gettimeofday () in
+
+  Printf.printf "Done compiling.\n%!";
 
   (* Calcuclate and print timing info for compiler stages. *)
   let _ = begin
