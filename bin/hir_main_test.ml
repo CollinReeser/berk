@@ -527,14 +527,6 @@ let () =
 
               Printf.printf "RAST:\n%s\n%!" (fmt_rfunc_def_t rfunc_def) ;
 
-              let mir_ctxt_from_rast = begin
-                let mir_ctxt = rfunc_to_mir rfunc_def in
-                Printf.printf
-                  "RAST-generated MIR:\n%s\n%!"
-                  (fmt_mir_ctxt mir_ctxt) ;
-                mir_ctxt
-              end in
-
               let hfunc_def = rfunc_def_t_to_hfunc_def_t rfunc_def in
 
               Printf.printf "HIR:\n%s\n%!" (fmt_hfunc_def_t hfunc_def) ;
@@ -547,7 +539,6 @@ let () =
                 mir_ctxt
               end in
 
-              mir_ctxt_from_rast |> ignore;
               mir_ctxt_from_hir |> ignore;
 
               Some(mir_ctxt_from_hir)
