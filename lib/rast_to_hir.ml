@@ -235,10 +235,14 @@ let rec rexpr_to_hir hctxt hscope rexpr
         (fmt_rexpr idx_expr)
         (fmt_rexpr idxable_expr) ;
 
-     (* Generate HIR for indexing arbitrarily deeply into some indexable, in
-     one shot. *)
+      (* Yield a pointer to some arbitrarily-complex datastructure, a series
+      of indexes to get to (a pointer to) the desired element within, and the
+      type of the element that will be yielded after loading from that pointer.
+      *)
       let rec _indexable_expr_to_hir hctxt hscope idxable =
         begin match idxable with
+        (* A named variable is already an alloca'd value accessible via pointer
+        on the stack. We want to merely yield that variable pointer. *)
         | RValVar(t, name) ->
             (* Check whether the given name represents a function argument. *)
             begin match (StrMap.find_opt name hctxt.func_vars) with
@@ -253,18 +257,32 @@ let rec rexpr_to_hir hctxt hscope rexpr
 
             | None ->
                 (* This is a named, non-function-arg variable. *)
+
+                (* Yield a _pointer to_ an indexable type. *)
                 let decl = (RPtr(t), name) in
-                (hctxt, hscope, decl, [])
+                (* Unwrap the _indexable type_ to get its component element
+                type. *)
+                let elem_t = unwrap_ptr t in
+                (hctxt, hscope, decl, [], elem_t)
             end
 
+        (* An inner indexing operation means we have another layer of the target
+        type to unwrap. We also want to do all indexing in one shot, so we
+        accumulate a list of indexes, so we can do index->index->load,
+        rather than index->load->index->load. *)
         | RIndexExpr(_, inner_idx_expr, inner_idxable_expr) ->
             let (hctxt, hscope, inner_idx) =
               rexpr_to_hir hctxt hscope inner_idx_expr
             in
-            let (hctxt, hscope, inner_idxable, idxs) =
+            let (hctxt, hscope, inner_idxable, idxs_rev, ptr_to_elem_t) =
               _indexable_expr_to_hir hctxt hscope inner_idxable_expr
             in
-            (hctxt, hscope, inner_idxable, inner_idx :: idxs)
+            (* Since we're doing another index operation, the element type we
+            got back from our recursive call is itself some
+            dereferenceable/indexable type, so unwrap that type further to get
+            the element type at this level of indexing. *)
+            let elem_t = unwrap_ptr ptr_to_elem_t in
+            (hctxt, hscope, inner_idxable, inner_idx :: idxs_rev, elem_t)
 
         | _ ->
             failwith (
@@ -276,21 +294,26 @@ let rec rexpr_to_hir hctxt hscope rexpr
         end
       in
 
+      (* Genertae the first-level dynamic index value. *)
       let (hctxt, hscope, idx) = rexpr_to_hir hctxt hscope idx_expr in
-      let (hctxt, hscope, ((ptr_to_arr_t, _) as idxable), inner_idxs) =
+
+      (* Evaluate the expression we'll ultimately index into, and any additional
+      layers of indexing we need to do, and the resultant type we will get once
+      the generated index pointer is loaded. *)
+      let (
+        hctxt, hscope, ((ptr_to_agg_t, _) as idxable), inner_idxs_rev, elem_t
+      ) =
         _indexable_expr_to_hir hctxt hscope idxable_expr
       in
 
-      let idxs = idx :: inner_idxs in
+      let idxs_rev = idx :: inner_idxs_rev in
+      let idxs = List.rev idxs_rev in
 
-      let arr_t = unwrap_ptr ptr_to_arr_t in
-      let elem_t = unwrap_indexable arr_t in
+      let ptr_to_elem_t = RPtr(elem_t) in
 
-      Printf.printf "ptr_to_arr_t: [ %s ], arr_t: [ %s ], elem_t: [ %s ]\n%!"
-        (fmt_rtype ptr_to_arr_t) (fmt_rtype arr_t) (fmt_rtype elem_t);
 
       let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl_ptr = (ptr_to_arr_t, tmp) in
+      let decl_ptr = (ptr_to_elem_t, tmp) in
       let instr = Instr(HDynamicIndex(decl_ptr, idxs, idxable)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in

@@ -307,14 +307,6 @@ let () =
       return arg_result;
     }
 
-//    fn test_static_array() {
-//      let array: [3]u16;
-//
-//      let val = array[1];
-//
-//      return;
-//    }
-
     fn test_static_array_dyn(a: i32, b: i32, c: u16, d: u16, e: i32): u16 {
       let mut array: [3]u16;
 
@@ -326,13 +318,14 @@ let () =
       return val;
     }
 
-//    fn test_static_array_multi() {
-//      let array: [3][7](i32, i32);
-//
-//      let val = array[1][4].1;
-//
-//      return;
-//    }
+    fn test_static_array_multi() {
+      let mut array: [3][7](i32, i32);
+
+      //array[1][4].1 = 10;
+      let val = array[1][4].1;
+
+      return;
+    }
 
 //    fn test_array() {
 //      let array = [0, 1, 2];
