@@ -5,7 +5,6 @@ open Berk.Type_check
 open Berk.Ast
 open Berk.Rast
 open Berk.Rast_to_hir
-open Berk.Rast_to_mir
 open Berk.Hir
 open Berk.Hir_to_mir
 open Berk.Mir
@@ -596,7 +595,8 @@ let () =
 
               Printf.printf "RAST:\n%s\n%!" (fmt_rfunc_decl_t rfunc_decl) ;
 
-              let mir_ctxt = rfunc_decl_to_mir rfunc_decl in
+              let hfunc_decl_t = rfunc_decl_t_to_hfunc_decl_t rfunc_decl in
+              let mir_ctxt = hfunc_decl_to_mir hfunc_decl_t in
 
               Printf.printf
                 "RAST-generated MIR:\n%s\n%!"
