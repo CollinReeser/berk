@@ -487,6 +487,41 @@ let unwrap_indexable_reference (indexable_t : rast_t) =
       )
 ;;
 
+let unwrap_aggregate_indexable (indexable_t : rast_t) i =
+  match indexable_t with
+  | RTuple(ts) ->
+      if i < List.length ts then
+        List.nth ts i
+      else
+        failwith (Printf.sprintf "Invalid index into tuple of arity [%d]" i)
+
+  | _ ->
+      failwith (
+        Printf.sprintf "Cannot unwrap non-indexable aggregate type: [%s]"
+          (fmt_rtype indexable_t)
+      )
+;;
+
+let unwrap_aggregate_indexable_reference (indexable_t : rast_t) i =
+  match indexable_t with
+  | RRef(RTuple(_) as tuple_t) ->
+      let inner_t = unwrap_aggregate_indexable tuple_t i in
+      RRef(inner_t)
+
+  | RRef(inner_t) ->
+      failwith (
+        Printf.sprintf
+          "Unwrapping ref to [ %s ] unimplemented"
+          (fmt_rtype inner_t)
+      )
+
+  | _ ->
+      failwith (
+        Printf.sprintf "Cannot unwrap non-reference type: [ %s ]"
+          (fmt_rtype indexable_t)
+      )
+;;
+
 let unwrap_ref ref_t =
   match ref_t with
   | RRef(t) -> t
@@ -503,20 +538,5 @@ let unwrap_ptr (ptr_t : rast_t) =
   | _ ->
       failwith (
         Printf.sprintf "Cannot unwrap non-ptr type [%s]" (fmt_rtype ptr_t)
-      )
-;;
-
-let unwrap_aggregate_indexable (indexable_t : rast_t) i =
-  match indexable_t with
-  | RTuple(ts) ->
-      if i < List.length ts then
-        List.nth ts i
-      else
-        failwith (Printf.sprintf "Invalid index into tuple of arity [%d]" i)
-
-  | _ ->
-      failwith (
-        Printf.sprintf "Cannot unwrap non-indexable aggregate type: [%s]"
-          (fmt_rtype indexable_t)
       )
 ;;

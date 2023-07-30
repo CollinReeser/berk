@@ -1253,7 +1253,7 @@ and type_check_expr
 
           | _ ->
               failwith (
-                Printf.sprintf "Unexpectedly indexing into non-tuple: [%s]"
+                Printf.sprintf "Unexpectedly indexing into non-tuple: [ %s ]"
                   (fmt_type tuple_t)
               )
         end in

@@ -323,7 +323,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
             got back from our recursive call is itself some
             dereferenceable/indexable type, so unwrap that type further to get
             the element type at this level of indexing. *)
-            let elem_t = unwrap_aggregate_indexable aggregate_t i in
+            let elem_t = unwrap_aggregate_indexable_reference aggregate_t i in
 
             (hctxt, hscope, inner_idxable, inner_idx :: idxs_rev, elem_t)
 
