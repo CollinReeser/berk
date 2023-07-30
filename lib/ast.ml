@@ -1348,7 +1348,8 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         yielded by indexing. *)
 
         let tup_t = expr_type tup_exp in
-        let elem_t = unwrap_aggregate_indexable_reference tup_t idx in
+        let elem_t = unwrap_aggregate_indexable tup_t idx in
+
         let _ =
           (* If the element type agrees with the injected referenced type, we're
           good. *)

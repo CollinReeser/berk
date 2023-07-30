@@ -367,6 +367,17 @@ let () =
       return val;
     }
 
+    fn test_tuple_ref_2(): i32 {
+      let mut tuple: ([4]i32, [5]i32);
+
+      tuple.0[2] = 45;
+
+      let inner_one: ref [4]i32 = tuple.0;
+      let val = inner_one[2];
+
+      return val;
+    }
+
     fn main(): i8 {
       {
         let if_or_result = if_or();
@@ -485,6 +496,13 @@ let () =
 
         ignore printf(
           "Got [%d] | [%d] Expected\n", test_tuple_ref_result, 55
+        );
+      }
+      {
+        let test_tuple_ref_2_result = test_tuple_ref_2();
+
+        ignore printf(
+          "Got [%d] | [%d] Expected\n", test_tuple_ref_2_result, 45
         );
       }
 

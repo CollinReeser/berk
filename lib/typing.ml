@@ -709,14 +709,15 @@ let rec unwrap_indexable indexable_t =
 ;;
 
 
-let unwrap_aggregate_indexable indexable_t i =
+let rec unwrap_aggregate_indexable indexable_t i =
   match indexable_t with
   | Tuple(ts) ->
       if i < List.length ts then
         List.nth ts i
       else
         failwith (Printf.sprintf "Invalid index into tuple of arity [%d]" i)
-
+  | Ref(inner_indexable_t) ->
+      unwrap_aggregate_indexable inner_indexable_t i
   | _ ->
       failwith (
         Printf.sprintf "Cannot unwrap non-indexable aggregate type: [%s]"
