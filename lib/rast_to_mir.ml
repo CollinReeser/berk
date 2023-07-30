@@ -7,6 +7,7 @@ let rec default_expr_for_t mir_ctxt (t : rast_t) : (mir_ctxt * rexpr) =
   begin match t with
   | RVarArgSentinel
   | RByteArray(_)
+  | RRef(_)
   | RPtr(_)
   | RSuperTuple(_)
   | RFunction(_, _) ->

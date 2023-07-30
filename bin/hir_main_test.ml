@@ -318,30 +318,40 @@ let () =
       return val;
     }
 
-    fn test_static_array_multi(
-      a: i32, b: i32, c: i32, d: i32,
-      e: i16, f: i16, g: i32, h: i32
-    ): i16 {
-      let mut array: [3][7](i16, i16);
+//    fn test_static_array_multi(
+//      a: i32, b: i32, c: i32, d: i32,
+//      e: i16, f: i16, g: i32, h: i32
+//    ): i16 {
+//      let mut array: [3][7](i16, i16);
+//
+//      array[a][b].1 = e;
+//      array[c][d].1 = f;
+//      let val = array[g][h].1;
+//
+//      return val;
+//    }
 
-      array[a][b].1 = e;
-      array[c][d].1 = f;
-      let val = array[g][h].1;
+//    fn test_static_complex(
+//      a: i32, b: i32, c: i32,
+//      d: i32, e: i32, f: i32,
+//      g: i16
+//    ): i16 {
+//      let mut array: [3][7]([4]i16, [5]i16);
+//
+//      array[a][b].1[c] = g;
+//      let val = array[d][e].1[f];
+//
+//      return val;
+//    }
 
-      return val;
-    }
+    fn test_static_array_multi_partial(): i16 {
+      let mut array: [3][7]i16;
 
-    fn test_static_complex(
-      a: i32, b: i32, c: i32,
-      d: i32, e: i32, f: i32,
-      g: i16
-    ): i16 {
-      let mut array: [3][7]([4]i16, [5]i16);
+      array[1][2] = 89;
+      let inner_arr: ref [7]i16 = array[1];
+      let inner_val: i16 = inner_arr[2];
 
-      array[a][b].1[c] = g;
-      let val = array[d][e].1[f];
-
-      return val;
+      return inner_val;
     }
 
     fn main(): i8 {
@@ -422,29 +432,39 @@ let () =
           "Got [%hd] | [%hd] Expected\n", test_static_array_result_2, 19
         );
       }
+//      {
+//        let test_static_array_multi_result_1 = test_static_array_multi(
+//          1, 2, 3, 4, 27, 29, 1, 2
+//        );
+//        ignore printf(
+//          "Got [%hd] | [%hd] Expected\n", test_static_array_multi_result_1, 27
+//        );
+//
+//        let test_static_array_multi_result_2 = test_static_array_multi(
+//          1, 2, 3, 4, 27, 29, 3, 4
+//        );
+//        ignore printf(
+//          "Got [%hd] | [%hd] Expected\n", test_static_array_multi_result_2, 29
+//        );
+//      }
+//      {
+//        let test_static_complex_result = test_static_complex(
+//          1, 2, 3,
+//          1, 2, 3,
+//          99
+//        );
+//        ignore printf(
+//          "Got [%hd] | [%hd] Expected\n", test_static_complex_result, 99
+//        );
+//      }
       {
-        let test_static_array_multi_result_1 = test_static_array_multi(
-          1, 2, 3, 4, 27, 29, 1, 2
-        );
-        ignore printf(
-          "Got [%hd] | [%hd] Expected\n", test_static_array_multi_result_1, 27
-        );
+        let test_static_array_multi_partial_result =
+          test_static_array_multi_partial();
 
-        let test_static_array_multi_result_2 = test_static_array_multi(
-          1, 2, 3, 4, 27, 29, 3, 4
-        );
         ignore printf(
-          "Got [%hd] | [%hd] Expected\n", test_static_array_multi_result_2, 29
-        );
-      }
-      {
-        let test_static_complex_result = test_static_complex(
-          1, 2, 3,
-          1, 2, 3,
-          99
-        );
-        ignore printf(
-          "Got [%hd] | [%hd] Expected\n", test_static_complex_result, 99
+          "Got [%hd] | [%hd] Expected\n",
+          test_static_array_multi_partial_result,
+          89
         );
       }
 

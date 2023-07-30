@@ -18,6 +18,9 @@ type berk_t =
   | String
   | Nil
   | VarArgSentinel
+  (* A ref to a type is like a pointer to a value, but the ref itself cannot be
+  re-assigned, and it cannot outlive the referenced value. *)
+  | Ref of berk_t
   | Ptr of berk_t
   | Tuple of berk_t list
   | Array of berk_t * int
@@ -78,6 +81,10 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
       let variants_fmt = fmt_join_strs " | " ctor_fmts in
 
       Printf.sprintf "variant %s {%s}" type_name variants_fmt
+
+  | Ref (typ) ->
+      Printf.sprintf "ref %s"
+        (fmt_type ~pretty_unbound:pretty_unbound typ)
 
   | Ptr (typ) ->
       Printf.sprintf "ptr %s"
@@ -165,8 +172,9 @@ let rec has_default_value t =
       time; there is no "default constructor". *)
       false
 
+  | Ref(_)
   | Ptr(_) ->
-      (* Pointers must always point to something. *)
+      (* References and pointers must always point to something. *)
       false
 
   | Function(_, _) ->
@@ -394,6 +402,10 @@ let rec type_convertible_to from_t to_t =
         else false
       else false
 
+  | (Ref(lhs_t), Ref(rhs_t))
+  | (Ptr(lhs_t), Ptr(rhs_t)) ->
+      type_convertible_to lhs_t rhs_t
+
   | _ ->
       let from_t_s = fmt_type from_t in
       let to_t_s = fmt_type to_t in
@@ -592,6 +604,7 @@ let rec sizeof_type t =
   | Function(_, _) -> 16
   (* FIXME: Not true yet, but will be if/when function ptrs become fat ptrs. *)
   | F128 -> 16
+  | Ref(_)
   | Ptr(_) -> 8
   | U64 | I64 | F64 -> 8
   | U32 | I32 | F32 -> 4
@@ -669,10 +682,10 @@ let is_index_type idx_t =
 ;;
 
 
-let is_indexable_type arr_t =
+let rec is_indexable_type arr_t =
   match arr_t with
-  | Ptr(_) -> true
   | Array(_, _) -> true
+  | Ref(inner_indexable_t) -> is_indexable_type inner_indexable_t
   | _ ->
       let not_arr_s = fmt_type arr_t in
       Printf.printf "Type [%s] is not indexable\n" not_arr_s;
@@ -680,9 +693,10 @@ let is_indexable_type arr_t =
 ;;
 
 
-let unwrap_indexable indexable_t =
+let rec unwrap_indexable indexable_t =
   match indexable_t with
   | Array(t, _) -> t
+  | Ref(inner_indexable_t) -> unwrap_indexable inner_indexable_t
   | _ ->
       failwith (
         Printf.sprintf "Cannot unwrap non-indexable type: [%s]"
@@ -714,6 +728,15 @@ let unwrap_ptr ptr_t =
   | _ ->
       failwith (
         Printf.sprintf "Cannot unwrap non-ptr type [%s]" (fmt_type ptr_t)
+      )
+;;
+
+let unwrap_ref ref_t =
+  match ref_t with
+  | Ref(t) -> t
+  | _ ->
+      failwith (
+        Printf.sprintf "Cannot unwrap non-ref type [%s]" (fmt_type ref_t)
       )
 ;;
 
@@ -759,6 +782,13 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
   | UnboundType(name, ts) ->
       let ts_concrete = List.map (concretify_unbound_types tvar_to_t) ts in
       UnboundType(name, ts_concrete)
+
+  | Ref(refed_t) ->
+      let refed_concretified_t =
+        concretify_unbound_types tvar_to_t refed_t
+      in
+
+      Ref(refed_concretified_t)
 
   | Ptr(pointed_t) ->
       let pointed_concretified_t =
@@ -822,7 +852,8 @@ let rec is_concrete_type ?(verbose=false) typ =
   | String
   | Nil -> true
 
-  | Ptr(pointed_t) -> _is_concrete_type pointed_t
+  | Ref(t)
+  | Ptr(t) -> _is_concrete_type t
 
   | VarArgSentinel -> true
 
@@ -1059,6 +1090,10 @@ let map_tvars_to_types
     | (VarArgSentinel, VarArgSentinel) ->
         map_so_far
 
+    | (Ref(lhs_t), Ref(rhs_t))
+    | (Ptr(lhs_t), Ptr(rhs_t)) ->
+        _map_tvars_to_types map_so_far lhs_t rhs_t
+
     | (Function(lhs_ret_t, lhs_args_ts), Function(rhs_ret_t, rhs_args_ts)) ->
         let map_so_far = _map_tvars_to_types map_so_far lhs_ret_t rhs_ret_t in
         List.fold_left2 _map_tvars_to_types map_so_far lhs_args_ts rhs_args_ts
@@ -1111,7 +1146,8 @@ let get_tvars typ =
     | VarArgSentinel
     | Undecided -> so_far
 
-    | Ptr(pointed_t) -> _get_tvars so_far pointed_t
+    | Ref(t)
+    | Ptr(t) -> _get_tvars so_far t
 
     | Tuple(tuple_typs) ->
         List.fold_left _get_tvars so_far tuple_typs
@@ -1169,4 +1205,102 @@ let get_tag_index_by_variant_ctor v_t ctor_name =
 (* Get the index of the given ctor name in the given list of variant ctors *)
 let get_variant_ctor_by_tag_index v_ctors idx =
   List.nth v_ctors idx
+;;
+
+(* Do two types exactly match. *)
+let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
+  begin match (lhs, rhs) with
+  | (Undecided, Undecided) -> true
+
+  | (Unbound(lhs_name), Unbound(rhs_name)) ->
+      if lhs_name = rhs_name then true else false
+
+  | (UnboundType(lhs_name, lhs_ts), UnboundType(rhs_name, rhs_ts)) ->
+      if lhs_name = rhs_name then
+        List.for_all2 is_same_type lhs_ts rhs_ts
+      else
+        false
+
+  | (U64, U64)
+  | (U32, U32)
+  | (U16, U16)
+  | (U8,  U8)
+  | (I64, I64)
+  | (I32, I32)
+  | (I16, I16)
+  | (I8,  I8)
+  | (F128, F128)
+  | (F64,  F64)
+  | (F32,  F32)
+  | (Bool, Bool)
+  | (String, String)
+  | (Nil, Nil)
+  | (VarArgSentinel, VarArgSentinel) ->
+      true
+
+  | (Ref(lhs), Ref(rhs)) ->
+      is_same_type lhs rhs
+
+  | (Ptr(lhs), Ptr(rhs)) ->
+      is_same_type lhs rhs
+
+  | (Array(lhs_t, lhs_i), Array(rhs_t, rhs_i)) ->
+      (lhs_i = rhs_i) && (is_same_type lhs_t rhs_t)
+
+  | (Tuple(lhs_ts), Tuple(rhs_ts)) ->
+      begin if (List.compare_lengths lhs_ts rhs_ts) = 0 then
+        List.for_all2 is_same_type lhs_ts rhs_ts
+      else
+        false
+      end
+
+  | (Function(lhs_ret_t, lhs_arg_ts), Function(rhs_ret_t, rhs_arg_ts)) ->
+      (is_same_type lhs_ret_t rhs_ret_t) &&
+      ((List.compare_lengths lhs_arg_ts rhs_arg_ts) = 0) &&
+      (List.for_all2 is_same_type lhs_arg_ts rhs_arg_ts)
+
+  | (Variant(lhs_name, lhs_ctors), Variant(rhs_name, rhs_ctors)) ->
+      if lhs_name = rhs_name then
+        let _is_same_ctor
+          {name=lhs_name; fields=lhs_fields}
+          {name=rhs_name; fields=rhs_fields}
+        =
+          if lhs_name = rhs_name then
+            List.for_all2 (
+              fun {t=lhs_t} {t=rhs_t} -> is_same_type lhs_t rhs_t
+            ) lhs_fields rhs_fields
+          else
+            false
+        in
+        List.for_all2 _is_same_ctor lhs_ctors rhs_ctors
+
+      else
+        false
+
+  | (Undecided, _)
+  | (Unbound(_), _)
+  | (UnboundType(_, _), _)
+  | (U64, _)
+  | (U32, _)
+  | (U16, _)
+  | (U8, _)
+  | (I64, _)
+  | (I32, _)
+  | (I16, _)
+  | (I8, _)
+  | (F128, _)
+  | (F64, _)
+  | (F32, _)
+  | (Bool, _)
+  | (String, _)
+  | (Nil, _)
+  | (VarArgSentinel, _)
+  | (Ref(_), _)
+  | (Ptr(_), _)
+  | (Array(_, _), _)
+  | (Tuple(_), _)
+  | (Function(_), _)
+  | (Variant(_, _), _) ->
+      false
+  end
 ;;

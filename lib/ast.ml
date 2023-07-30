@@ -1134,6 +1134,7 @@ let rec default_expr_for_t t =
   | Unbound(_)
   | UnboundType(_, _)
   | VarArgSentinel
+  | Ref(_)
   | Ptr(_)
   | Variant(_, _)
   | Function(_, _) ->
@@ -1187,7 +1188,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
   if not (type_convertible_to exp_t injected_t) then
     failwith (
       "Injection type [[" ^ (fmt_type injected_t) ^
-      "]] disagrees with existing " ^ "type [[" ^ (fmt_type exp_t) ^ "]]"
+      "]] disagrees with existing type [[" ^ (fmt_type exp_t) ^ "]]"
     )
   else
     match (injected_t, exp) with
@@ -1290,27 +1291,102 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
 
         BlockExpr(injected_t, stmts, exp_res_injected)
 
-    | (_, IndexExpr(_, idx_exp, arr_exp)) ->
-        (* We can't use our injection type info to assist with typechecking the
-        index expression, but we _can_ use it to assist in typechecking the
-        indexed array itself, by assuming the array expression type is expected
-        to be an "array of" the target type. *)
+    | (Ref(refed_t), IndexExpr(_, idx_exp, arr_exp)) ->
+        (* When indexing into an aggregate, if the expected type is a reference,
+        then we must make sure that the reference is to the type that would be
+        yielded by indexing. *)
+
         let arr_t = expr_type arr_exp in
-        let arr_injection_type = begin match arr_t with
-          | Array(_, sz) -> Array(injected_t, sz)
-          | _ -> failwith ("Unexpected non-array type: " ^ (fmt_type arr_t))
-        end in
-        let arr_exp_injected =
-          inject_type_into_expr ~ind:(ind ^ "  ") arr_injection_type arr_exp
+        let elem_t = unwrap_indexable arr_t in
+        let _ =
+          (* If the element type agrees with the injected referenced type, we're
+          good. *)
+          if is_same_type refed_t elem_t then
+            ()
+          (* If the array itself contains reference types, then that can also
+          be okay *)
+          else if is_same_type injected_t elem_t then
+            ()
+          else
+            failwith (
+              Printf.sprintf
+                "Cannot inject ref to type [ %s ] for indexed type [ %s ]"
+                (fmt_type refed_t)
+                (fmt_type elem_t)
+            )
         in
-        IndexExpr(injected_t, idx_exp, arr_exp_injected)
+        IndexExpr(injected_t, idx_exp, arr_exp)
+
+    | (_, IndexExpr(_, idx_exp, arr_exp)) ->
+        (* In this case, we expect the injected type to be the element type of
+        the indexed array. Since the injected type is not a reference, then the
+        array element type must be a base, non-indexable type. *)
+
+        let arr_t = expr_type arr_exp in
+        let elem_t = unwrap_indexable arr_t in
+
+        let _ =
+          if is_indexable_type elem_t then
+            failwith (
+              Printf.sprintf
+                (
+                  "Cannot inject non-ref type [ %s ] for indexed indexable " ^^
+                  "type [ %s ]"
+                )
+                (fmt_type injected_t)
+                (fmt_type elem_t)
+            )
+          else
+            ()
+        in
+
+        IndexExpr(injected_t, idx_exp, arr_exp)
+
+    | (Ref(refed_t), TupleIndexExpr(_, idx, tup_exp)) ->
+        (* When indexing into a tuple, if the expected type is a reference,
+        then we must make sure that the reference is to the type that would be
+        yielded by indexing. *)
+
+        let tup_t = expr_type tup_exp in
+        let elem_t = unwrap_aggregate_indexable tup_t idx in
+        let _ =
+          if is_same_type refed_t elem_t then
+            ()
+          else
+            failwith (
+              Printf.sprintf
+                "Cannot inject ref to type [ %s ] for indexed type [ %s ]"
+                (fmt_type refed_t)
+                (fmt_type elem_t)
+            )
+        in
+        TupleIndexExpr(injected_t, idx, tup_exp)
 
     | (_, TupleIndexExpr(_, idx, tup_exp)) ->
         let tuple_t = expr_type tup_exp in
+        let elem_t = unwrap_aggregate_indexable tuple_t idx in
 
         (* For the given tuple, assume the element at the given static index
-        must be the injection type, yielding an injected overall tuple type.
+        must be the injection type, yielding an injected overall tuple type. The
+        element must not be an indexable type, because otherwise the injected
+        type must be a reference.
         *)
+
+        let _ =
+          if is_indexable_type elem_t then
+            failwith (
+              Printf.sprintf
+                (
+                  "Cannot inject non-ref type [ %s ] for indexed indexable " ^^
+                  "type [ %s ]"
+                )
+                (fmt_type injected_t)
+                (fmt_type elem_t)
+            )
+          else
+            ()
+        in
+
         let tuple_injection_type = begin match tuple_t with
           | Tuple(ts) ->
               let new_ts = replace ts idx injected_t in
@@ -1498,6 +1574,7 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             (fmt_expr ~print_typ:true exp)
         )
 
+    | (Ref(_), _) -> failwith "Unimplemented"
     | (Ptr(_), _) -> failwith "Unimplemented"
 ;;
 

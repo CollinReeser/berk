@@ -1196,19 +1196,29 @@ and type_check_expr
         if is_index_type idx_t && is_indexable_type arr_t
           then
             begin match arr_t with
+            | Ref(Array(elem_typ, sz))
             | Array(elem_typ, sz) ->
+                (* If indexing into the array yields a base type (not an
+                indexable type), then we default to yielding that value. But,
+                if the index operation itself yields an indexable type, we will
+                yield a _reference_ to that indexable type, that would require
+                further indexing. *)
+                let yielded_t =
+                  if is_indexable_type elem_typ then Ref(elem_typ) else elem_typ
+                in
+
                 begin match idx_typechecked with
                 | ValInt(_, i) ->
                     begin if i < sz && i >= 0 then
                       IndexExpr(
-                        elem_typ, idx_typechecked, arr_typechecked
+                        yielded_t, idx_typechecked, arr_typechecked
                       )
                     else
                       failwith "Static out-of-bounds index into array"
                     end
                 | _ ->
                     IndexExpr(
-                      elem_typ, idx_typechecked, arr_typechecked
+                      yielded_t, idx_typechecked, arr_typechecked
                     )
                 end
 
@@ -1227,14 +1237,20 @@ and type_check_expr
         let tuple_t = expr_type tuple_typechecked in
         let tuple_idx_typechecked = begin
           match tuple_t with
-          | Tuple(ts) ->
-            begin
-              if idx < 0 || idx >= List.length ts
-              then failwith "out-of-bounds idx for tuple"
-              else
-                let elem_typ = List.nth ts idx in
-                TupleIndexExpr(elem_typ, idx, tuple_typechecked)
-            end
+          | Tuple(_) ->
+              let elem_typ = unwrap_aggregate_indexable tuple_t idx in
+
+              (* If indexing into the array yields a base type (not an
+              indexable type), then we default to yielding that value. But,
+              if the index operation itself yields an indexable type, we will
+              yield a _reference_ to that indexable type, that would require
+              further indexing. *)
+              let yielded_t =
+                if is_indexable_type elem_typ then Ref(elem_typ) else elem_typ
+              in
+
+              TupleIndexExpr(yielded_t, idx, tuple_typechecked)
+
           | _ ->
               failwith (
                 Printf.sprintf "Unexpectedly indexing into non-tuple: [%s]"
@@ -1959,6 +1975,7 @@ and generate_value_patts t : pattern list =
       let ts_patts_cart_prod = cartesian_product ts_patts in
       List.map (fun ts_patt -> PTuple(t, ts_patt)) ts_patts_cart_prod
 
+  | Ref(_) -> failwith "Unimplemented"
   | Ptr(_) -> failwith "Unimplemented"
   | Function(_, _) -> failwith "Unimplemented"
 

@@ -228,10 +228,10 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
-  | RIndexExpr(t, idx_expr, idxable_expr) ->
+  | RIndexExpr(index_result_t, idx_expr, idxable_expr) ->
       Printf.printf
         "RIndexExpr(%s, %s, %s)\n"
-        (fmt_rtype t)
+        (fmt_rtype index_result_t)
         (fmt_rexpr idx_expr)
         (fmt_rexpr idxable_expr) ;
 
@@ -258,10 +258,34 @@ let rec rexpr_to_hir hctxt hscope rexpr
             | None ->
                 (* This is a named, non-function-arg variable. *)
 
-                (* Yield a _pointer to_ an indexable type. *)
-                let decl = (RPtr(t), name) in
+                (* Yield a _reference to_ an indexable type. *)
 
-                (hctxt, hscope, decl, [], t)
+                (* If the variable type is already a reference, just yield the
+                variable directly. Else, yield a reference to the variable. *)
+                let (hctxt, hscope, decl, decl_t) =
+                  begin match t with
+                  | RRef(_) ->
+                      (* If the variable is already a reference, we need to load
+                      that reference from its variable stack location. *)
+                      let decl_var = (RPtr(t), name) in
+
+                      let (hctxt, tmp_ref) = get_tmp_name hctxt in
+                      let decl_ref = (t, tmp_ref) in
+                      let instr = Instr(HValueLoad(decl_ref, decl_var)) in
+                      let instrs = instr :: hscope.instructions in
+                      let hscope = {hscope with instructions = instrs} in
+                      (hctxt, hscope, decl_ref, t)
+
+                  | _ ->
+                      (* If the variable is a non-reference, then assume it's
+                      the indexable type we expect, and yield a reference to it
+                      (which is really a pointer to its stack location). *)
+                      let decl_t = RRef(t) in
+                      (hctxt, hscope, (decl_t, name), decl_t)
+                  end
+                in
+
+                (hctxt, hscope, decl, [], decl_t)
             end
 
         (* An inner indexing operation means we have another layer of the target
@@ -272,14 +296,14 @@ let rec rexpr_to_hir hctxt hscope rexpr
             let (hctxt, hscope, inner_idx) =
               rexpr_to_hir hctxt hscope inner_idx_expr
             in
-            let (hctxt, hscope, inner_idxable, idxs_rev, aggregate_t) =
+            let (hctxt, hscope, inner_idxable, idxs_rev, ref_agg_t) =
               _indexable_expr_to_hir hctxt hscope inner_idxable_expr
             in
             (* Since we're doing another index operation, the element type we
             got back from our recursive call is itself some
             dereferenceable/indexable type, so unwrap that type further to get
             the element type at this level of indexing. *)
-            let elem_t = unwrap_ptr aggregate_t in
+            let elem_t = unwrap_indexable_reference ref_agg_t in
 
             (hctxt, hscope, inner_idxable, inner_idx :: idxs_rev, elem_t)
 
@@ -320,7 +344,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
       layers of indexing we need to do, and the resultant type we will get once
       the generated index pointer is loaded. *)
       let (
-        hctxt, hscope, ((ptr_to_agg_t, _) as idxable), inner_idxs_rev, elem_t
+        hctxt, hscope, ((ref_to_agg_t, _) as idxable), inner_idxs_rev, elem_t
       ) =
         _indexable_expr_to_hir hctxt hscope idxable_expr
       in
@@ -328,21 +352,39 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let idxs_rev = idx :: inner_idxs_rev in
       let idxs = List.rev idxs_rev in
 
-      let elem_t = unwrap_indexable elem_t in
-      let ptr_to_elem_t = RPtr(elem_t) in
+
+      let elem_t = unwrap_indexable_reference elem_t in
 
 
       let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl_ptr = (ptr_to_elem_t, tmp) in
-      let instr = Instr(HDynamicIndex(decl_ptr, idxs, idxable)) in
+      let decl_ref = (elem_t, tmp) in
+      let instr = Instr(HDynamicIndex(decl_ref, idxs, idxable)) in
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
 
-      let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl_result = (elem_t, tmp) in
-      let instr = Instr(HValueLoad(decl_result, decl_ptr)) in
-      let instrs = instr :: hscope.instructions in
-      let hscope = {hscope with instructions = instrs} in
+      let (hctxt, hscope, decl_result) = begin
+        let refed_elem_t = unwrap_ref elem_t in
+
+        if is_same_type elem_t index_result_t then
+          (hctxt, hscope, decl_ref)
+
+        else if is_same_type refed_elem_t index_result_t then
+          let (hctxt, tmp) = get_tmp_name hctxt in
+          let decl_result = (refed_elem_t, tmp) in
+          let instr = Instr(HValueLoad(decl_result, decl_ref)) in
+          let instrs = instr :: hscope.instructions in
+          let hscope = {hscope with instructions = instrs} in
+          (hctxt, hscope, decl_result)
+
+        else
+          failwith (
+            Printf.sprintf
+              "Error: Index is yielding unexpected type [ %s ] vs [ %s ]"
+              (fmt_rtype elem_t)
+              (fmt_rtype index_result_t)
+          )
+      end in
+
       (hctxt, hscope, decl_result)
 
   | RWhileExpr (_, init_stmts, while_cond, then_stmts) ->
@@ -844,7 +886,7 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
   | RAssignStmt(name, named_t, rassign_idx_lvals, rexpr) ->
       let (hctxt, hscope, rhs_hvar) = rexpr_to_hir hctxt hscope rexpr in
 
-      let named_hvar = (RPtr(named_t), name) in
+      let named_hvar = (RRef(named_t), name) in
 
       (* Possibly-zero indexing operations, yielding a resultant lvalue. *)
       let (hctxt, hscope, indexed_hvar) =
@@ -866,7 +908,7 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
                 let (hctxt, hscope, i_hvar) = rexpr_to_hir hctxt hscope e in
 
                 let (hctxt, tmp) = get_tmp_name hctxt in
-                let decl = (RPtr(t), tmp) in
+                let decl = (RRef(t), tmp) in
                 let instr = Instr(HDynamicIndex(decl, [i_hvar], hvar)) in
                 let instrs = instr :: hscope.instructions in
                 let hscope = {hscope with instructions = instrs} in

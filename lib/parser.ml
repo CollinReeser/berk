@@ -373,6 +373,11 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   (* Type variable *)
   | Backtick(_) :: LowIdent(_, name) :: rest -> (rest, Unbound(name))
 
+  (* Reference *)
+  | KWRef(_) :: rest ->
+      let (rest, refed_t) = parse_type ~ind:ind_next rest in
+      (rest, Ref(refed_t))
+
   (* Static array. *)
   | LBracket(_) :: Integer(_, i) :: RBracket(_) :: rest ->
       let (rest, arr_t) = parse_type ~ind:ind_next rest in
