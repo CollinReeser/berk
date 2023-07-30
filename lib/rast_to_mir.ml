@@ -1298,6 +1298,10 @@ let rfunc_to_mir {rf_decl; rf_stmts} =
     ) (mir_ctxt, cur_bb) rf_stmts
   in
 
+  (* Other cleanup, ie, strip instructions after the first terminator in each
+  basic block.
+
+  FIXME: Really, this should have been caught earlier! *)
   let mir_ctxt = clean_up_mir mir_ctxt in
 
   mir_ctxt
