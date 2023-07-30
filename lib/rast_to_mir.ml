@@ -1280,7 +1280,7 @@ let rfunc_decl_to_mir {rf_name; rf_params; rf_ret_t} =
 ;;
 
 
-let rfunc_to_mir {rf_decl={rf_name; rf_ret_t; _} as rf_decl; rf_stmts} =
+let rfunc_to_mir {rf_decl; rf_stmts} =
   let mir_ctxt = rfunc_decl_to_mir rf_decl in
 
   let bb_entry = {name="entry"; instrs=[]} in
@@ -1290,35 +1290,13 @@ let rfunc_to_mir {rf_decl={rf_name; rf_ret_t; _} as rf_decl; rf_stmts} =
   let (mir_ctxt, cur_bb) = func_args_to_mir mir_ctxt bb_entry in
 
   (* Core generation of MIR for the function body. *)
-  let (mir_ctxt, cur_bb) =
+  let (mir_ctxt, _) =
     List.fold_left (
       fun (mir_ctxt, cur_bb) stmt ->
         let (mir_ctxt, cur_bb) = rstmt_to_mir mir_ctxt cur_bb stmt in
         (mir_ctxt, cur_bb)
     ) (mir_ctxt, cur_bb) rf_stmts
   in
-
-  (* Inject a trailing return stmt if it's missing and the function is void.
-  Else, if the trailing return statement is missing and the function is
-  non-void, fail. Really, this should have been caught earlier! *)
-  let mir_ctxt = begin
-    match (List.rev rf_stmts) with
-    | RReturnStmt(_) :: _ ->
-        mir_ctxt
-
-    | []
-    | _ :: _ ->
-        if rf_ret_t = RNil then
-          let (mir_ctxt, _) =
-            rstmt_to_mir mir_ctxt cur_bb (RReturnStmt(RValNil))
-          in
-          mir_ctxt
-        else
-          failwith (
-            Printf.sprintf "No trailing return-stmt but non-nil function [%s]"
-              rf_name
-          )
-  end in
 
   let mir_ctxt = clean_up_mir mir_ctxt in
 

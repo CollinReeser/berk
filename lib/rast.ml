@@ -471,9 +471,31 @@ and func_decl_t_to_rfunc_decl_t {f_name; f_params; f_ret_t} =
   let rf_ret_rt = berk_t_to_rast_t f_ret_t in
   {rf_name=f_name; rf_params=rf_params; rf_ret_t=rf_ret_rt}
 
-and func_def_t_to_rfunc_def_t {f_decl; f_stmts} =
+and func_def_t_to_rfunc_def_t
+  {f_decl=({f_name; f_ret_t; _} as f_decl); f_stmts}
+=
+  (* Ensure there is a trailing return stmt if there isn't one already. *)
+  let f_stmts =
+    begin match (List.rev f_stmts) with
+    | ReturnStmt(_) :: _ -> f_stmts
+    | []
+    | _ :: _ ->
+        if f_ret_t = Nil then
+          f_stmts @ [ReturnStmt(ValNil)]
+        else
+          failwith (
+            Printf.sprintf "No trailing return-stmt but non-nil function [%s]"
+              f_name
+          )
+    end
+  in
+
+  (* Generate RAST function declaration from source AST. *)
   let rf_decl = func_decl_t_to_rfunc_decl_t f_decl in
+
+  (* Generate RAST function definition from the source AST. *)
   let rf_stmts = List.map stmt_to_rstmt f_stmts in
+
   {rf_decl=rf_decl; rf_stmts=rf_stmts}
 ;;
 

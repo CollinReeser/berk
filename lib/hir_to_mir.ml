@@ -416,5 +416,11 @@ let hfunc_def_to_mir {hf_decl; hf_scope} =
       toplevel_decl_hfscope.instructions
   in
 
+  (* Other cleanup, ie, strip instructions after the first terminator in each
+  basic block.
+
+  FIXME: Really, this should have been caught earlier! *)
+  let mir_ctxt = clean_up_mir mir_ctxt in
+
   mir_ctxt
 ;;
