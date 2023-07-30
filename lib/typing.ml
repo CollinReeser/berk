@@ -406,6 +406,10 @@ let rec type_convertible_to from_t to_t =
   | (Ptr(lhs_t), Ptr(rhs_t)) ->
       type_convertible_to lhs_t rhs_t
 
+  (* A type is implicitly convertible to a reference to that type. *)
+  | (lhs_t, Ref(rhs_t)) ->
+      type_convertible_to lhs_t rhs_t
+
   | _ ->
       let from_t_s = fmt_type from_t in
       let to_t_s = fmt_type to_t in
@@ -716,6 +720,27 @@ let unwrap_aggregate_indexable indexable_t i =
   | _ ->
       failwith (
         Printf.sprintf "Cannot unwrap non-indexable aggregate type: [%s]"
+          (fmt_type indexable_t)
+      )
+;;
+
+
+let unwrap_aggregate_indexable_reference (indexable_t : berk_t) i =
+  match indexable_t with
+  | Ref(Tuple(_) as tuple_t) ->
+      let inner_t = unwrap_aggregate_indexable tuple_t i in
+      Ref(inner_t)
+
+  | Ref(inner_t) ->
+      failwith (
+        Printf.sprintf
+          "Unwrapping ref to [ %s ] unimplemented"
+          (fmt_type inner_t)
+      )
+
+  | _ ->
+      failwith (
+        Printf.sprintf "Cannot unwrap non-reference type: [ %s ]"
           (fmt_type indexable_t)
       )
 ;;
@@ -1092,6 +1117,11 @@ let map_tvars_to_types
 
     | (Ref(lhs_t), Ref(rhs_t))
     | (Ptr(lhs_t), Ptr(rhs_t)) ->
+        _map_tvars_to_types map_so_far lhs_t rhs_t
+
+    (* A reference to a type can be transparently treated as the type itself. *)
+    | (lhs_t, Ref(rhs_t))
+    | (Ref(lhs_t), rhs_t) ->
         _map_tvars_to_types map_so_far lhs_t rhs_t
 
     | (Function(lhs_ret_t, lhs_args_ts), Function(rhs_ret_t, rhs_args_ts)) ->

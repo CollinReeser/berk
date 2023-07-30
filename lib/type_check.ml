@@ -1233,14 +1233,15 @@ and type_check_expr
             )
 
     | TupleIndexExpr(_, idx, agg) ->
-        let tuple_typechecked = _type_check_expr agg in
-        let tuple_t = expr_type tuple_typechecked in
+        let agg_typechecked = _type_check_expr agg in
+        let agg_t = expr_type agg_typechecked in
         let tuple_idx_typechecked = begin
-          match tuple_t with
-          | Tuple(_) ->
+          match agg_t with
+          | Ref((Tuple(_) as tuple_t))
+          | (Tuple(_) as tuple_t) ->
               let elem_typ = unwrap_aggregate_indexable tuple_t idx in
 
-              (* If indexing into the array yields a base type (not an
+              (* If indexing into the tuple yields a base type (not an
               indexable type), then we default to yielding that value. But,
               if the index operation itself yields an indexable type, we will
               yield a _reference_ to that indexable type, that would require
@@ -1249,12 +1250,12 @@ and type_check_expr
                 if is_indexable_type elem_typ then Ref(elem_typ) else elem_typ
               in
 
-              TupleIndexExpr(yielded_t, idx, tuple_typechecked)
+              TupleIndexExpr(yielded_t, idx, agg_typechecked)
 
           | _ ->
               failwith (
                 Printf.sprintf "Unexpectedly indexing into non-tuple: [ %s ]"
-                  (fmt_type tuple_t)
+                  (fmt_type agg_t)
               )
         end in
 

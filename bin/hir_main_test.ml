@@ -354,6 +354,19 @@ let () =
       return inner_val;
     }
 
+    fn test_tuple_ref(): i32 {
+      let mut array: [3]([4]i32, [5]i32);
+
+      array[1].0[2] = 55;
+
+      let inner_one: ref ([4]i32, [5]i32) = array[1];
+      let inner_two: ref [4]i32 = inner_one.0;
+
+      let val = inner_two[2];
+
+      return val;
+    }
+
     fn main(): i8 {
       {
         let if_or_result = if_or();
@@ -465,6 +478,13 @@ let () =
           "Got [%hd] | [%hd] Expected\n",
           test_static_array_multi_partial_result,
           89
+        );
+      }
+      {
+        let test_tuple_ref_result = test_tuple_ref();
+
+        ignore printf(
+          "Got [%d] | [%d] Expected\n", test_tuple_ref_result, 55
         );
       }
 
