@@ -937,7 +937,30 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
   | RAssignStmt(name, named_t, rassign_idx_lvals, rexpr) ->
       let (hctxt, hscope, rhs_hvar) = rexpr_to_hir hctxt hscope rexpr in
 
-      let named_hvar = (RRef(named_t), name) in
+      (* If the variable type is already a reference, just yield the variable
+      directly. Else, yield a reference to the variable. *)
+      let (hctxt, hscope, named_hvar) =
+        begin match named_t with
+        | RRef(_) ->
+            (* If the variable is already a reference, we need to load
+            that reference from its variable stack location. *)
+            let decl_var = (RPtr(named_t), name) in
+
+            let (hctxt, tmp_ref) = get_tmp_name hctxt in
+            let decl_ref = (named_t, tmp_ref) in
+            let instr = Instr(HValueLoad(decl_ref, decl_var)) in
+            let instrs = instr :: hscope.instructions in
+            let hscope = {hscope with instructions = instrs} in
+            (hctxt, hscope, decl_ref)
+
+        | _ ->
+            (* If the variable is a non-reference, then assume it's
+            the indexable type we expect, and yield a reference to it
+            (which is really a pointer to its stack location). *)
+            let decl_var = (RRef(named_t), name) in
+            (hctxt, hscope, decl_var)
+        end
+      in
 
       (* Possibly-zero indexing operations, yielding a resultant lvalue. *)
       let (hctxt, hscope, indexed_hvar) =
