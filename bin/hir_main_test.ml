@@ -538,7 +538,7 @@ let () =
   let timing_parse_start = Unix.gettimeofday () in
 
   (* Parsing into module-declaration AST list. *)
-  let mod_decls = parse_tokens ~trace:true tokens in
+  let mod_decls = parse_tokens ~trace:false tokens in
 
   let timing_parse_end = Unix.gettimeofday () in
 
