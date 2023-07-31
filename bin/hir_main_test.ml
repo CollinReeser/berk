@@ -306,6 +306,18 @@ let () =
       return arg_result;
     }
 
+    fn test_match_variant(): i32 {
+      let opt_val = Some(true);
+
+      let match_result = match opt_val {
+      | Some(false) -> 10
+      | Some(true) -> 20
+      | None -> 30
+      };
+
+      return match_result;
+    }
+
     fn test_static_array(a: i32, b: i32, c: u16, d: u16, e: i32): u16 {
       let mut array: [3]u16;
 

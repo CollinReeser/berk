@@ -357,8 +357,11 @@ let rec is_same_type (lhs : rast_t) (rhs : rast_t) : bool =
 
 (* Do two types match with respect to how bitwise casts would treat them in
 practice. *)
-let is_bitwise_same_type lhs rhs =
+let rec is_bitwise_same_type lhs rhs =
   begin match (lhs, rhs) with
+  | (RPtr(lhs_t), RPtr(rhs_t)) ->
+      is_bitwise_same_type lhs_t rhs_t
+
   (* Handle the edge-case where the a super-tuple can be considered the same
   type as a classic tuple if the largest superimposed tuple matches the classic
   tuple. *)

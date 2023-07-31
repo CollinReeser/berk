@@ -205,10 +205,12 @@ let fmt_hir_instr hir_instr : string =
         (fmt_hir_value h_val)
 
   | HValCast(h_var_res, cast_op, h_var_orig) ->
-      sprintf "%s = %s (%s)"
+      let target_t = hir_variable_type h_var_res in
+      sprintf "%s = %s (%s) -> %s"
         (fmt_hir_variable h_var_res)
         (fmt_cast_op cast_op)
         (fmt_hir_variable h_var_orig)
+        (fmt_rtype target_t)
 
   | HUnOp(h_var_res, un_op, h_var_orig) ->
       sprintf "%s = %s (%s)"
@@ -460,3 +462,4 @@ declarations stripped. *)
     declarations = all_decls;
     instructions = instrs_stripped
   }
+;;

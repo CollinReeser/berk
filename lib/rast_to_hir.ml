@@ -245,6 +245,40 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
 
+  | RValCast(target_t, (Bitwise as op), exp) ->
+      let exp_t = rexpr_type exp in
+
+      let (hctxt, hscope, rhs_var) = rexpr_to_hir hctxt hscope exp in
+
+      (* Only generate the cast if it's a non-no-op cast, as otherwise
+      during codegen the code generator may elide the cast instruction
+      entirely, which can mess up the expectation that MIR and codegen IR
+      agree on names of temporaries. *)
+
+      let (hctxt, hscope, decl) = begin
+        if (is_bitwise_same_type target_t exp_t) then
+          (hctxt, hscope, rhs_var)
+
+        else
+          let (hctxt, tmp_store) = get_tmp_name hctxt in
+          let (hctxt, tmp_cast) = get_tmp_name hctxt in
+          let (hctxt, tmp_load) = get_tmp_name hctxt in
+          let decl_store = (RPtr(exp_t), tmp_store) in
+          let decl_cast = (RPtr(target_t), tmp_cast) in
+          let decl_load = (target_t, tmp_load) in
+          let decls = decl_store :: hscope.declarations in
+          let instr_store = Instr(HValueStore(decl_store, rhs_var)) in
+          let instr_cast = Instr(HValCast(decl_cast, op, decl_store)) in
+          let instr_load = Instr(HValueLoad(decl_load, decl_cast)) in
+          let instrs =
+            instr_load :: instr_cast :: instr_store :: hscope.instructions
+          in
+          let hscope = {declarations = decls; instructions = instrs} in
+          (hctxt, hscope, decl_load)
+      end in
+
+      (hctxt, hscope, decl)
+
   | RValCast(t, op, exp) ->
       let (hctxt, hscope, rhs_var) = rexpr_to_hir hctxt hscope exp in
 
@@ -629,6 +663,40 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
       let hscope = {hscope with instructions = instrs} in
 
       (hctxt, hscope, decl)
+
+  | RPCastThen(target_t, (Bitwise as op), casted_patt) ->
+      let matchee_t = hir_variable_type hmatchee in
+
+      (* Only generate the cast if it's a non-no-op cast, as otherwise
+      during codegen the code generator may elide the cast instruction
+      entirely, which can mess up the expectation that MIR and codegen IR
+      agree on names of temporaries. *)
+
+      let (hctxt, hscope, decl) = begin
+        if (is_bitwise_same_type target_t matchee_t) then
+          (hctxt, hscope, hmatchee)
+
+        else
+          (* Cast the matchee to the target type, then descend into the sub
+          pattern. *)
+          let (hctxt, tmp_store) = get_tmp_name hctxt in
+          let (hctxt, tmp_cast) = get_tmp_name hctxt in
+          let (hctxt, tmp_load) = get_tmp_name hctxt in
+          let decl_store = (RPtr(matchee_t), tmp_store) in
+          let decl_cast = (RPtr(target_t), tmp_cast) in
+          let decl_load = (target_t, tmp_load) in
+          let decls = decl_store :: hscope.declarations in
+          let instr_store = Instr(HValueStore(decl_store, hmatchee)) in
+          let instr_cast = Instr(HValCast(decl_cast, op, decl_store)) in
+          let instr_load = Instr(HValueLoad(decl_load, decl_cast)) in
+          let instrs =
+            instr_load :: instr_cast :: instr_store :: hscope.instructions
+          in
+          let hscope = {declarations = decls; instructions = instrs} in
+          (hctxt, hscope, decl_load)
+      end in
+
+      rpattern_to_hir hctxt hscope decl casted_patt
 
   | RPCastThen(target_t, op, casted_patt) ->
       (* Cast the matchee to the target type, then descend into the sub
