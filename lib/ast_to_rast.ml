@@ -254,6 +254,8 @@ and pattern_to_rpattern patt : rpattern =
       RPatternAs(rt, rpatt, name)
   end
 
+(* Translate lval-assignment-specific indexing into the generic "evaluate
+to a ptr" logic that both RHS and LHS indexing can share. *)
 and assign_idx_lval_to_rexpr_index rexpr (idxs : assign_idx_lval list) : rexpr =
   let index_expr =
     List.fold_left (
