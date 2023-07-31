@@ -254,17 +254,23 @@ and pattern_to_rpattern patt : rpattern =
       RPatternAs(rt, rpatt, name)
   end
 
-and assign_idx_lval_to_rassign_idx_lval idx : rassign_idx_lval =
-  begin match idx with
-  | ALStaticIndex(indexed_t, i) ->
-      let indexed_rt = berk_t_to_rast_t indexed_t in
-      RALStaticIndex(indexed_rt, i)
+and assign_idx_lval_to_rexpr_index rexpr (idxs : assign_idx_lval list) : rexpr =
+  let index_expr =
+    List.fold_left (
+      fun cur_exp (idx : assign_idx_lval) ->
+        begin match idx with
+        | ALStaticIndex(indexed_t, i) ->
+            let indexed_rt = berk_t_to_rast_t indexed_t in
+            RTupleIndexExpr(indexed_rt, i, cur_exp)
 
-  | ALIndex(indexed_t, e) ->
-      let indexed_rt = berk_t_to_rast_t indexed_t in
-      let re = expr_to_rexpr e in
-      RALIndex(indexed_rt, re)
-  end
+        | ALIndex(indexed_t, e) ->
+            let indexed_rt = berk_t_to_rast_t indexed_t in
+            let re = expr_to_rexpr e in
+            RIndexExpr(indexed_rt, re, cur_exp)
+        end
+    ) rexpr idxs
+  in
+  index_expr
 
 and stmt_to_rstmt stmt : rstmt =
   begin match stmt with
@@ -292,10 +298,12 @@ and stmt_to_rstmt stmt : rstmt =
       RDeclDefStmt(names_rts)
 
   | AssignStmt(name, named_t, idxs, e) ->
-      let ridxs = List.map assign_idx_lval_to_rassign_idx_lval idxs in
+      let named_rt = berk_t_to_rast_t named_t in
+      let start_rexpr = RValVar(named_rt, name) in
+      let ridx = assign_idx_lval_to_rexpr_index start_rexpr idxs in
       let named_rt = berk_t_to_rast_t named_t in
       let re = expr_to_rexpr e in
-      RAssignStmt(name, named_rt, ridxs, re)
+      RAssignStmt(name, named_rt, ridx, re)
 
   (* Deconstructing `let` stmts can be described as first assigning the
   result of the expr-to-be-deconstructed to a placeholder named variable, and

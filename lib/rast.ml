@@ -73,22 +73,20 @@ and rpattern =
   the given name to the matchee. *)
   | RPatternAs of rast_t * rpattern * string
 
-and rassign_idx_lval =
-  (* An index into a tuple. The type is of the result, after the index. *)
-  | RALStaticIndex of rast_t * int
-  (* An index into a static or dynamic array. The type is of the result, after
-  the index.*)
-  | RALIndex of rast_t * rexpr
-
 and rstmt =
   | RDeclStmt of string * rast_t * rexpr
 
   | RDeclDefStmt of (string * rast_t) list
 
-  (* Type is the type of the RHS expression. Note that this may not be exactly
+  (*
+  The string is the name of the lvalue variable. The first expr is either the
+  variable itself, or a series of indexing operations on top of the variable.
+  The second (RHS) expression is the value to assign to the lvalue.
+
+  Type is the type of the RHS expression. Note that this may not be exactly
   the type of the actual target variable, but prior typechecking implies it's
   at least implicitly convertible. *)
-  | RAssignStmt of string * rast_t * rassign_idx_lval list * rexpr
+  | RAssignStmt of string * rast_t * rexpr * rexpr
 
   | RExprStmt of rexpr
   | RReturnStmt of rexpr
@@ -364,28 +362,6 @@ and fmt_join_idents_types
         delim
         (fmt_join_idents_types delim xs)
 
-and fmt_rassign_lval_idxs ?(print_typ = false) lval_idxs =
-  let rec _fmt_rassign_lval_idxs lval_idxs_rem fmt_so_far =
-    begin match lval_idxs_rem with
-    | [] -> fmt_so_far
-    | idx :: rest ->
-        let fmt = fmt_rassign_lval_idx ~print_typ:print_typ idx in
-        _fmt_rassign_lval_idxs rest (fmt_so_far ^ fmt)
-    end
-  in
-  _fmt_rassign_lval_idxs lval_idxs ""
-
-and fmt_rassign_lval_idx ?(print_typ = false) lval_idx =
-  begin match lval_idx with
-  | RALStaticIndex(t, i) ->
-      let t_fmt = if print_typ then ":" ^ (fmt_rtype t) else "" in
-      Printf.sprintf ".%d%s" i t_fmt
-
-  | RALIndex(t, exp) ->
-      let t_fmt = if print_typ then ":" ^ (fmt_rtype t) else "" in
-      Printf.sprintf "[%s]%s" (fmt_rexpr ~print_typ:print_typ exp) t_fmt
-  end
-
 and fmt_rstmt ?(print_typ = false) ind rstmt =
   begin match rstmt with
   | RDeclStmt (ident, rt, ex) ->
@@ -401,12 +377,12 @@ and fmt_rstmt ?(print_typ = false) ind rstmt =
         ind
         (fmt_join_idents_types ", " idents_ts)
 
-  | RAssignStmt (ident, rt, lval_idxs, ex) ->
-      Printf.sprintf "%s%s:%s %s = %s;\n"
+  | RAssignStmt (ident, rt, idxs, ex) ->
+      Printf.sprintf "%s%s:%s (%s) = %s;\n"
         ind
         ident
         (fmt_rtype rt)
-        (fmt_rassign_lval_idxs ~print_typ:print_typ lval_idxs)
+        (fmt_rexpr idxs)
         (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
 
   | RExprStmt (ex) ->

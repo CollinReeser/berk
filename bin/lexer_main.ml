@@ -170,13 +170,20 @@ let () =
       ignore printf("Default int: [%d], default str: [%s]\n", def_int, def_str);
 
       let mut bool_vars: [12]bool;
+
+      // Initialize
+      while {let mut init_i: u32 = 0;} init_i < 12 {
+        bool_vars[init_i] = false;
+        init_i = init_i + 1;
+      }
+
       bool_vars[2] = true;
       bool_vars[6] = true;
 
-      while {let mut i: u32 = 0;} i < 12 {
-        ignore printf("Bool var: [%d] [%d]\n", i, bool_vars[i]);
+      while {let mut idx_i: u32 = 0;} idx_i < 12 {
+        ignore printf("Bool var: [%d] [%d]\n", idx_i, bool_vars[idx_i]);
 
-        i = i + 1;
+        idx_i = idx_i + 1;
       }
 
       let my_str = "Hello, world! [%d] (%d) [%llu] (%llu)\n";
@@ -194,18 +201,22 @@ let () =
       let right = tup.2;
 
       ignore printf(
-        "Tuple: left[%d], mid[%d], right[%d]\n", left, middle, right
+        "Tuple: left[%d], mid[%d], right[%d] ((%d) (%d) (%d))\n",
+        left, middle, right,
+        1, 4, 3
       );
 
       let fn_ptr = ret_int;
       let fn_ptr_val = fn_ptr.();
 
-      ignore printf("fn ptr val: [%d] [%d]\n", fn_ptr_val, fn_ptr.());
+      ignore printf("fn ptr val: [%d] [%d] (20) (20)\n", fn_ptr_val, fn_ptr.());
 
       let fn_tup = (fib, fib);
-      ignore printf("Double-indirection fib: [%llu]\n", fn_tup.1.(50));
+      ignore printf(
+        "Double-indirection fib: [%llu] (%llu)\n", fn_tup.1.(50), fib_exp
+      );
 
-      while {let mut iter: u32 = 0;} iter < 16 {
+      while {let mut iter: u32 = 0;} iter < 8 {
         ignore printf("iter: %d\n", iter);
 
         iter = iter + 1;
@@ -250,10 +261,21 @@ let () =
 
       let mut map: [25][79]bool;
 
+      // Populate the map with a checkerboard pattern.
       while {let mut map_i = 0;} map_i < 25 {
         while {let mut map_j = 0;} map_j < 79 {
+          // The map is uninitialized, so first clear the entry.
+          map[map_i][map_j] = false;
+
           if map_i % 2 != 0 {
             if map_j % 2 != 0 {
+              // Set the entry.
+              map[map_i][map_j] = true;
+            }
+          }
+          else {
+            if map_j % 2 == 0 {
+              // Set the entry.
               map[map_i][map_j] = true;
             }
           }
@@ -262,6 +284,7 @@ let () =
         map_i = map_i + 1;
       }
 
+      // Print the checkerboard pattern.
       while {let mut map_ii = 0;} map_ii < 25 {
         while {let mut map_jj = 0;} map_jj < 79 {
           if map[map_ii][map_jj] == true {
