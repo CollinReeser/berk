@@ -1,4 +1,3 @@
-open Ast
 open Ir
 open Rast_typing
 open Utility
@@ -98,7 +97,7 @@ and rstmt =
   multiple rstmt. *)
   | RStmts of rstmt list
 
-and rf_param = (ident_t * rast_t)
+and rf_param = (string * rast_t)
 
 and rfunc_decl_t = {
   rf_name: string;
@@ -351,7 +350,7 @@ and fmt_rpattern ?(print_typ=false) ?(init_ind="") rpatt =
   sprintf "%s| %s" init_ind rpattern_fmt
 
 and fmt_join_idents_types
-  delim (idents_types : (ident_t * rast_t) list) : string =
+  delim (idents_types : (string * rast_t) list) : string =
   match idents_types with
   | [] -> ""
 
