@@ -816,12 +816,31 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
             let (hctxt, cur_scope, helem) = begin
               let elem_t = unwrap_aggregate_indexable tup_t idx in
 
-              let (hctxt, tmp) = get_tmp_name hctxt in
-              let decl = (elem_t, tmp) in
-              let instr = Instr(HAggregateIndex(decl, idx, hmatchee)) in
-              let instrs = instr :: cur_scope.instructions in
-              let cur_scope = {cur_scope with instructions = instrs} in
-              (hctxt, cur_scope, decl)
+              let (hctxt, tmp_idx) = get_tmp_name hctxt in
+              let (hctxt, tmp_store) = get_tmp_name hctxt in
+              let (hctxt, tmp_idx_val) = get_tmp_name hctxt in
+              let (hctxt, tmp_load) = get_tmp_name hctxt in
+
+              let decl_idx = (RI32, tmp_idx) in
+              let decl_store = (RPtr(tup_t), tmp_store) in
+              let decl_idx_val = (RPtr(elem_t), tmp_idx_val) in
+              let decl_load = (elem_t, tmp_load) in
+
+              let decls = decl_store :: cur_scope.declarations in
+
+              let instr_idx = Instr(HValueAssign(decl_idx, HValI32(idx))) in
+              let instr_store = Instr(HValueStore(decl_store, hmatchee)) in
+              let instr_idx_val =
+                Instr(HDynamicIndex(decl_idx_val, [decl_idx], decl_store))
+              in
+              let instr_load = Instr(HValueLoad(decl_load, decl_idx_val)) in
+
+              let instrs =
+                instr_load :: instr_idx_val :: instr_store :: instr_idx ::
+                  cur_scope.instructions
+              in
+              let cur_scope = {declarations = decls; instructions = instrs} in
+              (hctxt, cur_scope, decl_load)
             end in
 
             (* Evaluate the tuple-element sub-pattern, yielding a match/no-match
