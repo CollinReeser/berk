@@ -13,12 +13,16 @@ variables, while still respecting alignment.
 *)
 let hscope_decls_to_mir mir_ctxt bb decls =
   let decls_sorted =
-    List.stable_sort (
+    (* For now, don't actually sort, so it's easier to read the HIR/MIR
+    output. *)
+    decls
+
+    (* List.stable_sort (
       fun (lhs_ptr_t, _) (rhs_ptr_t, _) ->
         let lhs_t = unwrap_ptr lhs_ptr_t in
         let rhs_t = unwrap_ptr rhs_ptr_t in
         compare (sizeof_rtype rhs_t) (sizeof_rtype lhs_t)
-    ) decls
+    ) decls *)
   in
 
   let alloca_instrs_rev =

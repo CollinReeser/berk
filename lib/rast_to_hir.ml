@@ -962,7 +962,7 @@ and rmatch_arms_to_hir hctxt hscope hmatchee hresult patts_to_exprs
 (* Given a decl (that's assumed to have already been added to the scope),
 initialize the memory pointed to by that decl. *)
 and initialize_decls hctxt hscope decls =
-  let _init_decl_type_to_val t =
+  let _decl_type_to_val t =
     begin match t with
     | RI64 -> HValI64(0)
     | RI32 -> HValI32(0)
@@ -981,14 +981,24 @@ and initialize_decls hctxt hscope decls =
     | _ ->
         failwith (
           Printf.sprintf
-            "initialize_decls._init_decl_type_to_val for [ %s ] unimplemented."
+            "initialize_decls._decl_type_to_val for [ %s ] unimplemented."
             (fmt_rtype t)
         )
     end
   in
 
-  let _initialize_decl (hctxt, hscope) ((ptr_t, _) as decl) =
+  let rec _initialize_decl (hctxt, hscope) ((ptr_t, _) as decl) =
     begin match ptr_t with
+    | RRef(
+        (
+          RI64 | RI32 | RI16 | RI8 |
+          RU64 | RU32 | RU16 | RU8 |
+          RF128 | RF64 | RF32 |
+          RBool |
+          RString |
+          RNil
+        ) as basic_t
+      )
     | RPtr(
         (
           RI64 | RI32 | RI16 | RI8 |
@@ -999,7 +1009,7 @@ and initialize_decls hctxt hscope decls =
           RNil
         ) as basic_t
       ) ->
-        let init_val = _init_decl_type_to_val basic_t in
+        let init_val = _decl_type_to_val basic_t in
 
         let (hctxt, tmp_init) = get_tmp_name hctxt in
         let decl_init = (basic_t, tmp_init) in
@@ -1009,6 +1019,122 @@ and initialize_decls hctxt hscope decls =
         let hscope = {hscope with instructions = instrs} in
         (hctxt, hscope)
 
+    | RRef(RTuple(ts))
+    | RPtr(RTuple(ts)) ->
+        (* For each static index of the tuple, calculate a reference to that
+        index, and recurse. *)
+        let (hctxt, hscope, _) =
+          List.fold_left (
+            fun (hctxt, hscope, idx) t ->
+              let (hctxt, tmp_idx) = get_tmp_name hctxt in
+              let (hctxt, tmp_ref) = get_tmp_name hctxt in
+              let decl_idx = (RI32, tmp_idx) in
+              let decl_ref = (RRef(t), tmp_ref) in
+              let instr_idx = Instr(HValueAssign(decl_idx, HValI32(idx))) in
+              let instr_ref = Instr(HDynamicIndex(decl_ref, [decl_idx], decl)) in
+              let instrs = instr_ref :: instr_idx :: hscope.instructions in
+              let hscope = {hscope with instructions = instrs} in
+
+              let (hctxt, hscope) = _initialize_decl (hctxt, hscope) decl_ref in
+
+              (hctxt, hscope, (idx + 1))
+          ) (hctxt, hscope, 0) ts
+        in
+
+        (hctxt, hscope)
+
+    | RRef(RArray(t, sz))
+    | RPtr(RArray(t, sz)) ->
+        (* Looping over each index in the array, calculate a reference to that
+        index and recurse. *)
+
+        (* Declare and initialize an iteration variable. *)
+
+        let (hctxt, hscope, decl_iter_store) =
+          let (hctxt, tmp_iter) = get_tmp_name hctxt in
+          let (hctxt, tmp_iter_store) = get_tmp_name hctxt in
+          let decl_iter = (RI32, tmp_iter) in
+          let decl_iter_store = (RPtr(RI32), tmp_iter_store) in
+          let decls = decl_iter_store :: hscope.declarations in
+          let instr_iter = Instr(HValueAssign(decl_iter, HValI32(0))) in
+          let instr_iter_store = Instr(HValueStore(decl_iter_store, decl_iter)) in
+          let instrs = instr_iter_store :: instr_iter :: hscope.instructions in
+          let hscope = {declarations = decls; instructions = instrs} in
+
+          (hctxt, hscope, decl_iter_store)
+        in
+
+        (* Populate the condition-evaluation scope, yielding that scope and the
+        evaluated condition. *)
+        let (hctxt, cond_scope, decl_cond) =
+          let cond_scope = empty_scope in
+
+          let (hctxt, tmp_iter) = get_tmp_name hctxt in
+          let (hctxt, tmp_size) = get_tmp_name hctxt in
+          let (hctxt, tmp_cond) = get_tmp_name hctxt in
+          let decl_iter = (RI32, tmp_iter) in
+          let decl_size = (RI32, tmp_size) in
+          let decl_cond = (RBool, tmp_cond) in
+          let instr_iter = Instr(HValueLoad(decl_iter, decl_iter_store)) in
+          let instr_size = Instr(HValueAssign(decl_size, HValI32(sz))) in
+          let instr_cond = Instr(HBinOp(decl_cond, Lt, decl_iter, decl_size)) in
+          let instrs = (
+            instr_cond ::
+            instr_size ::
+            instr_iter ::
+            cond_scope.instructions
+          ) in
+          let cond_scope = {cond_scope with instructions = instrs} in
+
+          (hctxt, cond_scope, decl_cond)
+        in
+
+        (* In the body of the loop, calculate a pointer to the "current" element
+        in the array, based on our iterator variable, and then increment our
+        iterator. *)
+        let (hctxt, body_scope) =
+          let body_scope = empty_scope in
+
+          let (hctxt, tmp_iter) = get_tmp_name hctxt in
+          let (hctxt, tmp_ref) = get_tmp_name hctxt in
+          let decl_iter = (RI32, tmp_iter) in
+          let decl_ref = (RRef(t), tmp_ref) in
+          let instr_iter = Instr(HValueLoad(decl_iter, decl_iter_store)) in
+          let instr_ref = Instr(HDynamicIndex(decl_ref, [decl_iter], decl)) in
+          let instrs = instr_ref :: instr_iter :: body_scope.instructions in
+          let body_scope = {body_scope with instructions = instrs} in
+
+          let (hctxt, body_scope) =
+            _initialize_decl (hctxt, body_scope) decl_ref
+          in
+
+          (* Inject incrementing the array iterator variable at the end of the
+          loop body. *)
+          let (hctxt, tmp_one) = get_tmp_name hctxt in
+          let (hctxt, tmp_inc) = get_tmp_name hctxt in
+          let decl_one = (RI32, tmp_one) in
+          let decl_inc = (RI32, tmp_inc) in
+          let instr_one = Instr(HValueAssign(decl_one, HValI32(1))) in
+          let instr_inc = Instr(HBinOp(decl_inc, Add, decl_one, decl_iter)) in
+          let instr_iter_store = Instr(HValueStore(decl_iter_store, decl_inc)) in
+
+          let instrs = (
+            instr_iter_store ::
+            instr_inc ::
+            instr_one ::
+            body_scope.instructions
+          ) in
+          let body_scope = {body_scope with instructions = instrs} in
+
+          (hctxt, body_scope)
+        in
+
+        let instr_loop = CondLoopScope(cond_scope, decl_cond, body_scope) in
+        let instrs = instr_loop :: hscope.instructions in
+        let hscope = {hscope with instructions = instrs} in
+        (hctxt, hscope)
+
+    | RRef(_)
     | RPtr(_) ->
         Printf.printf
           "initialize_decls._initialize_decl for [ %s ] unimplemented.\n%!"

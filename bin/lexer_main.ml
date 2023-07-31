@@ -164,18 +164,14 @@ let () =
         ignore printf("False! Good!\n");
       }
 
+      // Declared variables are auto-initialized.
       let def_int: u32;
       let def_str: string;
 
       ignore printf("Default int: [%d], default str: [%s]\n", def_int, def_str);
 
+      // No need to initialize; declared datastructures are auto-initialized.
       let mut bool_vars: [12]bool;
-
-      // Initialize
-      while {let mut init_i: u32 = 0;} init_i < 12 {
-        bool_vars[init_i] = false;
-        init_i = init_i + 1;
-      }
 
       bool_vars[2] = true;
       bool_vars[6] = true;
@@ -264,8 +260,8 @@ let () =
       // Populate the map with a checkerboard pattern.
       while {let mut map_i = 0;} map_i < 25 {
         while {let mut map_j = 0;} map_j < 79 {
-          // The map is uninitialized, so first clear the entry.
-          map[map_i][map_j] = false;
+          // No need to initialize; arbitrary stack datastructures are
+          // auto-initialized.
 
           if map_i % 2 != 0 {
             if map_j % 2 != 0 {

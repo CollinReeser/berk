@@ -296,14 +296,14 @@ and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
       sprintf (
         "%swhile (\n" ^^
         "%s\n" ^^
-        "%s%s\n" ^^
-        "%s) {\n" ^^
+        "%scond (%s)\n" ^^
+        "%s) loop body {\n" ^^
         "%s\n" ^^
         "%s}"
       )
         ind
         (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_cond)
-        (ind ^ "    ") (fmt_hir_variable h_var_cond)
+        (ind ^ "  ") (fmt_hir_variable h_var_cond)
         ind
         (fmt_hir_scope ~ind:(ind ^ "  ") h_scope_body)
         ind
