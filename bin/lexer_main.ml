@@ -4,7 +4,9 @@ open Berk.Parser
 open Berk.Type_check
 open Berk.Ast
 open Berk.Rast
-open Berk.Rast_to_mir
+open Berk.Rast_to_hir
+open Berk.Hir
+open Berk.Hir_to_mir
 open Berk.Mir
 open Berk.Codegen_mir
 open Berk.Llvm_utility
@@ -176,11 +178,12 @@ let () =
         i = i + 1;
       }
 
-      let my_str = "Hello, world! [%d] [%llu]\n";
+      let my_str = "Hello, world! [%d] (%d) [%llu] (%llu)\n";
       let var = 6 + 7 * 8 - ret_int();
       let var2: i32 = 6 + 7 * 8 - ret_int();
       let fib_res = fib(50);
-      ignore printf(my_str, var, fib_res);
+      let fib_exp: u64 = 12586269025;
+      ignore printf(my_str, var, 42, fib_res, fib_exp);
 
       let mut tup = (1, 2, 3);
       tup.1 = 4;
@@ -208,44 +211,36 @@ let () =
       }
 
       let mut ultra_multi_vars: [10][20][30][40]bool;
-      let mut layer_one = ultra_multi_vars[9];
-      let mut layer_two = layer_one[19];
-      let mut layer_thr = layer_two[29];
-      let mut ultra_val = layer_thr[39];
+      let mut layer_one: ref [20][30][40]bool = ultra_multi_vars[9];
+      let mut layer_two: ref [30][40]bool = layer_one[19];
+      let mut layer_thr: ref [40]bool = layer_two[29];
+
+      ultra_multi_vars[9][19][29][39] = false;
 
       ignore printf(
-        "Before change, multi-dimensional: [%d] [%d] [%d] [%d] [%d]\n",
-        ultra_val,
-        layer_thr[39],
-        layer_two[29][39],
-        layer_one[19][29][39],
+        "Change zro, multi-dimensional: [%hhd]\n",
         ultra_multi_vars[9][19][29][39]
       );
 
       layer_thr[39] = true;
-      ultra_val = layer_thr[39];
 
       ignore printf(
-        "After  change, multi-dimensional: [%d] [%d] [%d] [%d] [%d]\n",
-        ultra_val,
-        layer_thr[39],
-        layer_two[29][39],
-        layer_one[19][29][39],
-        ultra_multi_vars[9][19][29][39]
+        "Change one, multi-dimensional: [%hhd]\n",
+        layer_thr[39]
       );
 
-      layer_thr[39] = true;
-      layer_two[29][39] = true;
+      layer_two[29][39] = false;
+
+      ignore printf(
+        "Change two, multi-dimensional: [%hhd]\n",
+        layer_one[19][29][39]
+      );
+
       layer_one[19][29][39] = true;
-      ultra_multi_vars[9][19][29][39] = true;
-      ultra_multi_vars[0][1][2][3] = true;
 
       ignore printf(
-        "Values at various indices: [%d] [%d] [%d] [%d]\n",
-        ultra_multi_vars[0][1][2][2],
-        ultra_multi_vars[0][1][2][3],
-        ultra_multi_vars[0][1][2][4],
-        ultra_multi_vars[0][1][1][3]
+        "Change thr, multi-dimensional: [%hhd]\n",
+        layer_thr[39]
       );
 
       collatz(5);
@@ -313,8 +308,6 @@ let () =
         "2d.left: [%d], 2d.middle: [%d], 2d.right: [%s]\n",
         arr_2d[1][2].0, arr_2d[1][2].1, arr_2d[1][2].2
       );
-
-      //let weird_array: (u32, [10]bool, [20][30](u32, [40]bool));
 
       let variant_val = True(true);
 
@@ -856,23 +849,37 @@ let () =
           | FuncExternDecl(func_decl) ->
               let rfunc_decl = func_decl_t_to_rfunc_decl_t func_decl in
 
-              Printf.printf "RAST:\n%s\n" (fmt_rfunc_decl_t rfunc_decl) ;
+              Printf.printf "RAST:\n%s\n%!" (fmt_rfunc_decl_t rfunc_decl) ;
 
-              let mir_ctxt = rfunc_decl_to_mir rfunc_decl in
+              let hfunc_decl_t = rfunc_decl_t_to_hfunc_decl_t rfunc_decl in
+              let mir_ctxt = hfunc_decl_to_mir hfunc_decl_t in
 
-              Printf.printf "MIR:\n%s\n" (fmt_mir_ctxt mir_ctxt) ;
+              Printf.printf
+                "RAST-generated MIR:\n%s\n%!"
+                (fmt_mir_ctxt mir_ctxt);
 
               Some(mir_ctxt)
           | FuncDef(func_def) ->
               let rfunc_def = func_def_t_to_rfunc_def_t func_def in
 
-              Printf.printf "RAST:\n%s\n" (fmt_rfunc_def_t rfunc_def) ;
+              Printf.printf "RAST:\n%s\n%!" (fmt_rfunc_def_t rfunc_def) ;
 
-              let mir_ctxt = rfunc_to_mir rfunc_def in
+              let hfunc_def = rfunc_def_t_to_hfunc_def_t rfunc_def in
 
-              Printf.printf "MIR:\n%s\n" (fmt_mir_ctxt mir_ctxt) ;
+              Printf.printf "HIR:\n%s\n%!" (fmt_hfunc_def_t hfunc_def) ;
 
-              Some(mir_ctxt)
+              let mir_ctxt_from_hir = begin
+                let mir_ctxt = hfunc_def_to_mir hfunc_def in
+                Printf.printf
+                  "HIR-generated MIR:\n%s\n%!"
+                  (fmt_mir_ctxt mir_ctxt) ;
+                mir_ctxt
+              end in
+
+              mir_ctxt_from_hir |> ignore;
+
+              Some(mir_ctxt_from_hir)
+
         end
     ) mod_decls_tc_rewritten
   in
