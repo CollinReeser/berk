@@ -1,15 +1,15 @@
 (* NOTE: Deliberately in approximately "compiler pipeline" order. *)
 open Berk.Lexer
 open Berk.Parser
-open Berk.Type_check
 open Berk.Ast
+open Berk.Type_check
 open Berk.Ast_to_rast
 open Berk.Rast
 open Berk.Rast_to_hir
 open Berk.Hir
 open Berk.Hir_to_mir
 open Berk.Mir
-open Berk.Codegen_mir
+open Berk.Mir_to_llvm
 open Berk.Llvm_utility
 
 
