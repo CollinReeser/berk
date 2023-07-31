@@ -390,6 +390,42 @@ let () =
       return val;
     }
 
+    fn test_static_crazy(a: i16): i16 {
+      let mut array: [3](
+        [4](
+          [5]i16, [6]i16
+        ),
+        [7](
+          [8]i16, [9]i16
+        )
+      );
+
+      array[1].0[2].0[3] = a;
+
+      let inner_one: ref (
+        [4](
+          [5]i16, [6]i16
+        ),
+        [7](
+          [8]i16, [9]i16
+        )
+      ) = array[1];
+
+      let inner_two: ref [4](
+        [5]i16, [6]i16
+      ) = inner_one.0;
+
+      let inner_three: ref (
+        [5]i16, [6]i16
+      ) = inner_two[2];
+
+      let inner_four: ref [5]i16 = inner_three.0;
+
+      let inner_five: i16 = inner_four[3];
+
+      return inner_five;
+    }
+
     fn main(): i8 {
       {
         let if_or_result = if_or();
@@ -515,6 +551,13 @@ let () =
 
         ignore printf(
           "Got [%d] | [%d] Expected\n", test_tuple_ref_2_result, 45
+        );
+      }
+      {
+        let test_static_crazy_result = test_static_crazy(101);
+
+        ignore printf(
+          "Got [%hd] | [%hd] Expected\n", test_static_crazy_result, 101
         );
       }
 
