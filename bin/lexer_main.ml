@@ -99,8 +99,8 @@ let () =
       ignore printf("Prime: 2\n");
 
       while { // Side-comment test: while-expr init-var-decl block.
-        let len = 16;
-        let mut sieve: [16]bool;
+        let len = 32;
+        let mut sieve: [32]bool;
         let mut i = 3;
       } i < len {
         if sieve[i] != true {
