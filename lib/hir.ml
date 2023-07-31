@@ -37,10 +37,6 @@ type hir_instr =
   provided by the RHS. *)
   | HAggregate of hir_variable * hir_variable list
 
-  (* "Tuple-index" into the RHS variable with the given constant integer index,
-  yielding the value in the resultant LHS variable. ie: `tmp = tup.3;` *)
-  | HAggregateIndex of hir_variable * int * hir_variable
-
   (* LHS is resultant variable, that is a _pointer to_ the indexed element (that
   would then still need to be loaded). Middle is one or more indexing variables.
   RHS is a pointer to an indexable value. *)
@@ -180,12 +176,6 @@ let fmt_hir_instr hir_instr : string =
       sprintf "%s = (%s)"
         (fmt_hir_variable h_var_res)
         elems_fmt
-
-  | HAggregateIndex(h_var_res, i, h_var_tup) ->
-      sprintf "%s = (%s).%d"
-        (fmt_hir_variable h_var_res)
-        (fmt_hir_variable h_var_tup)
-        i
 
   | HDynamicIndex(h_var_res, h_var_idxs, h_var_arr) ->
       sprintf "%s = IDX (%s)[%s]"

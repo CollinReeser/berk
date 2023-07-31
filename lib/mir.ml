@@ -63,8 +63,6 @@ always a pointer type. *)
 (* Turn a list of separate values into a struct containing those values, whose
 members are in the same order as the given list. *)
 | ConstructAggregate of lval * lval list
-(* Yield the lval element at the given index in the given aggregate value. *)
-| FromAggregate of lval * int * lval
 (* The first lval is the return value, and the second lval is the function to be
 called. *)
 | Call of lval * lval * lval list
@@ -191,12 +189,6 @@ let fmt_instr instr =
       sprintf "  %s = aggregate of (%s)\n"
         (fmt_lval lval)
         (fmt_join_strs "; "(List.map fmt_lval elems))
-
-  | FromAggregate(lval, i, lval_aggregate) ->
-      sprintf "  %s = extract index %d from %s\n"
-        (fmt_lval lval)
-        i
-        (fmt_lval lval_aggregate)
 
   | Call(lval, lval_func, args) ->
       sprintf "  %s = call %s(%s)\n"
@@ -378,7 +370,6 @@ let instr_lval instr =
   | Cast(lval, _, _) -> lval
   | PtrTo(lval, _, _) -> lval
   | ConstructAggregate(lval, _) -> lval
-  | FromAggregate(lval, _, _) -> lval
   | Call(lval, _, _) -> lval
   | CallVoid(_, _) -> failwith "No resultant lval for void call"
   | CondBr(_, _, _) -> failwith "No resultant lval for condbr"

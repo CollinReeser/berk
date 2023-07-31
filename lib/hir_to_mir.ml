@@ -146,19 +146,6 @@ let hir_instr_to_mir mir_ctxt bb instr : (mir_ctxt * bb) =
       let mir_ctxt = update_bb mir_ctxt bb in
       (mir_ctxt, bb)
 
-  | HAggregateIndex(result_var, idx, aggregate_var) ->
-      let result_lval = lval_from_hvar Tmp result_var in
-      let aggregate_lval = lval_from_hvar Tmp aggregate_var in
-
-      let bb = {
-        bb with instrs = bb.instrs @ [
-          FromAggregate(result_lval, idx, aggregate_lval)
-        ]
-      } in
-
-      let mir_ctxt = update_bb mir_ctxt bb in
-      (mir_ctxt, bb)
-
   | HArgToVar(result_var, _, arg_idx) ->
       let result_lval = lval_from_hvar Tmp result_var in
 

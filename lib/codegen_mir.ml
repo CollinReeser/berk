@@ -274,20 +274,6 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | FromAggregate({lname; _}, elem_idx, {lname=agg_name; _}) ->
-      let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
-
-      let elem_val =
-        Llvm.build_extractvalue agg_value elem_idx lname builder |>
-        enforce_mir_llvm_name_agreement lname
-      in
-
-      let func_ctxt = {
-        func_ctxt with cur_vars = StrMap.add lname elem_val func_ctxt.cur_vars
-      } in
-
-      func_ctxt
-
   | PtrTo({lname; _}, indices, {lname=agg_name; _}) ->
       let index_to_llvm idx = begin match idx with
         | Static(i) ->
