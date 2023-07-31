@@ -3,6 +3,7 @@ open Berk.Lexer
 open Berk.Parser
 open Berk.Type_check
 open Berk.Ast
+open Berk.Ast_to_rast
 open Berk.Rast
 open Berk.Rast_to_hir
 open Berk.Hir
