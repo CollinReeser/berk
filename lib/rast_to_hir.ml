@@ -959,6 +959,75 @@ and rmatch_arms_to_hir hctxt hscope hmatchee hresult patts_to_exprs
   (hctxt, hscope)
 
 
+(* Given a decl (that's assumed to have already been added to the scope),
+initialize the memory pointed to by that decl. *)
+and initialize_decls hctxt hscope decls =
+  let _init_decl_type_to_val t =
+    begin match t with
+    | RI64 -> HValI64(0)
+    | RI32 -> HValI32(0)
+    | RI16 -> HValI16(0)
+    | RI8  -> HValI8(0)
+    | RU64 -> HValU64(0)
+    | RU32 -> HValU32(0)
+    | RU16 -> HValU16(0)
+    | RU8  -> HValU8(0)
+    | RF128 -> HValF128("0.0")
+    | RF64  -> HValF64(0.0)
+    | RF32  -> HValF32(0.0)
+    | RBool -> HValBool(false)
+    | RString -> HValStr("")
+    | RNil -> HValNil
+    | _ ->
+        failwith (
+          Printf.sprintf
+            "initialize_decls._init_decl_type_to_val for [ %s ] unimplemented."
+            (fmt_rtype t)
+        )
+    end
+  in
+
+  let _initialize_decl (hctxt, hscope) ((ptr_t, _) as decl) =
+    begin match ptr_t with
+    | RPtr(
+        (
+          RI64 | RI32 | RI16 | RI8 |
+          RU64 | RU32 | RU16 | RU8 |
+          RF128 | RF64 | RF32 |
+          RBool |
+          RString |
+          RNil
+        ) as basic_t
+      ) ->
+        let init_val = _init_decl_type_to_val basic_t in
+
+        let (hctxt, tmp_init) = get_tmp_name hctxt in
+        let decl_init = (basic_t, tmp_init) in
+        let instr_init = Instr(HValueAssign(decl_init, init_val)) in
+        let instr_store = Instr(HValueStore(decl, decl_init)) in
+        let instrs = instr_store :: instr_init :: hscope.instructions in
+        let hscope = {hscope with instructions = instrs} in
+        (hctxt, hscope)
+
+    | RPtr(_) ->
+        Printf.printf
+          "initialize_decls._initialize_decl for [ %s ] unimplemented.\n%!"
+          (fmt_rtype ptr_t);
+
+        (hctxt, hscope)
+
+    | _ ->
+        failwith (
+          Printf.sprintf
+            "initialize_decls._initialize_decl for [ %s ] is nonsense."
+            (fmt_rtype ptr_t)
+        )
+    end
+  in
+
+  List.fold_left _initialize_decl (hctxt, hscope) decls
+
+
 and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
   begin match rstmt with
   (* "Expand" a list of rstmts into hir instructions. *)
@@ -994,13 +1063,14 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       variables declared this way are those with types that have deterministic
       default values, which coincidentally is also the set of types which we
       would lower any higher-level types into. *)
-      List.fold_left (
-        fun (hctxt, hscope) (name, t) ->
-          let decl = (RPtr(t), name) in
-          let decls = decl :: hscope.declarations in
-          let hscope = {hscope with declarations = decls} in
-          (hctxt, hscope)
-      ) (hctxt, hscope) name_t_pairs
+      let default_decls =
+        List.map (fun (name, t) -> (RPtr(t), name)) name_t_pairs
+      in
+      let decls = default_decls @ hscope.declarations in
+      let hscope = {hscope with declarations = decls} in
+
+      let (hctxt, hscope) = initialize_decls hctxt hscope default_decls in
+      (hctxt, hscope)
 
   | RReturnStmt(rexpr) ->
       let (hctxt, hscope, ((t, _) as hvar)) = rexpr_to_hir hctxt hscope rexpr in

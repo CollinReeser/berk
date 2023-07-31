@@ -426,6 +426,32 @@ let () =
       return inner_five;
     }
 
+    fn test_default_init() {
+      let a: i64;
+      let b: i16;
+      let c: i32;
+      let d: i8;
+      let e: u32;
+      let f: u8;
+      let g: u16;
+      let h: u64;
+      let i: f128;
+      let j: f64;
+      let k: f32;
+      let l: bool;
+      let m: string;
+      let n: (u32, i64, u8);
+      let o: (string, bool);
+      let p: ((i8, u64, i32), u16, (bool, string));
+      let q: [10]i32;
+      let r: [10][20]i32;
+      let s: [10](u32, i64);
+      let t: [10]([20]u32, [30]i64);
+      let u: [10]([20](i16, bool), [30]([40]bool, i16));
+
+      return;
+    }
+
     fn main(): i8 {
       {
         let if_or_result = if_or();
@@ -559,6 +585,9 @@ let () =
         ignore printf(
           "Got [%hd] | [%hd] Expected\n", test_static_crazy_result, 101
         );
+      }
+      {
+        test_default_init();
       }
 
       return 0;
