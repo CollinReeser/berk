@@ -447,7 +447,55 @@ let () =
       let r: [10][20]i32;
       let s: [10](u32, i64);
       let t: [10]([20]u32, [30]i64);
-      let u: [10]([20](i16, bool), [30]([40]bool, i16));
+      let u: [2]([3](i16, string), [4]([5]bool, f32));
+
+      ignore printf("u: [\n");
+      while {let mut idx = 0;} idx < 2 {
+        let top_level_tuple_lhs_arr: ref [3](i16, string) = u[idx].0;
+
+        ignore printf("  [\n");
+        while {let mut jdx = 0;} jdx < 3 {
+          let inner_lhs_i16 = top_level_tuple_lhs_arr[jdx].0;
+          let inner_rhs_str = top_level_tuple_lhs_arr[jdx].1;
+
+          ignore printf("    (%hd, \"%s\"),\n", inner_lhs_i16, inner_rhs_str);
+
+          jdx = jdx + 1;
+        }
+        ignore printf("  ],\n");
+
+        let top_level_tuple_rhs_arr: ref [4]([5]bool, f32) = u[idx].1;
+
+        ignore printf("  [\n");
+        while {let mut kdx = 0;} kdx < 4 {
+          let inner_bool_arr: ref [5]bool = top_level_tuple_rhs_arr[kdx].0;
+
+          ignore printf("    ([");
+          while {let mut ldx = 0;} ldx < 5 {
+            let inner_lhs_bool = inner_bool_arr[ldx];
+
+            if ldx < 4 {
+              ignore printf("%hhd, ", inner_lhs_bool);
+            }
+            else {
+              ignore printf("%hhd", inner_lhs_bool);
+            }
+
+            ldx = ldx + 1;
+          }
+          ignore printf("], ");
+
+          let inner_rhs_f32 = top_level_tuple_rhs_arr[kdx].1;
+
+          ignore printf("%.1f),\n", inner_rhs_f32);
+
+          kdx = kdx + 1;
+        }
+        ignore printf("  ],\n");
+
+        idx = idx + 1;
+      }
+      ignore printf("]\n");
 
       return;
     }
