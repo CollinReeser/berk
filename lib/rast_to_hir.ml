@@ -430,9 +430,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
       let idxs_rev = idx :: inner_idxs_rev in
       let idxs = List.rev idxs_rev in
 
-
       let elem_t = unwrap_indexable_reference elem_t in
-
 
       let (hctxt, tmp) = get_tmp_name hctxt in
       let decl_ref = (elem_t, tmp) in
