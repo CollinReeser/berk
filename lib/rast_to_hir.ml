@@ -423,9 +423,7 @@ let rec rexpr_to_hir hctxt hscope rexpr
       (* Evaluate the expression we'll ultimately index into, and any additional
       layers of indexing we need to do, and the resultant type we will get once
       the generated index pointer is loaded. *)
-      let (
-        hctxt, hscope, ((ref_to_agg_t, _) as idxable), inner_idxs_rev, elem_t
-      ) =
+      let (hctxt, hscope, idxable, inner_idxs_rev, elem_t) =
         _indexable_expr_to_hir hctxt hscope idxable_expr
       in
 
