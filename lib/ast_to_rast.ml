@@ -289,7 +289,7 @@ and stmt_to_rstmt stmt : rstmt =
       let re = expr_to_rexpr e in
       RDeclStmt(name, rt, re)
 
-  | DeclDefStmt(names_quals_ts) ->
+  | DeclDefaultStmt(names_quals_ts) ->
       let names_rts =
         List.map (
           fun (name, _, t) ->
@@ -297,7 +297,7 @@ and stmt_to_rstmt stmt : rstmt =
             (name, rt)
         ) names_quals_ts
       in
-      RDeclDefStmt(names_rts)
+      RDeclDefaultStmt(names_rts)
 
   | AssignStmt(name, named_t, idxs, e) ->
       let named_rt = berk_t_to_rast_t named_t in

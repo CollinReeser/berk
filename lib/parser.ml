@@ -729,7 +729,7 @@ and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
       (* Lookahead to the semicolon, if there is one. If so, this is a
       "default declaration": `let var: bool; *)
       | (Semicolon(_) :: _) as rest ->
-          (rest, DeclDefStmt([(varname, qual, t)]))
+          (rest, DeclDefaultStmt([(varname, qual, t)]))
 
       | tok :: _ ->
           let fmted = fmt_token tok in
@@ -739,7 +739,7 @@ and parse_decl_stmt ?(ind="") tokens : (token list * stmt) =
           )
       | [] -> failwith "Unexpected EOF while parsing let declaration."
       end
-  (* TODO: Extend to recognize DeclDefStmt with multiple fields. *)
+  (* TODO: Extend to recognize DeclDefaultStmt with multiple fields. *)
   end
 
 

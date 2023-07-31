@@ -989,7 +989,7 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       (hctxt, hscope)
 
   (* Declare a list of new named variables. *)
-  | RDeclDefStmt(name_t_pairs) ->
+  | RDeclDefaultStmt(name_t_pairs) ->
       (* NOTE: This depends on an earlier pass having ensured that the only
       variables declared this way are those with types that have deterministic
       default values, which coincidentally is also the set of types which we
@@ -1020,8 +1020,6 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
   lvalue. *)
   | RAssignStmt(_, _, lval_rexpr, rhs_rexpr) ->
       let (hctxt, hscope, rhs_hvar) = rexpr_to_hir hctxt hscope rhs_rexpr in
-
-
 
       (* Evaluate the expression we'll ultimately index into, and any additional
       layers of indexing we need to do, and the resultant type we will get once

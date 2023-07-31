@@ -136,7 +136,7 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
   | DeclDeconStmt(_, typ, expr) ->
       (_is_concrete_expr expr) && (_is_concrete_type typ)
 
-  | DeclDefStmt(idents_quals_ts) ->
+  | DeclDefaultStmt(idents_quals_ts) ->
       List.fold_left (&&) true (
         List.map (fun (_, _, t) -> _is_concrete_type t) idents_quals_ts
       )
@@ -497,7 +497,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
       (tc_ctxt_up, DeclStmt(ident, qual, resolved_t, exp_typechecked))
 
-  | DeclDefStmt((idents_quals_ts)) ->
+  | DeclDefaultStmt((idents_quals_ts)) ->
       let tc_ctxt =
         List.fold_left (
           fun tc_ctxt (ident, qual, t) ->

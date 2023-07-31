@@ -143,11 +143,11 @@ and stmt =
   | DeclStmt of ident_t * var_qual * berk_t * expr
   (* A `let` stmt that only declares variables, taking the default value for
   each. No expression is associated with this stmt. *)
-  | DeclDefStmt of (ident_t * var_qual * berk_t) list
+  | DeclDefaultStmt of (ident_t * var_qual * berk_t) list
   (* A "deconstructing" stmt that takes a deconstructable expression (like a
   tuple) and deconstructs it into the newly-named variable components.
   eg, `let (a, b, c) = (1, 2, 3);` *)
-  (* TODO: This should be normalized a bit with DeclDefStmt and instead have
+  (* TODO: This should be normalized a bit with DeclDefaultStmt and instead have
   the type be per-variable, rather than define a post-deconstruction tuple type.
   *)
   | DeclDeconStmt of (ident_t * var_qual) list * berk_t * expr
@@ -415,7 +415,7 @@ and dump_stmt_ast ?(ind="") stmt =
         ind_next
         (dump_expr_ast ~ind:ind_next e)
         ind
-  | DeclDefStmt(name_qual_t_ls) ->
+  | DeclDefaultStmt(name_qual_t_ls) ->
       let ind_next = ind ^ " " in
       let dumped_name_qual_t_ls =
         List.map (
@@ -429,7 +429,7 @@ and dump_stmt_ast ?(ind="") stmt =
         ) name_qual_t_ls
       in
       let dumped_names_quals_ts = fmt_join_strs ",\n" dumped_name_qual_t_ls in
-      sprintf "DeclDefStmt(\n%s\n%s)"
+      sprintf "DeclDefaultStmt(\n%s\n%s)"
         dumped_names_quals_ts
         ind
   | DeclDeconStmt(name_qual_ls, t, e) ->
@@ -969,7 +969,7 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         typ_s
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
-  | DeclDefStmt (idents_quals_ts) ->
+  | DeclDefaultStmt (idents_quals_ts) ->
       Printf.sprintf "%slet %s;\n"
         ind
         (fmt_join_idents_quals_types ", " idents_quals_ts)
@@ -1692,7 +1692,7 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         in
         (unique_varnames, DeclStmt(uniq_varname, varqual, t, exp_rewritten))
 
-    | DeclDefStmt(idents_quals_ts) ->
+    | DeclDefaultStmt(idents_quals_ts) ->
         let (unique_varnames, uniq_idents_quals_ts) =
           List.fold_left_map (
             fun unique_varnames (varname, varqual, t) ->
@@ -1702,7 +1702,7 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
               (unique_varnames, (uniq_varname, varqual, t))
           ) unique_varnames idents_quals_ts
         in
-        (unique_varnames, DeclDefStmt(uniq_idents_quals_ts))
+        (unique_varnames, DeclDefaultStmt(uniq_idents_quals_ts))
 
     | DeclDeconStmt(varname_varquals, t, exp) ->
         let (unique_varnames, exp_rewritten) =

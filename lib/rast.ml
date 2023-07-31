@@ -76,7 +76,7 @@ and rpattern =
 and rstmt =
   | RDeclStmt of string * rast_t * rexpr
 
-  | RDeclDefStmt of (string * rast_t) list
+  | RDeclDefaultStmt of (string * rast_t) list
 
   (*
   The string is the name of the lvalue variable. The first expr is either the
@@ -372,7 +372,7 @@ and fmt_rstmt ?(print_typ = false) ind rstmt =
         typ_s
         (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
 
-  | RDeclDefStmt (idents_ts) ->
+  | RDeclDefaultStmt (idents_ts) ->
       Printf.sprintf "%slet %s;\n"
         ind
         (fmt_join_idents_types ", " idents_ts)
