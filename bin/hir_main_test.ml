@@ -428,13 +428,13 @@ let () =
 
     fn test_default_init() {
       let a: i64;
-      let b: i16;
-      let c: i32;
+      let b: i32;
+      let c: i16;
       let d: i8;
-      let e: u32;
-      let f: u8;
+      let e: u64;
+      let f: u32;
       let g: u16;
-      let h: u64;
+      let h: u8;
       let i: f128;
       let j: f64;
       let k: f32;
@@ -448,54 +448,129 @@ let () =
       let s: [10](u32, i64);
       let t: [10]([20]u32, [30]i64);
       let u: [2]([3](i16, string), [4]([5]bool, f32));
+      let v: ([3](i16, string), [4]([5]bool, f32));
 
-      ignore printf("u: [\n");
-      while {let mut idx = 0;} idx < 2 {
-        let top_level_tuple_lhs_arr: ref [3](i16, string) = u[idx].0;
+      ignore printf("a: %lld\n", a);
+      ignore printf("b: %d\n", b);
+      ignore printf("c: %hd\n", c);
+      ignore printf("d: %hhd\n", d);
+      ignore printf("e: %llu\n", e);
+      ignore printf("f: %u\n", f);
+      ignore printf("g: %hu\n", g);
+      ignore printf("h: %hhu\n", h);
+      ignore printf("i: %Lf\n", i);
+      ignore printf("j: %f\n", j);
+      ignore printf("k: %f\n", h);
+      ignore printf("l: %hhd\n", l);
+      ignore printf("m: \"%s\"\n", m);
+      ignore printf("n: (%u, %lld, %hhu)\n", n.0, n.1, n.2);
+      ignore printf("o: (\"%s\", %hhd)\n", o.0, o.1);
+      ignore printf(
+        "p: ((%hhd, %llu, %d), %hu, (%hhd, \"%s\"))\n",
+        p .0 .0, p .0 .1, p .0 .2,
+        p .1,
+        p .2 .0, p .2 .1
+      );
+
+      {
+        ignore printf("u: [\n");
+        while {let mut idx = 0;} idx < 2 {
+          let top_level_tuple_lhs_arr: ref [3](i16, string) = u[idx].0;
+
+          ignore printf("  (\n");
+          ignore printf("    [\n");
+          while {let mut jdx = 0;} jdx < 3 {
+            let inner_lhs_i16 = top_level_tuple_lhs_arr[jdx].0;
+            let inner_rhs_str = top_level_tuple_lhs_arr[jdx].1;
+
+            ignore printf("      (%hd, \"%s\"),\n", inner_lhs_i16, inner_rhs_str);
+
+            jdx = jdx + 1;
+          }
+          ignore printf("    ],\n");
+
+          let top_level_tuple_rhs_arr: ref [4]([5]bool, f32) = u[idx].1;
+
+          ignore printf("    [\n");
+          while {let mut kdx = 0;} kdx < 4 {
+            let inner_bool_arr: ref [5]bool = top_level_tuple_rhs_arr[kdx].0;
+
+            ignore printf("      ([");
+            while {let mut ldx = 0;} ldx < 5 {
+              let inner_lhs_bool = inner_bool_arr[ldx];
+
+              if ldx < 4 {
+                ignore printf("%hhd, ", inner_lhs_bool);
+              }
+              else {
+                ignore printf("%hhd", inner_lhs_bool);
+              }
+
+              ldx = ldx + 1;
+            }
+            ignore printf("], ");
+
+            let inner_rhs_f32 = top_level_tuple_rhs_arr[kdx].1;
+
+            ignore printf("%.1f),\n", inner_rhs_f32);
+
+            kdx = kdx + 1;
+          }
+          ignore printf("    ],\n");
+          ignore printf("  ),\n");
+
+          idx = idx + 1;
+        }
+        ignore printf("]\n");
+      }
+
+      {
+        ignore printf("v: (\n");
+
+        let top_level_tuple_lhs_arr: ref [3](i16, string) = v.0;
 
         ignore printf("  [\n");
-        while {let mut jdx = 0;} jdx < 3 {
-          let inner_lhs_i16 = top_level_tuple_lhs_arr[jdx].0;
-          let inner_rhs_str = top_level_tuple_lhs_arr[jdx].1;
+        while {let mut mdx = 0;} mdx < 3 {
+          let inner_lhs_i16 = top_level_tuple_lhs_arr[mdx].0;
+          let inner_rhs_str = top_level_tuple_lhs_arr[mdx].1;
 
           ignore printf("    (%hd, \"%s\"),\n", inner_lhs_i16, inner_rhs_str);
 
-          jdx = jdx + 1;
+          mdx = mdx + 1;
         }
         ignore printf("  ],\n");
 
-        let top_level_tuple_rhs_arr: ref [4]([5]bool, f32) = u[idx].1;
+        let top_level_tuple_rhs_arr: ref [4]([5]bool, f32) = v.1;
 
         ignore printf("  [\n");
-        while {let mut kdx = 0;} kdx < 4 {
-          let inner_bool_arr: ref [5]bool = top_level_tuple_rhs_arr[kdx].0;
+        while {let mut ndx = 0;} ndx < 4 {
+          let inner_bool_arr: ref [5]bool = top_level_tuple_rhs_arr[ndx].0;
 
           ignore printf("    ([");
-          while {let mut ldx = 0;} ldx < 5 {
-            let inner_lhs_bool = inner_bool_arr[ldx];
+          while {let mut odx = 0;} odx < 5 {
+            let inner_lhs_bool = inner_bool_arr[odx];
 
-            if ldx < 4 {
+            if odx < 4 {
               ignore printf("%hhd, ", inner_lhs_bool);
             }
             else {
               ignore printf("%hhd", inner_lhs_bool);
             }
 
-            ldx = ldx + 1;
+            odx = odx + 1;
           }
           ignore printf("], ");
 
-          let inner_rhs_f32 = top_level_tuple_rhs_arr[kdx].1;
+          let inner_rhs_f32 = top_level_tuple_rhs_arr[ndx].1;
 
           ignore printf("%.1f),\n", inner_rhs_f32);
 
-          kdx = kdx + 1;
+          ndx = ndx + 1;
         }
         ignore printf("  ],\n");
 
-        idx = idx + 1;
+        ignore printf(")\n");
       }
-      ignore printf("]\n");
 
       return;
     }

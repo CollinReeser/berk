@@ -1141,6 +1141,15 @@ and parse_value ?(ind="") tokens : (token list * expr) =
       with Backtrack ->
       try
         let (rest, exp_chain) =
+          (* FIXME: Chained tuple indexing is a lexing ambiguity. Consider:
+            let tup = (1, (2, 3), 4);
+            let val = tup.1.0;
+          where the `1.0` will get lexed as a float value and this parse will
+          fail. Workaround: Inject whitespace, a la:
+            let val = tup.1 .0;
+            let val = tup. 1. 0;
+            let val = tup .1 .0;
+          *)
           parse_tuple_index ~ind:ind_next rest exp_so_far
         in
         _parse_value rest exp_chain
