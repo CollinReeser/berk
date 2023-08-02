@@ -45,6 +45,15 @@ and expr =
   | BlockExpr of berk_t * stmt list * expr
   (* if expr, then expr, else expr *)
   | IfThenElseExpr of berk_t * expr * expr * expr
+  (* if-then-else expr with non-zero is-bindings, without || branches.
+  Each expression in the if-conditional is either a (non-short-circuiting)
+  boolean expression, or an `is` binding, and each expression in the list is
+  implied to be joined by the `&&` short-circuiting boolean operator.
+
+  e.g.: if var < 10 && opt is Some(i) && i > 20 { ... } { ... }
+  *)
+  | IfIsThenElseExpr of
+      berk_t * if_is_expr list * expr * expr
   (* while expr, init stmts, cond expr, then stmts *)
   | WhileExpr of berk_t * stmt list * expr * stmt list
   (* A direct call to an in-scope named function. *)
@@ -78,6 +87,10 @@ and expr =
   (* Match/pattern expression. First expr is value to match on. Remainder are
   pairs of patterns and their resultant expressions *)
   | MatchExpr of berk_t * expr * (pattern * expr) list
+
+and if_is_expr =
+  | IfIsGeneral of expr
+  | IfIsPattern of expr * pattern
 
 and int_range =
   (* A specific integer. *)
@@ -260,6 +273,14 @@ let rec dump_expr_ast ?(ind="") expr =
         ind_next
         (dump_expr_ast ~ind:ind_next e_else)
         ind
+
+  | IfIsThenElseExpr(t, e_conds, e_then, e_else) ->
+      e_conds |> ignore;
+      e_then |> ignore;
+      e_else |> ignore;
+      sprintf "IfIsThenElseExpr(%s, ...)"
+        (fmt_type t)
+
   | WhileExpr(t, init_ss, e_cond, then_ss) ->
       let ind_next = ind ^ " " in
       let dumped_init_ss = List.map (dump_stmt_ast ~ind:ind_next) init_ss in
@@ -703,6 +724,43 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
         )
         ind
 
+  | IfIsThenElseExpr(_, conds, then_expr, else_expr) ->
+      let conds_fmt_xs =
+        List.map (
+          fun cond ->
+            begin match cond with
+            | IfIsGeneral(expr) ->
+                fmt_expr
+                  ~init_ind:false ~ind:(ind ^ "  ") ~print_typ:print_typ
+                  expr
+
+            | IfIsPattern(expr, patt) ->
+                let expr_fmt =
+                  fmt_expr
+                    ~init_ind:false ~ind:(ind ^ "  ") ~print_typ:print_typ
+                    expr
+                in
+                let patt_fmt = fmt_pattern ~print_typ:print_typ patt in
+                Printf.sprintf "%s is %s" expr_fmt patt_fmt
+            end
+        ) conds
+      in
+      let conds_fmt = fmt_join_strs " && " conds_fmt_xs in
+      Printf.sprintf "%s%sif (%s) {\n%s\n%s} else {\n%s\n%s}"
+        init_ind
+        typ_s_rev
+        conds_fmt
+        (
+          fmt_expr
+            ~init_ind:true ~ind:(ind ^ "  ") ~print_typ:print_typ then_expr
+        )
+        ind
+        (
+          fmt_expr
+            ~init_ind:true ~ind:(ind ^ "  ") ~print_typ:print_typ else_expr
+        )
+        ind
+
   | WhileExpr (_, init_stmts, while_cond, then_stmts) ->
       let formatted_init_stmts = begin
         let (open_brace, close_brace, ind) =
@@ -839,6 +897,7 @@ and expr_type exp =
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
   | IfThenElseExpr(typ, _, _, _) -> typ
+  | IfIsThenElseExpr(typ, _, _, _) -> typ
   | WhileExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
   | UfcsCall(typ, _, _, _) -> typ
@@ -1823,6 +1882,43 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           unique_varnames,
           IfThenElseExpr(
             t, exp_cond_rewritten, exp_then_rewritten, exp_else_rewritten
+          )
+        )
+
+    | IfIsThenElseExpr(t, exp_conds, exp_then, exp_else) ->
+        let (unique_varnames, exp_conds_rewritten) =
+          List.fold_left_map (
+            fun unique_varnames exp_cond ->
+              begin match exp_cond with
+              | IfIsGeneral(exp) ->
+                  let (unique_varnames, exp_rewritten) =
+                    _rewrite_exp unique_varnames exp
+                  in
+                  (unique_varnames, IfIsGeneral(exp_rewritten))
+
+              | IfIsPattern(exp, patt) ->
+                  let (unique_varnames, exp_rewritten) =
+                    _rewrite_exp unique_varnames exp
+                  in
+                  let (unique_varnames, patt_rewritten) =
+                    _rewrite_patt_exp unique_varnames patt
+                  in
+                  (unique_varnames, IfIsPattern(exp_rewritten, patt_rewritten))
+
+              end
+          ) unique_varnames exp_conds
+        in
+
+        let (unique_varnames, exp_then_rewritten) =
+          _rewrite_exp unique_varnames exp_then
+        in
+        let (unique_varnames, exp_else_rewritten) =
+          _rewrite_exp unique_varnames exp_else
+        in
+        (
+          unique_varnames,
+          IfIsThenElseExpr(
+            t, exp_conds_rewritten, exp_then_rewritten, exp_else_rewritten
           )
         )
 

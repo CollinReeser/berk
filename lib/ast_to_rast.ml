@@ -165,6 +165,46 @@ let rec expr_to_rexpr expr : rexpr =
         ]
       )
 
+  | IfIsThenElseExpr(t, e_conds, e_then, e_else) ->
+      let rt = berk_t_to_rast_t t in
+      let re_then = expr_to_rexpr e_then in
+      let re_else = expr_to_rexpr e_else in
+
+      let rec _if_is_conds_to_rexpr conds =
+        begin match conds with
+        | [] ->
+            re_then
+
+        | IfIsGeneral(e_cond_part) :: rest ->
+            let re_cond_part = expr_to_rexpr e_cond_part in
+            let re_cond_rest = _if_is_conds_to_rexpr rest in
+
+            RMatchExpr(
+              rt,
+              re_cond_part, [
+                (RPBool(true), re_cond_rest);
+                (RWild(RBool), re_else)
+              ]
+            )
+
+        | IfIsPattern(exp, patt) :: rest ->
+            let re_cond_part = expr_to_rexpr exp in
+            let re_patt = pattern_to_rpattern patt in
+            let re_rt = rexpr_type re_cond_part in
+            let re_cond_rest = _if_is_conds_to_rexpr rest in
+
+            RMatchExpr(
+              rt,
+              re_cond_part, [
+                (re_patt, re_cond_rest);
+                (RWild(re_rt), re_else)
+              ]
+            )
+
+        end
+      in
+      _if_is_conds_to_rexpr e_conds
+
   | WhileExpr(t, stmts_init, e_cond, stmts_block) ->
       let rt = berk_t_to_rast_t t in
       let rstmts_init = List.map stmt_to_rstmt stmts_init in

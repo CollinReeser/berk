@@ -193,6 +193,26 @@ and is_concrete_expr ?(verbose=false) expr =
         (_is_concrete_expr expr_2) &&
         (_is_concrete_expr expr_3)
 
+  | IfIsThenElseExpr(typ, cond_exprs, expr_2, expr_3) ->
+      let is_concrete_cond_exprs =
+        List.for_all (
+          fun cond ->
+            begin match cond with
+            | IfIsGeneral(exp) ->
+                _is_concrete_expr exp
+
+            | IfIsPattern(exp, patt) ->
+                _is_concrete_expr exp &&
+                _is_concrete_patt patt
+            end
+        ) cond_exprs
+      in
+
+      (_is_concrete_type typ) &&
+        is_concrete_cond_exprs &&
+        (_is_concrete_expr expr_2) &&
+        (_is_concrete_expr expr_3)
+
   | BlockExpr(typ, stmts, expr) ->
       (_is_concrete_type typ) &&
         (_is_concrete_expr expr) &&
@@ -959,6 +979,12 @@ and type_check_expr
           then_expr_typechecked,
           else_expr_typechecked
         )
+
+    | IfIsThenElseExpr(_, conds, then_expr, else_expr) ->
+        conds |> ignore;
+        then_expr |> ignore;
+        else_expr |> ignore;
+        failwith "IfIsThenElseExpr: Unimplemented"
 
     | WhileExpr(_, init_stmts, while_cond, then_stmts) ->
         (* NOTE: We keep the returned tc_ctxt for typechecking the init-stmts,
