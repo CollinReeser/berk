@@ -17,6 +17,7 @@ type token =
 | KWWhile of position
 | KWMatch of position
 | KWAs of position
+| KWIs of position
 | KWi8 of position
 | KWi16 of position
 | KWi32 of position
@@ -129,7 +130,8 @@ let fmt_token tok =
   | KWElse(p)      -> Printf.sprintf "else   (kw)    : %s"   (fmt_pos p)
   | KWWhile(p)     -> Printf.sprintf "while  (kw)    : %s"   (fmt_pos p)
   | KWMatch(p)     -> Printf.sprintf "match  (kw)    : %s"   (fmt_pos p)
-  | KWAs(p)        -> Printf.sprintf "as  (kw)    : %s"   (fmt_pos p)
+  | KWAs(p)        -> Printf.sprintf "as     (kw)    : %s"   (fmt_pos p)
+  | KWIs(p)        -> Printf.sprintf "is     (kw)    : %s"   (fmt_pos p)
   | KWi8(p)        -> Printf.sprintf "i8     (kw)    : %s"   (fmt_pos p)
   | KWi16(p)       -> Printf.sprintf "i16    (kw)    : %s"   (fmt_pos p)
   | KWi32(p)       -> Printf.sprintf "i32    (kw)    : %s"   (fmt_pos p)
@@ -292,6 +294,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "as" ->
         let tok = KWAs(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "is" ->
+        let tok = KWIs(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "i8" ->
         let tok = KWi8(get_pos buf) in
