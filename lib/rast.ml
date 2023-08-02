@@ -57,6 +57,9 @@ type rexpr =
   | RWhileExpr of rast_t * rstmt list * rexpr * rstmt list
 
 and rpattern =
+  (* The LHS type in each case, when relevant, is the type of the source value
+  being matched by the pattern. *)
+
   | RWild of rast_t
   | RVarBind of rast_t * string
   | RPNil
@@ -66,9 +69,9 @@ and rpattern =
   | RPIntUntil of rast_t * int
   | RPIntRange of rast_t * int * int
   | RPTuple of rast_t * rpattern list
-  (* Reinterpret the matchee as the given type, and then apply the given
-  pattern. *)
-  | RPCastThen of rast_t * cast_op * rpattern
+  (* Reinterpret the matchee as the given type (the second given type), and then
+  apply the given pattern. *)
+  | RPCastThen of rast_t * rast_t * cast_op * rpattern
   (* Match the matchee against the given pattern, but also bind a variable of
   the given name to the matchee. *)
   | RPatternAs of rast_t * rpattern * string
@@ -132,6 +135,22 @@ let rexpr_type exp : rast_t =
   | RTupleIndexExpr(typ, _, _) -> typ
   | RTupleExpr(typ, _) -> typ
   | RMatchExpr(typ, _, _) -> typ
+  end
+;;
+
+let rpattern_type patt : rast_t =
+  begin match patt with
+  | RWild(t) -> t
+  | RVarBind(t, _) -> t
+  | RPNil -> RNil
+  | RPBool(_) -> RBool
+  | RPIntLit(t, _) -> t
+  | RPIntFrom(t, _) -> t
+  | RPIntUntil(t, _) -> t
+  | RPIntRange(t, _, _) -> t
+  | RPTuple(t, _) -> t
+  | RPCastThen(t, _, _, _) -> t
+  | RPatternAs(t, _, _) -> t
   end
 ;;
 
@@ -330,11 +349,11 @@ and fmt_rpattern ?(print_typ=false) ?(init_ind="") rpatt =
     | RPTuple(rt, patterns) ->
         let patterns_fmt = List.map _fmt_rpattern patterns in
         sprintf "(%s)%s" (fmt_join_strs ", " patterns_fmt) (_maybe_fmt_rtype rt)
-    | RPCastThen(rt, op, patt) ->
-        let rt_fmt = fmt_rtype rt in
+    | RPCastThen(_, target_rt, op, patt) ->
+        let target_rt_fmt = fmt_rtype target_rt in
         let op_fmt = fmt_cast_op op in
         let patt_fmt = _fmt_rpattern patt in
-        sprintf "<%s_cast<%s>, then match %s>" op_fmt rt_fmt patt_fmt
+        sprintf "<%s_cast<%s>, then match %s>" op_fmt target_rt_fmt patt_fmt
     | RPatternAs(t, pattern, var_name) ->
         sprintf
           "%s%s as %s"

@@ -661,8 +661,20 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
       (hctxt, hscope, decl)
 
-  | RPCastThen(target_t, (Bitwise as op), casted_patt) ->
+  | RPCastThen(t, target_t, (Bitwise as op), casted_patt) ->
       let matchee_t = hir_variable_type hmatchee in
+
+      let _ =
+        if is_same_type t matchee_t then
+          ()
+        else
+          failwith (
+            Printf.sprintf
+              "Error: Pattern type and expr type do not agree: [ %s ] vs [ %s ]"
+              (fmt_rtype t)
+              (fmt_rtype matchee_t)
+          )
+      in
 
       (* Only generate the cast if it's a non-no-op cast, as otherwise
       during codegen the code generator may elide the cast instruction
@@ -695,7 +707,21 @@ and rpattern_to_hir hctxt hscope hmatchee patt =
 
       rpattern_to_hir hctxt hscope decl casted_patt
 
-  | RPCastThen(target_t, op, casted_patt) ->
+  | RPCastThen(t, target_t, op, casted_patt) ->
+      let matchee_t = hir_variable_type hmatchee in
+
+      let _ =
+        if is_same_type t matchee_t then
+          ()
+        else
+          failwith (
+            Printf.sprintf
+              "Error: Pattern type and expr type do not agree: [ %s ] vs [ %s ]"
+              (fmt_rtype t)
+              (fmt_rtype matchee_t)
+          )
+      in
+
       (* Cast the matchee to the target type, then descend into the sub
       pattern. *)
       let (hctxt, tmp) = get_tmp_name hctxt in

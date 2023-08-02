@@ -286,7 +286,8 @@ and pattern_to_rpattern patt : rpattern =
         RPTuple(ctor_tuple_t, tuple_rpatts)
       end in
 
-      RPCastThen(ctor_tuple_t, Bitwise, tuple_patt)
+      let rt = berk_t_to_rast_t t in
+      RPCastThen(rt, ctor_tuple_t, Bitwise, tuple_patt)
 
   | PatternAs(t, patt, name) ->
       let rt = berk_t_to_rast_t t in
