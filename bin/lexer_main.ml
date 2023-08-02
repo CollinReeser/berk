@@ -765,6 +765,18 @@ let () =
         }
       }
 
+      let short_circuit_val = if true && false {
+        10
+      } else if false || false {
+        20
+      } else if true && true {
+        30
+      } else {
+        40
+      };
+
+      ignore printf("Short-circuit val: [%d]\n", short_circuit_val);
+
       return 0;
     }
   |} in
