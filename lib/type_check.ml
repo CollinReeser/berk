@@ -981,10 +981,70 @@ and type_check_expr
         )
 
     | IfIsThenElseExpr(_, conds, then_expr, else_expr) ->
-        conds |> ignore;
-        then_expr |> ignore;
-        else_expr |> ignore;
-        failwith "IfIsThenElseExpr: Unimplemented"
+        let (tc_ctxt, conds_typechecked) =
+          List.fold_left_map (
+            fun tc_ctxt cond ->
+              begin match cond with
+              | IfIsGeneral(inner_cond) ->
+                  (* Normal boolean conditions should evaluate to bool. *)
+
+                  let inner_cond_typechecked =
+                    type_check_expr tc_ctxt Undecided inner_cond
+                  in
+                  let inner_cond_t = expr_type inner_cond_typechecked in
+
+                  let _ = match inner_cond_t with
+                  | Bool -> ()
+                  | _ -> failwith "if-expr condition must resolve to Bool"
+                  in
+
+                  (tc_ctxt, IfIsGeneral(inner_cond_typechecked))
+
+              | IfIsPattern(matched_exp, patt) ->
+                  (* is-bindings need to agree in type between the matchee and
+                  the match pattern. The boolean conditional is implied by
+                  whether or not the match actually succeeds. *)
+
+                  let matched_exp_typechecked =
+                    type_check_expr tc_ctxt Undecided matched_exp
+                  in
+                  let matched_exp_t = expr_type matched_exp_typechecked in
+
+                  let (tc_ctxt, patt_typechecked) =
+                    type_check_pattern tc_ctxt matched_exp_t patt
+                  in
+
+                  (
+                    tc_ctxt,
+                    IfIsPattern(matched_exp_typechecked, patt_typechecked)
+                  )
+              end
+          ) tc_ctxt conds
+        in
+
+        (* Since there could be new variable bindings introduced from the
+        conditional patterns, we need to use the updated tc_ctxt we have rather
+        than the top-level one, as these bindings need to exist within the
+        then-branch (but not the else-branch!) *)
+
+        let then_expr_typechecked =
+          type_check_expr tc_ctxt expected_t then_expr
+        in
+        let else_expr_typechecked =
+          _type_check_expr else_expr
+        in
+
+        let then_expr_t = expr_type then_expr_typechecked in
+        let else_expr_t = expr_type else_expr_typechecked in
+
+        let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
+
+        IfIsThenElseExpr(
+          then_else_agreement_t,
+          conds_typechecked,
+          then_expr_typechecked,
+          else_expr_typechecked
+        )
 
     | WhileExpr(_, init_stmts, while_cond, then_stmts) ->
         (* NOTE: We keep the returned tc_ctxt for typechecking the init-stmts,
