@@ -63,24 +63,6 @@ type hir_instr =
   | HExprInvokeVoid of hir_variable * hir_variable list
 
 
-and rpattern =
-  | HWild of rast_t
-  | HVarBind of rast_t * string
-  | HPNil
-  | HPBool of bool
-  | HPIntLit of rast_t * int
-  | HPIntFrom of rast_t * int
-  | HPIntUntil of rast_t * int
-  | HPIntRange of rast_t * int * int
-  | HPTuple of rast_t * rpattern list
-  (* Reinterpret the matchee as the given type, and then apply the given
-  pattern. *)
-  | HPCastThen of rast_t * cast_op * rpattern
-  (* Match the matchee against the given pattern, but also bind a variable of
-  the given name to the matchee. *)
-  | HPatternAs of rast_t * rpattern * string
-
-
 type hir_scope = {
   declarations: hir_variable list;
   instructions: hir_scope_instr list;
