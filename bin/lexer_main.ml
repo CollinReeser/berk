@@ -55,6 +55,29 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    fn if_is_expr() {
+      let opt = Some(5);
+
+      match opt {
+      | Some(i) -> {
+          ignore printf("if_is_expr::match::i: [%d]\n", i);
+        }
+      | None -> {
+          ignore printf("if_is_expr::match failed!\n");
+        }
+      }
+
+      if opt is Some(_) {
+        ignore printf("if_is_expr::is!\n");
+      }
+
+      if opt is None {
+        ignore printf("if_is_expr::None??\n");
+      }
+
+      return;
+    }
+
     fn is_unsigned_sub_safe(lhs: u64, rhs: u64): YesOrNo<bool> {
       if lhs >= rhs {
         return Yes(true);
@@ -412,7 +435,7 @@ let () =
       ignore printf("or_true_2:   [%d] ([1] expected)\n", or_true_2);
       ignore printf("or_true_3:   [%d] ([1] expected)\n", or_true_3);
 
-      ignore short_circuit(true, "short circuit sanity");
+      ignore short_circuit(true, "short circuit sanity\n");
 
       ignore printf("Expect LHS only: ");
       let and_ff =
@@ -776,6 +799,8 @@ let () =
       };
 
       ignore printf("Short-circuit val: [%d]\n", short_circuit_val);
+
+      if_is_expr();
 
       return 0;
     }

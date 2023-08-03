@@ -602,6 +602,7 @@ and parse_stmt ?(ind="") tokens : (token list * stmt) option =
         (
           ExprStmt(_, BlockExpr(_, _, _))
         | ExprStmt(_, IfThenElseExpr(_, _, _, _))
+        | ExprStmt(_, IfIsThenElseExpr(_, _, _, _))
         | ExprStmt(_, WhileExpr(_, _, _, _))
         | ExprStmt(_, MatchExpr(_, _, _))
         ),
@@ -931,6 +932,13 @@ and parse_logical_and ?(ind="") tokens : (token list * expr) =
   _parse_logical_and ~ind:ind_next rest exp_lhs
 
 
+and parse_if_is_reduced_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  let (rest, exp) = parse_equality ~ind:ind_next tokens in
+  (rest, exp)
+
+
 and parse_equality ?(ind="") tokens : (token list * expr) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
@@ -1101,7 +1109,7 @@ and parse_value ?(ind="") tokens : (token list * expr) =
     with Backtrack ->
     try parse_paren_expr ~ind:ind_next tokens
     with Backtrack ->
-    try parse_if_expr ~ind:ind_next tokens
+    try parse_if_expr_general ~ind:ind_next tokens
     with Backtrack ->
     try parse_while_expr ~ind:ind_next tokens
     with Backtrack ->
@@ -1171,6 +1179,12 @@ and parse_value ?(ind="") tokens : (token list * expr) =
   in
 
   _parse_value ~ind:ind_next rest exp
+
+
+and parse_if_expr_general ?(ind="") tokens : (token list * expr) =
+  try parse_if_expr ~ind:ind tokens
+  with Backtrack ->
+  parse_if_is_expr ~ind:ind tokens
 
 
 and parse_func_call ?(ind="") tokens : (token list * expr) =
@@ -1478,6 +1492,60 @@ and parse_if_expr ?(ind="") tokens : (token list * expr) =
   end
 
 
+and parse_if_is_expr ?(ind="") tokens : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  begin match tokens with
+  | KWIf(_) :: rest ->
+      let (rest, cond) =
+        begin try
+          let (rest, exp) = parse_if_is_reduced_expr ~ind:ind_next rest in
+          begin match rest with
+          | KWIs(_) :: rest ->
+              let (rest, patt) = parse_pattern ~ind:ind_next rest in
+              (rest, IfIsPattern(exp, patt))
+
+          | _ ->
+              raise Backtrack
+          end
+
+        with Backtrack ->
+          let (rest, cond_exp) = parse_if_is_reduced_expr ~ind:ind_next rest in
+          (rest, IfIsGeneral(cond_exp))
+        end
+      in
+
+      let conds = [cond] in
+
+      let (rest, then_exp) = parse_expr_block ~ind:ind_next rest in
+
+      let _parse_else tokens : (token list * expr) =
+        begin match tokens with
+        | KWElse(_) :: rest ->
+            begin try
+              (* Try to chain into another if-expr. *)
+              parse_if_expr_general ~ind:ind rest
+            with Backtrack ->
+              (* Try to parse the final else expr block. *)
+              parse_expr_block ~ind:ind_next rest
+            end
+
+        | _ :: _ ->
+            (rest, ValNil)
+
+        | [] -> failwith "Unexpected EOF while parsing if-expr."
+        end
+      in
+
+      let (rest, else_exp) = _parse_else rest in
+
+      (rest, IfIsThenElseExpr(Undecided, conds, then_exp, else_exp))
+
+  | _ ->
+      raise Backtrack
+  end
+
+
 and parse_while_expr ?(ind="") tokens : (token list * expr) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
@@ -1509,107 +1577,109 @@ and parse_while_expr ?(ind="") tokens : (token list * expr) =
   end
 
 
-and parse_match_expr ?(ind="") tokens : (token list * expr) =
+and parse_pattern ?(ind="") tokens : (token list * pattern) =
   let _ = print_trace ind __FUNCTION__ tokens in
 
   (* Parse eg:
     as <ident>
   *)
-  let rec _parse_pattern tokens =
-    let _parse_pattern_as tokens pattern =
-      begin match tokens with
-      | KWAs(_) :: LowIdent(_, as_name) :: rest ->
-          (rest, PatternAs(Undecided, pattern, as_name))
-
-      | KWAs(_) :: _ ->
-          failwith "`as` match pattern requires bind name"
-
-      | _ ->
-          (tokens, pattern)
-      end
-    in
-
-    (* Parse eg:
-      , <pattern>, <pattern>, <pattern>)
-    *)
-    let rec _parse_comma_pattern_multi tokens more_patterns_rev =
-      begin match tokens with
-      | Comma(_) :: rest ->
-          let (rest, next_pattern) = _parse_pattern rest in
-          let more_patterns_rev' = next_pattern :: more_patterns_rev in
-          _parse_comma_pattern_multi rest more_patterns_rev'
-
-      | RParen(_) :: rest ->
-          (rest, more_patterns_rev)
-
-      | _ ->
-          failwith "Failed to parse comma-delimited patterns in match expr"
-      end
-    in
-
+  let _parse_pattern_as tokens pattern =
     begin match tokens with
-    (* Variable bind pattern. *)
-    | LowIdent(_, bind_name) :: rest ->
-        (rest, VarBind(Undecided, bind_name))
+    | KWAs(_) :: LowIdent(_, as_name) :: rest ->
+        (rest, PatternAs(Undecided, pattern, as_name))
 
-    (* Wildcard pattern. *)
-    | Underscore(_) :: rest ->
-        let pattern = Wild(Undecided) in
-        _parse_pattern_as rest pattern
-
-    | KWTrue(_) :: rest ->
-        let pattern = PBool(true) in
-        _parse_pattern_as rest pattern
-
-    | KWFalse(_) :: rest ->
-        let pattern = PBool(false) in
-        _parse_pattern_as rest pattern
-
-    | Integer(_, i) :: DotDot(_) :: Integer(_, j) :: rest ->
-        let pattern = PInt(Undecided, IRangeFromUntil(i, j)) in
-        _parse_pattern_as rest pattern
-
-    | Integer(_, i) :: DotDot(_) :: rest ->
-        let pattern = PInt(Undecided, IRangeAllFrom(i)) in
-        _parse_pattern_as rest pattern
-
-    | DotDot(_) :: Integer(_, i) :: rest ->
-        let pattern = PInt(Undecided, IRangeAllUntil(i)) in
-        _parse_pattern_as rest pattern
-
-    | Integer(_, i) :: rest ->
-        let pattern = PInt(Undecided, IRangeLiteral(i)) in
-        _parse_pattern_as rest pattern
-
-    (* Tuple pattern. *)
-    | LParen(_) :: rest ->
-        let (rest, first_pattern) = _parse_pattern rest in
-
-        let (rest, more_patterns_rev) = _parse_comma_pattern_multi rest [] in
-        let more_patterns = List.rev more_patterns_rev in
-        let tuple_sub_patterns = first_pattern :: more_patterns in
-        let pattern = PTuple(Undecided, tuple_sub_patterns) in
-        _parse_pattern_as rest pattern
-
-    (* Variant deconstruction pattern with fields. *)
-    | CapIdent(_, v_name) :: LParen(_) :: rest ->
-        let (rest, first_pattern) = _parse_pattern rest in
-
-        let (rest, more_patterns_rev) = _parse_comma_pattern_multi rest [] in
-        let more_patterns = List.rev more_patterns_rev in
-        let ctor_sub_patterns = first_pattern :: more_patterns in
-        let pattern = Ctor(Undecided, v_name, ctor_sub_patterns) in
-        _parse_pattern_as rest pattern
-
-    (* Variant deconstruction with no fields. *)
-    | CapIdent(_, v_name) :: rest ->
-        let pattern = Ctor(Undecided, v_name, []) in
-        _parse_pattern_as rest pattern
+    | KWAs(_) :: _ ->
+        failwith "`as` match pattern requires bind name"
 
     | _ ->
-        failwith "Failed to parse match expr pattern."
+        (tokens, pattern)
     end
   in
+
+  (* Parse eg:
+    , <pattern>, <pattern>, <pattern>)
+  *)
+  let rec _parse_comma_pattern_multi tokens more_patterns_rev =
+    begin match tokens with
+    | Comma(_) :: rest ->
+        let (rest, next_pattern) = parse_pattern rest in
+        let more_patterns_rev' = next_pattern :: more_patterns_rev in
+        _parse_comma_pattern_multi rest more_patterns_rev'
+
+    | RParen(_) :: rest ->
+        (rest, more_patterns_rev)
+
+    | _ ->
+        failwith "Failed to parse comma-delimited patterns in match expr"
+    end
+  in
+
+  begin match tokens with
+  (* Variable bind pattern. *)
+  | LowIdent(_, bind_name) :: rest ->
+      (rest, VarBind(Undecided, bind_name))
+
+  (* Wildcard pattern. *)
+  | Underscore(_) :: rest ->
+      let pattern = Wild(Undecided) in
+      _parse_pattern_as rest pattern
+
+  | KWTrue(_) :: rest ->
+      let pattern = PBool(true) in
+      _parse_pattern_as rest pattern
+
+  | KWFalse(_) :: rest ->
+      let pattern = PBool(false) in
+      _parse_pattern_as rest pattern
+
+  | Integer(_, i) :: DotDot(_) :: Integer(_, j) :: rest ->
+      let pattern = PInt(Undecided, IRangeFromUntil(i, j)) in
+      _parse_pattern_as rest pattern
+
+  | Integer(_, i) :: DotDot(_) :: rest ->
+      let pattern = PInt(Undecided, IRangeAllFrom(i)) in
+      _parse_pattern_as rest pattern
+
+  | DotDot(_) :: Integer(_, i) :: rest ->
+      let pattern = PInt(Undecided, IRangeAllUntil(i)) in
+      _parse_pattern_as rest pattern
+
+  | Integer(_, i) :: rest ->
+      let pattern = PInt(Undecided, IRangeLiteral(i)) in
+      _parse_pattern_as rest pattern
+
+  (* Tuple pattern. *)
+  | LParen(_) :: rest ->
+      let (rest, first_pattern) = parse_pattern rest in
+
+      let (rest, more_patterns_rev) = _parse_comma_pattern_multi rest [] in
+      let more_patterns = List.rev more_patterns_rev in
+      let tuple_sub_patterns = first_pattern :: more_patterns in
+      let pattern = PTuple(Undecided, tuple_sub_patterns) in
+      _parse_pattern_as rest pattern
+
+  (* Variant deconstruction pattern with fields. *)
+  | CapIdent(_, v_name) :: LParen(_) :: rest ->
+      let (rest, first_pattern) = parse_pattern rest in
+
+      let (rest, more_patterns_rev) = _parse_comma_pattern_multi rest [] in
+      let more_patterns = List.rev more_patterns_rev in
+      let ctor_sub_patterns = first_pattern :: more_patterns in
+      let pattern = Ctor(Undecided, v_name, ctor_sub_patterns) in
+      _parse_pattern_as rest pattern
+
+  (* Variant deconstruction with no fields. *)
+  | CapIdent(_, v_name) :: rest ->
+      let pattern = Ctor(Undecided, v_name, []) in
+      _parse_pattern_as rest pattern
+
+  | _ ->
+      failwith "Failed to parse match expr pattern."
+  end
+
+
+and parse_match_expr ?(ind="") tokens : (token list * expr) =
+  let _ = print_trace ind __FUNCTION__ tokens in
 
   (* Parse eg:
     | (Some(x, false, _), false) -> 5
@@ -1620,7 +1690,7 @@ and parse_match_expr ?(ind="") tokens : (token list * expr) =
     let rec __parse_pattern_expr_pairs tokens pattern_expr_pairs_rev =
       begin match tokens with
       | Bar(_) :: rest ->
-          let (rest, pattern) = _parse_pattern rest in
+          let (rest, pattern) = parse_pattern rest in
 
           begin match rest with
           | Arrow(_) :: rest ->

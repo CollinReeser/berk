@@ -1537,6 +1537,50 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
 
         IfThenElseExpr(common_t, cond_exp, then_exp_injected, else_exp_injected)
 
+    | (_, IfIsThenElseExpr(_, conds, then_exp, else_exp)) ->
+        (* The injected type into an if-expr should be the common type that
+        all branches agree on, but that is still convertible to the injected
+        type itself. Put another way, the "most concrete" type to use is the one
+        that combines the possibly-incomplete information shared between the
+        injected type, the then-branch type, and the else-branch type, but this
+        common type must not be a superset of the injected type. *)
+
+        let then_t = expr_type then_exp in
+        let else_t = expr_type else_exp in
+        let common_then_else_t = common_type_of_lr then_t else_t in
+        let common_t = common_type_of_lr injected_t common_then_else_t in
+
+        (* The common type of the then/else/expected types, if it exists, may be
+        a superset of the injected type, but the injected type is expected to
+        dominate. *)
+        let common_t = if type_convertible_to common_t injected_t then
+          common_t
+        else
+          failwith (
+            Printf.sprintf
+              (
+                "then/else branches do not agree on type that is compatible " ^^
+                "with injected type: then [[ %s ]], else [[ %s ]], " ^^
+                "common then/else [[ %s ]], common all [[ %s ]], " ^^
+                "injected [[ %s ]]"
+              )
+              (fmt_type then_t)
+              (fmt_type else_t)
+              (fmt_type common_then_else_t)
+              (fmt_type common_t)
+              (fmt_type injected_t)
+          )
+        in
+
+        let then_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") common_t then_exp
+        in
+        let else_exp_injected =
+          inject_type_into_expr ~ind:(ind ^ "  ") common_t else_exp
+        in
+
+        IfIsThenElseExpr(common_t, conds, then_exp_injected, else_exp_injected)
+
     | (_, WhileExpr(_, init_stmts, cond_expr, stmts)) ->
         if injected_t <> Nil then
           failwith "Type of while-expr must be nil."
