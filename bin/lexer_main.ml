@@ -75,6 +75,31 @@ let () =
         ignore printf("if_is_expr::None??\n");
       }
 
+      if true && opt is Some(_) {
+        ignore printf("if_is_expr::is 2!\n");
+      }
+
+      if opt is Some(_) && true {
+        ignore printf("if_is_expr::is 3!\n");
+      }
+
+      if false && opt is Some(_) {
+        ignore printf("if_is_expr::is 4!\n");
+      }
+
+      if opt is Some(_) && false {
+        ignore printf("if_is_expr::is 5!\n");
+      }
+
+      let yes_val = Yes(":D");
+      if opt is Some(i) && yes_val is Yes(str) {
+        ignore printf("if_is_expr::is, could it be... [%d] [%s]\n", i, str);
+      }
+
+      if opt is Some(i) && i == 5 {
+        ignore printf("if_is_expr::is, could it be... [%d]\n", i);
+      }
+
       return;
     }
 

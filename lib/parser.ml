@@ -1497,25 +1497,38 @@ and parse_if_is_expr ?(ind="") tokens : (token list * expr) =
 
   begin match tokens with
   | KWIf(_) :: rest ->
-      let (rest, cond) =
-        begin try
-          let (rest, exp) = parse_if_is_reduced_expr ~ind:ind_next rest in
-          begin match rest with
-          | KWIs(_) :: rest ->
-              let (rest, patt) = parse_pattern ~ind:ind_next rest in
-              (rest, IfIsPattern(exp, patt))
+      let rec _parse_if_is_conds rest conds_rev =
+        let (rest, conds_rev) =
+          begin try
+            let (rest, exp) = parse_if_is_reduced_expr ~ind:ind_next rest in
+            begin match rest with
+            | KWIs(_) :: rest ->
+                let (rest, patt) = parse_pattern ~ind:ind_next rest in
+                (rest, IfIsPattern(exp, patt) :: conds_rev)
 
-          | _ ->
-              raise Backtrack
+            | _ ->
+                raise Backtrack
+            end
+
+          with Backtrack ->
+            let (rest, cond_exp) =
+              parse_if_is_reduced_expr ~ind:ind_next rest
+            in
+            (rest, IfIsGeneral(cond_exp) :: conds_rev)
           end
+        in
+        begin match rest with
+        | AmpAmp(_) :: rest ->
+            _parse_if_is_conds rest conds_rev
 
-        with Backtrack ->
-          let (rest, cond_exp) = parse_if_is_reduced_expr ~ind:ind_next rest in
-          (rest, IfIsGeneral(cond_exp))
+        | _ ->
+            (rest, conds_rev)
         end
       in
 
-      let conds = [cond] in
+      let (rest, conds_rev) = _parse_if_is_conds rest [] in
+
+      let conds = List.rev conds_rev in
 
       let (rest, then_exp) = parse_expr_block ~ind:ind_next rest in
 
