@@ -55,6 +55,20 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    fn if_is_expr_test() {
+      if Some(5) is Some(i) {
+        ignore printf("if_is_expr_test [%d] (5)\n", i);
+      }
+
+      if Yes("Value!") is Yes(s) && Some(10.5) is Some(f) {
+        ignore printf(
+          "if_is_expr_test [%s] ('Value!'); [%.1f] (10.5)\n", s, f
+        );
+      }
+
+      return;
+    }
+
     fn if_is_expr() {
       let opt = Some(5);
 
@@ -826,6 +840,8 @@ let () =
       ignore printf("Short-circuit val: [%d]\n", short_circuit_val);
 
       if_is_expr();
+
+      if_is_expr_test();
 
       return 0;
     }

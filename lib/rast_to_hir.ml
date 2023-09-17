@@ -254,11 +254,34 @@ and rexpr_to_hir hctxt hscope rexpr
       (* Only generate the cast if it's a non-no-op cast, as otherwise
       during codegen the code generator may elide the cast instruction
       entirely, which can mess up the expectation that MIR and codegen IR
-      agree on names of temporaries. *)
+      agree on names of temporaries.
+
+      NOTE: We still treat the final decl as-if it were casted to the
+      target type, even if we elide an explicit cast.
+      *)
 
       let (hctxt, hscope, decl) = begin
         if (is_bitwise_same_type target_t exp_t) then
-          (hctxt, hscope, rhs_var)
+          (* In this case, the source type and target type have the same bitwise
+          representation, so we must elide an instruction to perform an actual
+          cast. Instead, we perform an "implicit" cast by storing the source
+          value into a memory location, and loading it back in as-if it were the
+          target type.
+
+          NOTE: This kind of implicit cast is often required when casting
+          variant temporaries, so that follow-on instructions are working in
+          terms of the variant's "super tuple" type, rather than its "concrete
+          tuple" type. *)
+          let (hctxt, tmp_store) = get_tmp_name hctxt in
+          let (hctxt, tmp_load) = get_tmp_name hctxt in
+          let decl_store = (RPtr(exp_t), tmp_store) in
+          let decl_load = (target_t, tmp_load) in
+          let decls = decl_store :: hscope.declarations in
+          let instr_store = Instr(HValueStore(decl_store, rhs_var)) in
+          let instr_load = Instr(HValueLoad(decl_load, decl_store)) in
+          let instrs = instr_load :: instr_store :: hscope.instructions in
+          let hscope = {declarations = decls; instructions = instrs} in
+          (hctxt, hscope, decl_load)
 
         else
           let (hctxt, tmp_store) = get_tmp_name hctxt in
