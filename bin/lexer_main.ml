@@ -209,6 +209,20 @@ let () =
       return v1 + v4;
     }
 
+    fn phi_test(one: i64, two: i64) {
+      let mut phi_one = one;
+      let mut phi_two = two;
+
+      if phi_one + phi_two > 20 {
+        phi_one = 30;
+        phi_two = 40;
+      }
+
+      ignore printf("one: [%d]; two: [%d]\n", phi_one, phi_two);
+
+      return;
+    }
+
     fn main(): i8 {
       let dup_hello_1 = "Hello, world!";
       let dup_hello_2 = "Hello, world!";
@@ -842,6 +856,8 @@ let () =
       if_is_expr();
 
       if_is_expr_test();
+
+      phi_test(10, 20);
 
       return 0;
     }
