@@ -1,0 +1,62 @@
+TODO:
+  Features:
+    [X] - multi-dimensional static arrays
+    [X] - Adding parsing support for variants
+    [X] - Add parsing support for match expressions
+    [X] - Fix support for variant constructors with non-zero fields in MIR
+    [X] - Fix support for variant constructors with only fieldless ctors in MIR
+    [X] - Add parsing support for floats
+    [X] - Add parsing support for deconstructing variable declaration stmt
+    [X] - Support logical-and, logical-or
+    [X] - Support basic usage of templated variants
+    [X] - Add parsing support for `let x: T` where T is a user-defined variant
+    [X] - Add parsing support for `let x: T` where T is a templated variant
+    [X] - Add support for returning templated variants
+    [X] - Support logical-not
+    [X] - Support for UFCS
+    [X] - Support matching integers/integer ranges in match expr
+    [X] - Arbitrarily-complex stack-allocated datastructures (beyond basic arr)
+    [ ] - Disallow redundant overlapping integer ranges in match expr
+    [ ] - Support for variant field labels
+    [ ] - Add parsing support for truncate/extend
+    [ ] - Add parsing support for bitwise cast
+    [ ] - Support array expressions by marrying with default-array-type init
+    [ ] - Indexing into strings
+    [ ] - .length for arrays, strings
+    [ ] - Support indexing variant field without match if all ctors have it
+    [ ] - Address TODOs
+    [ ] - Compile-time check disallowing identical non-volatile const exprs (catches copy-paste bugs). Debate: Sometimes stuff only _seems_ identical.
+  Refactors and Simplifications:
+    [X] - Simplify lval_to_alloca
+    [X] - Rename `StaticIndex` into `TupleIndex`
+    [X] - Simplify parser.ml tracing debug logic
+    [X] - Remove AST support for various integer types, only need ValInt
+    [X] - Remove required indent arg to fmt_expr
+    [X] - Collapse the truncate/bitwise/extend casts into one unary op expr
+    [X] - Remove support for deconstructed assignment (may add back later?)
+    [X] - Remove mir_main.ml after all features work in lexer_main.ml
+    [X] - Remove main.ml after ensuring all features work in lexer_main.ml
+    [X] - Remove codegen.ml after all features work in lexer_main.ml
+    [X] - Rewrite `rewrite_to_unique_varnames` for cleaner folds
+    [X] - Avoid "reversed" lists from folds with fold_*_map
+    [X] - Remove mandatory indent arg from `fmt_pattern`
+    [X] - Make VariantCtorExpr instead take a trailing `expr list`, not tup
+    [X] - Define a reduced-complexity AST (RAST), then AST -> RAST
+    [X] - Implement RAST -> MIR
+    [X] - Remove AST -> MIR
+    [ ] - Marry type_convertible_to and merge_types
+    [ ] - Simplify/refactor `unwrap_*` family/friends functions
+    [ ] - Peruse MIR/MIR-codegen impl for simplifications
+    [ ] - ? Remove ident_t in favor of raw string
+    [ ] - ? Remove support for variable shadowing, removes substantial code
+    [ ] - ? Remove/rework concept of deconstructing assignment
+    [ ] - ? Remove explicit parsing for variant typevars, infer after parse
+    [ ] - ? Impl MIR for variants as tuples with hidden first u8
+    [ ] - ? Can ValRawArray expr and ByteArray type be married somehow?
+    [ ] - ? Simplify expr/stmt dichotomy
+  Bug Fixes:
+    [X] - Fix being able to access shallow out-of-scope variables from BlockExpr
+    [X] - Fix being unable to re-use `as` variable names in disparate match arms
+    [X] - Fix LLVM instruction dominance issue involving repeat variable names
+    [ ] - Fix chained tuple index parse fail due to float confusion, `tup.1.2`
+    [ ] - Address FIXMEs

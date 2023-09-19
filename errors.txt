@@ -1,0 +1,680 @@
+Error-handling musings
+
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let
+            Ok(fd_1) is open(p_1, Read) &&
+            Ok(fd_2) is open(p_2, Read)
+        catch Err with open_failed;
+
+        try let
+            Ok(txt_1) is readline(fd_1) &&
+            Ok(txt_2) is readline(fd_2)
+        catch Err with readline_failed;
+
+        try let
+            Ok(x) is txt_1.to_int() &&
+            Ok(y) is txt_2.to_int()
+        catch Err with to_int_failed;
+
+        return Some(x + y);
+    }
+    catch Err(err_str) is open_failed {
+        printf("Failed to open file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is readline_failed {
+        printf("Failed to read file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is to_int_failed {
+        printf("Failed to parse str to int: %s\n", err_str.c_str());
+    }
+
+    return None;
+}
+
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let Ok(fd_1) is open(p_1, Read);
+        try let Ok(fd_2) is open(p_2, Read);
+
+        try let Ok(txt_1) is readline(fd_1);
+        try let Ok(txt_2) is readline(fd_2);
+
+        try let Ok(x) is txt_1.to_int();
+        try let Ok(y) is txt_2.to_int();
+
+        return Some(x + y);
+    }
+
+    return None;
+}
+
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let Ok(fd_1) is open(p_1, Read);
+        try let Ok(fd_2) is open(p_2, Read);
+
+        try let Ok(txt_1) is readline(fd_1);
+        try let Ok(txt_2) is readline(fd_2);
+
+        try let Ok(x) is txt_1.to_int();
+        try let Ok(y) is txt_2.to_int();
+
+        return Some(x + y);
+    }
+
+    return None;
+}
+
+===
+
+// `else` block that must return, Swift-style.
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let Ok(fd_1) is open(p_1, Read) else { return None };
+    try let Ok(fd_2) is open(p_2, Read) else { return None };
+
+    try let Ok(txt_1) is readline(fd_1) else { return None };
+    try let Ok(txt_2) is readline(fd_2) else { return None };
+
+    try let Ok(x) is txt_1.to_int() else { return None };
+    try let Ok(y) is txt_2.to_int() else { return None };
+
+    return Some(x + y);
+
+    return None;
+}
+
+// `catch` block that produces a different value (?).
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let Ok(fd_1) is open(p_1, Read) catch { 3 };
+    try let Ok(fd_2) is open(p_2, Read) catch { 3 };
+
+    try let Ok(txt_1) is readline(fd_1) catch { 3 };
+    try let Ok(txt_2) is readline(fd_2) catch { 3 };
+
+    try let Ok(x) is txt_1.to_int() catch { 3 };
+    try let Ok(y) is txt_2.to_int() catch { 3 };
+
+    return Some(x + y);
+
+    return None;
+}
+
+// `catch` syntax for differentiating between different kinds of errors.
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let
+            Ok(fd_1) is open(p_1, Read) &&
+            Ok(fd_2) is open(p_2, Read)
+        catch Err as open_failed;
+
+        try let
+            Ok(txt_1) is readline(fd_1) &&
+            Ok(txt_2) is readline(fd_2)
+        catch Err as readline_failed;
+
+        try let
+            Ok(x) is txt_1.to_int() &&
+            Ok(y) is txt_2.to_int()
+        catch Err as to_int_failed;
+
+        return Some(x + y);
+    }
+    catch Err(err_str) is open_failed {
+        printf("Failed to open file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is readline_failed {
+        printf("Failed to read file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is to_int_failed {
+        printf("Failed to parse str to int: %s\n", err_str.c_str());
+    }
+
+    return None;
+}
+
+// `catch` syntax for traditional-style `try`/`catch`
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let
+            Ok(fd_1) is open(p_1, Read) &&
+            Ok(fd_2) is open(p_2, Read)
+        catch Err;
+
+        try let
+            Ok(txt_1) is readline(fd_1) &&
+            Ok(txt_2) is readline(fd_2)
+        catch Err;
+
+        try let
+            Ok(x) is txt_1.to_int() &&
+            Ok(y) is txt_2.to_int()
+        catch Err;
+
+        return Some(x + y);
+    }
+    catch Err(err_str) {
+        printf("Failed to open file: %s\n", err_str.c_str());
+    }
+
+    return None;
+}
+
+// Error propagation.
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    try let Ok(fd_1) is open(p_1, Read) else;
+    try let Ok(fd_2) is open(p_2, Read) else;
+
+    try let Ok(txt_1) is readline(fd_1) else;
+    try let Ok(txt_2) is readline(fd_2) else;
+
+    try let Ok(x) is txt_1.to_int() else;
+    try let Ok(y) is txt_2.to_int() else;
+
+    return Ok(x + y);
+}
+
+// UFCS error propagation?
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    try let value = p_1
+        .open(Read).?<Ok>
+        .readline().?<Ok>
+        .to_int()
+        * 2;
+}
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    try {
+        try let value = p_1
+            .open(Read).?<Ok, catch Err>
+            .readline().?<Ok, catch Err>
+            .to_int()
+            * 2;
+    }
+    catch Err(err_str) {
+        printf("Failed: %s\n", err_str.c_str());
+    }
+}
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    try {
+        let value = p_1
+            .open(Read).?<Ok, catch Err as open_err>
+            .readline().?<Ok, catch Err as read_err>
+            .to_int()
+            * 2;
+    }
+    catch Err(err_str) as open_err {
+        printf("Failed open: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) as read_err {
+        printf("Failed open: %s\n", err_str.c_str());
+    }
+}
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    let value = p_1
+        .open(Read).?<Ok, else "7".as_file()>
+        .readline().?<Ok, else "7">
+        .to_int()
+        * 2;
+}
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Tri<u32, string> {
+    try {
+        let value = p_1
+            .open(Read).?<Ok, return Err, else "7".as_file()>
+            .readline().?<Ok, catch Err, else "7">
+            .to_int()
+            * 2;
+    }
+    catch Err(str) {
+        printf("Err: [%s]\n", str.c_str());
+    }
+}
+// `.?<Ok>` is short for `.?<Ok, return Err>`
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    let value = p_1
+        .open(Read).?<Ok, return Err>
+        .readline().?<Ok, return Err>
+        .to_int()
+        * 2;
+
+    return Ok(value);
+}
+
+// The above approximately expands to:
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    let value = match open(p_1, Read) {
+    | Ok(v) ->
+        match readline(v) {
+        | Ok(v') -> to_int(v) * 2
+        | Err(str) -> { return Err(str); }
+        }
+    | Err(str) -> { return Err(str); }
+    };
+
+    return Ok(value);
+}
+// Or:
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    let val' = p_1.open(Read);
+    let val'' = match val' {| Ok(v) -> v | Err(str) -> {return Err(str)} };
+    let val''' = val''.readline();
+    let val'''' = match val''' {| Ok(v) -> v | Err(str) -> {return Err(str)} };
+    let val''''' = val''''.to_int() * 2;
+
+    return Ok(val''''');
+}
+
+The new functionality/syntax needs to seem "natural" amongst the other features.
+It should make sense with UFCS, regular match expressions, `if let`, etc. Maybe
+we can even find a uniform syntax for some of them? Match expressions likely
+need to remain the most full-featured version, but perhaps that means we can
+express everything else in terms of match stmts, or match stmts plus some other
+orthogonal features?
+
+Need to avoid a "cute" syntax that appears to be elegant when the examples are
+concise/simple/straightforward, but falls apart into a mess in more complex
+examples. Need to write some "real" code?
+
+The UFCS syntax above looks vaguely like a poor man's monad/do-notation,
+motivating just allowing monad style. On the other hand, UFCS is very ergonomic,
+so having a syntactic sugar for that is also reasonable. What does the
+simplified expansion look like?
+
+// Maybe part of the key is allowing UFCS for more than just function calls.
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Res<u32, string> {
+    let value = p_1
+        .open(Read).match {Ok(v) -> v | Err(_) as err -> return err}
+        .readline().match {Ok(v) -> v | Err(_) as err -> return err}
+        .to_int()
+        * 2;
+
+    return Ok(value);
+}
+
+fn test(): Res<u32, string> {
+  try {
+    let complex = tricky_func()
+      .frombulate()
+      .as tmp {
+          if tmp < 10 { 10 } else { tmp }
+      }
+      .flip()
+      .match {Some(v) -> v | None -> throw None as err_none }
+      .foobar()
+      .match {Ok(v) -> v | Err(_) as err_err -> throw err_err }
+      .baz()
+      .match {Some(v) -> v | None -> return Err("Could not baz") }
+      .blip()
+      .match {Ok(v) -> v | Err(_) -> 20 }
+      .tarp(16, _) // UFCS into different spot than first.
+      .match {Ok(v) -> v | Err(_) -> 20 }
+      .trap()
+      .?<Ok> // Equivalent: `.as tmp {match tmp {Ok(v) -> v | _ -> return tmp}}`
+      .flarb()
+      .?<Ok>
+      .frodge()
+      .?<Ok else return> // Equivalent: `.?<Ok>`
+      // .?<Ok else throw> // Equiv: `.match {Ok(v) -> v | _ as err_err -> throw err_err}`
+      // .?<Ok else {10}> // Equiv: `.match {Ok(v) -> v | _ -> 10 }`
+    ;
+
+    return Ok(complex);
+  }
+  catch None as err_none {
+    printf("None\n");
+  }
+  // What if `catch` is really just a special `match`?
+  // catch err_none {
+  // | None -> printf("None\n");
+  // // | Some(...) -> // Not needed, and statically disallowed, because
+  //                   // err_none above is known to be `None`? Maybe compiler
+  //                   // remembers subset of patterns the `as` was latched to
+  //                   // be, and only requires those are covered in `catch`?
+  // }
+  catch Err(str) as err_err {
+    printf("Err: [%s]\n", str);
+  }
+
+  return Err("Failed");
+}
+
+
+
+
+
+variant Opt<`a> {
+| Some(`a)
+| None
+}
+
+variant Res<`a, `b> {
+| Ok(`a)
+| Err(`b)
+}
+
+fn open(...): FH throws VomitException {
+  ...
+}
+
+fn read(fd: FH): Res<string, string> {
+  ...
+}
+
+fn string_to_int(line: string): Some(int) {
+  ...
+}
+
+fn do_stuff(path: FilePath): Res<int, string> {
+  let opened_file = open(path);
+  match opened_file {
+  | Ok(fh) ->
+      let line = read(fh);
+      match line {
+      | Ok(l) ->
+          let parse_i = string_to_int(l);
+          match parse_i {
+          | Some(i) -> return Ok(i * 2);
+          | None -> ...
+          }
+      | Err(str) ->
+          printf("Error opening: [%s]", str.c_str());
+          return Err(str);
+      }
+  | Err(str) ->
+      printf("Error opening: [%s]", str.c_str());
+      return Err(str);
+  }
+}
+
+
+fn do_stuff(path: FilePath): Res<int, string> {
+  let value = path
+    .open().?<Ok, return Err>
+    .read().?<Ok, return Err>
+    .string_to_int().?<Some, return Err("fucked")>
+    * 2;
+
+  return Res(value);
+}
+
+fn do_stuff(path: FilePath): Res<int, string> {
+  let value = path
+    .open().?<Ok>
+    .read().?<Ok>
+    .string_to_int().?<Some, return Err("fucked")>
+    * 2;
+
+  return Res(value);
+}
+
+
+fn do_stuff(path: FilePath): Res<int, string> {
+  try {
+    let value =
+      path
+      .open().?<Ok, return Err>
+      .read().?<Ok, throw Err as read_err>
+      .string_to_int().?<Some, else 10>
+      * 2;
+  } catch Err(str) as read_err {
+    ...
+  }
+
+  return Res(value);
+}
+
+
+fn do_stuff(path: FilePath): Res<int, string> {
+  try {
+    let Ok(fh) = path.open() throw Err as open_err;
+    let Ok(line) = fh.read() else return Err;
+    let Some(i) = line.string_to_int() throw None;
+    return Ok(i * 2);
+  }
+  catch Err(str) as open_err {
+    printf("Error opening: [%s]", str.c_str());
+    return Err(str);
+  }
+  catch Err(str) as read_err {
+    printf("Error reading: [%s]", str.c_str());
+    return Err(str);
+  }
+  catch None {
+    printf("Error opening");
+    return Err(str);
+  }
+
+  return Res(value);
+}
+
+
+
+// try {
+//   let complex_file = complex_function_returns_file(...);
+//   let file_one = open("file_one");
+//   let file_two = open("file_two");
+//   let file_three = open("file_three");
+// }
+// catch FileNotFoundException(ex) {
+//   printf("File failed to open: ", ex.what());
+// }
+// catch ArrayIndexOutOfBounds(ex) {
+
+// }
+
+
+
+
+
+
+
+
+
+
+
+fn do_stuff(path: FilePath): Res<int, string> {
+  let value = path.open()?.read()?.string_to_int()? * 2;
+
+  return Res(value);
+}
+
+
+
+
+
+
+
+
+variant Token {
+| Integer(i32)
+| Floating(f32)
+| Plus
+| Minus
+| Star
+| Slash
+| LParen
+| RParen
+}
+
+variant Expr {
+| Int(i32)
+| Flt(f32)
+| Add(Expr, Expr)
+| Sub(Expr, Expr)
+| Mul(Expr, Expr)
+| Div(Expr, Expr)
+| Grp(Expr)
+}
+
+fn eval(ex: Expr): f32 {
+  return match ex {
+  | Flt(f) -> f
+  | Int(i) -> i.f32
+  | Grp(inner) -> eval(inner)
+  | Add(lhs, rhs) ->
+      let lhs' = eval(lhs);
+      let rhs' = eval(rhs);
+      lhs' + rhs'
+  | Sub(lhs, rhs) ->
+      let lhs' = eval(lhs);
+      let rhs' = eval(rhs);
+      lhs' - rhs'
+  | Mul(lhs, rhs) ->
+      let lhs' = eval(lhs);
+      let rhs' = eval(rhs);
+      lhs' * rhs'
+  | Div(lhs, rhs) ->
+      let lhs' = eval(lhs);
+      let rhs' = eval(rhs);
+      lhs' / rhs'
+  };
+
+  // Getting fancy with pattern matching?
+  //
+  // return match ex {
+  // | Flt(f) -> f
+  // | Int(i) -> i.f32
+  // | Grp(inner) -> eval(inner)
+  // | ?<(Add|Sub|Mul|Div) as `Ctor>(lhs, rhs) ->
+  //     let lhs' = eval(lhs);
+  //     let rhs' = eval(rhs);
+  //     match `Ctor {
+  //     | Add -> lhs + rhs
+  //     | Sub -> lhs - rhs
+  //     | Mul -> lhs * rhs
+  //     | Div -> lhs / rhs
+  //     }
+  // };
+}
+
+// String spans are triples: (start, end, orig_length). They can be indexed, and
+// if mut then also "appended to", etc, but are bounds-checked.
+fn lex_int(content: stringspan): Opt(Token) {
+  fn is_int_char(c: char): bool {
+    return match c {
+    | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' -> true
+    | _ -> false
+    }
+  }
+
+  if content[0].is_int_char() {
+    let mut tok_span = content[0..1];
+
+    while {let idx = 1;} content.size > idx && content[idx].is_int_char() {
+      tok_span = content[0..idx+1];
+      idx = idx + 1;
+    }
+
+    // Panic if it doesn't convert. Should be guaranteed successful because we
+    // just lexed the integer ourselves.
+    do let Some(i) = tok_span.strspan_to_int();
+
+    return Some(Integer(i));
+  }
+
+  return None;
+}
+
+fn lex(content: string): []Token {
+  let mut tokens: []Token;
+
+  let content' = content.span;
+
+  while content'.size > 0{
+    match content' {
+    | "+".. -> tokens ~= Plus;
+    | "-".. -> tokens ~= Minus;
+    | "*".. -> tokens ~= Star;
+    | "/".. -> tokens ~= Slash;
+    | "(".. -> tokens ~= LParen;
+    | ")".. -> tokens ~= RParen;
+    | (" " | "\n" | "\r" | "\t").. -> {}
+    | c ->
+        if c == '_' || c.is_alpha() {
+
+        }
+    }
+  }
+}
+
+
+
+and parse_sum tokens : (token list * expr) =
+  let rec _parse_sum tokens exp_lhs =
+    begin match tokens with
+    | Plus(_) :: rest ->
+        let (rest, exp_rhs) = parse_prod rest in
+        let exp = BinOp(Undecided, Add, exp_lhs, exp_rhs) in
+        _parse_sum rest exp
+
+    | Minus(_) :: rest ->
+        let (rest, exp_rhs) = parse_prod rest in
+        let exp = BinOp(Undecided, Sub, exp_lhs, exp_rhs) in
+        _parse_sum rest exp
+
+    | _ -> (tokens, exp_lhs)
+    end
+  in
+
+  let (rest, exp_lhs) = parse_prod tokens in
+  _parse_sum rest exp_lhs
+
+
+and parse_prod tokens : (token list * expr) =
+  let rec _parse_prod tokens exp_lhs =
+    begin match tokens with
+    | Star(_) :: rest ->
+        let (rest, exp_rhs) = parse_unary rest in
+        let exp = BinOp(Undecided, Mul, exp_lhs, exp_rhs) in
+        _parse_prod rest exp
+
+    | Slash(_) :: rest ->
+        let (rest, exp_rhs) = parse_unary rest in
+        let exp = BinOp(Undecided, Div, exp_lhs, exp_rhs) in
+        _parse_prod rest exp
+
+    | _ -> (tokens, exp_lhs)
+    end
+  in
+
+  let (rest, exp_lhs) = parse_unary tokens in
+  _parse_prod rest exp_lhs
+
+
+
+variant Token {
+| Integer(i32)
+| Floating(f32)
+| Plus
+| Minus
+| Star
+| Slash
+| LParen
+| RParen
+}
+
+variant Expr {
+| Int(i32)
+| Flt(f32)
+| Add(Expr, Expr)
+| Sub(Expr, Expr)
+| Mul(Expr, Expr)
+| Div(Expr, Expr)
+| Grp(Expr)
+}
+
+fn parse(tokens: [..]Token): Res<Expr, string> {
+  let tree = parse_add(tokens);
+
+  return tree;
+}
+
+fn parse_add(tokens: [..]Token): Expr {
+  fn _parse_add(tokens: [..]Token): Expr {
+    match tokens {
+    | ?<(Plus|Minus) as `Ctor> ~ rest ->
+        let (rest, exp_rhs) = parse_prod rest in
+        let exp = BinOp(Undecided, Add, exp_lhs, exp_rhs) in
+        _parse_sum rest exp
+    }
+  }
+}

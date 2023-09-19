@@ -1,0 +1,2237 @@
+Personal wants:
+    - Easy to print types.
+        - Implies some sort of compile-time "reflection".
+        - Could also empower more options in templating.
+    - Templating, including compile-time logic decisions.
+    - Language-level dynamic arrays, hashmaps, sets, with built-in operators.
+    - POD-initialization syntax: `{ .field_one = 3; .field_two = 6 }`
+    - Syntax for limiting scopes as small as possible.
+    - Scope-guard semantics.
+        - Either full RAII, zig `defer`, or D various scope capabilities.
+    - Easy modular configuration of a class.
+        - Separately-configurable data/method members (via trait system?)
+        - Think configurable wrapper class.
+    - UFCS, currying, closures: clean flow of logic.
+    - Generators (solution for datastructure iteration?).
+        - Support for consumption of generators within `for` loops.
+    - Coroutine support (some solution for what `async`/`await` is for).
+
+
+===
+
+
+Basic Goals:
+
+(2) 80/20 principle: It should be easy to both _use_ (as a consumer of the
+language) and _implement_ (as a developer of the language) its various features.
+Easy things should be easy, and complex things should be possible _within
+reason_. This language is not intended to compete with C, C++, Rust, Zig. It is
+intended to compete with languages like Python, etc, but with a
+performance-oriented edge by virtue of compiled performance.
+
+(2) Do not punish the core dev/debug cycle in favor of asserting that "all code
+is always release-worthy." There should be low-pain debug-cycle "escape hatches"
+for things the compiler would otherwise complain about in a release build. Put
+another way: the metric on which to judge software is what it looks like when
+released; overly scrutinizing (or regimenting) the path taken to the finished
+product is not beneficial.
+
+
+===
+
+
+Inspirations:
+
+- C, C++, D, OCaml, Rust, Haskell, Zig, C#, Mellow.
+
+
+===
+
+
+Possible names:
+
+- berk
+- adelaide (ie, "eighty-twenty", 80/20 principle)
+
+
+===
+
+
+Making ignoring expression values statically disallowed.
+
+Ignoring function return values can lead to hard-to-find bugs. It might not even
+be the wrong thing most of the time, but when it _is_ the wrong thing, it can
+be a pain.
+
+This is especially so in cases where the return value is producing an
+RAII-dependent object that will free/do something at the end of the scope. If
+the RAII value is never actually assigned, then it will go out of scope
+immediately after initial evaluation, and the resultant behavior is likely wrong
+and difficult to diagnose.
+
+In languages that don't depend on error codes (like C does), it's even less
+likely that ignoring the return value is the right thing.
+
+However, forcing the user to _always_ do something with the result of an
+expression is _not always_ the right thing. Especially so if the expression
+includes invoking some third-party library function that returns a value that
+isn't always needed. The user can't work around this case cleanly.
+
+Proposals:
+
+(1) Permit a `let _ = <expression>;` syntax. "Acknowledge" the value, ignore it.
+
+Works. Arguably greppable, though whitespace can make it possible to "miss"
+cases depending on formatting.
+
+Susceptible to being used during dev/debug, but not corrected (or at least
+commented) before pushing a release build, as it's harder to see with a quick
+scan of the eyes.
+
+(2) Add additional language construct(s) to support this concept. In particular:
+
+`ignore <expression>;`, which makes explicit the intent to ignore a value. This
+is only allowed on expressions that return non-nil, so:
+
+    (a) Expressions that yield non-nil must be used, or `ignore`d.
+    (b) Expressions that yield nil are _not_ permitted to be `ignored`.
+
+ie, `ignore` is always actively doing something.
+
+`ignore("...") <expression>;` (workshop the syntax?) provides a reason for why
+it is okay to ignore the expression value. Everything is always subject to
+bitrot over time, but having a contemporaneous explanation for such a choice can
+be highly valuable.
+
+Finally, when compiling the module in `--release` mode, _all_ `ignore`
+statements must include an explanation, ie, `ignore(...) <expr>;`. So, this
+provides a way for a user to rapidly iterate during core dev/debug by simply
+using an undefended `ignore <expr>;`, but once they have solidified their
+approach and have a concrete defense for why even in a release build it still
+makes sense to `ignore` the expr, they can include their contemporaneous defense
+at that point. This of course can be sidestepped with a nonsense comment, but
+the existence of the `ignore` keyword at all is greppable and provides a
+"place to look" when debugging tricky issues.
+
+This also encourages library writers to write APIs that return consistently
+useful values. A program with a high ratio of `ignore` statements is suspect.
+
+Other considerations:
+
+- If we go with supporting `pure` functions, then `ignore`ing a `pure` function
+doesn't make any sense and should be statically disallowed.
+
+- There are times where the canonical way to call the function does not care
+about its return value, but there are rare cases where the return value is
+interesting. This is most common with a subset of C FFI functions, eg `printf`.
+In these cases, having a way to annotate the function itself to indicate it is
+okay to ignore its value would be more ergonomic for the programmer. The problem
+with this tool is if it becomes "standard" in the community to simply annotate
+all functions this way, which defeats the purpose of the whole exercise and
+nobody is happy. Alternative: for things like IO, provide a "native" API that
+returns void, that internally explicitly `ignore`s the return value of the
+backend API (like `printf`).
+
+
+===
+
+
+struct pod:
+
+If a struct is declared as `pod`, it can be created/modified/etc through
+pod syntax, which is just handling the struct members directly:
+
+struct pod Point {
+struct Point is pod {
+struct Point {
+    x: u64;
+    y: u64;
+
+    // Structs can define default values for members, that can
+    // be overridden at construction time.
+    z: u64 = 20;
+} is {
+    pod,
+} impl {
+    ...
+}
+
+fn main() {
+    let p: Point = {
+        .x=5, .y=6
+    };
+    let p: Point = {
+        .x=5,
+        .y=6,
+        .z=30,
+    };
+    let p: Point = {
+        .x=5;
+        .y=6;
+    };
+
+    let p = Point {.x=5, .y=6};
+
+    // All values must be initialized.
+    // let p: Point = {.x = 5};
+
+    // Type inference should be able to figure out this is a Point.
+    // Will complain if there are multiple in-scope types that match?
+    // Will (or will not?) use the most inner-scoped matching type if
+    // its unique?
+    let p = {.x=5, .y=6, .z=30};
+
+    // Type inference should also be able to figure out this is a Point.
+    let p = {.x=5, .y=6};
+
+}
+
+
+===
+
+
+Typestates:
+
+struct Bar {
+    ...
+    ...
+} is {
+    pod;
+    typestates: one, two, three;
+} does {
+
+
+    fn complex(lhs: Bar<is one>, rhs: Bar<is two>): Bar<is three> {
+
+    }
+
+}
+
+
+// A templated type with a complex multi-object lifetime?
+
+struct Baz<T, U> {
+
+} is/typestates/lifecycle {
+    ready,
+    can_drop,
+}
+
+
+
+struct File {
+    fd: u64;
+} is/has {
+    opened,
+    closed,
+} does/can {
+    fn static open(): File<is opened> {
+    fn static open(): File is opened {
+    fn static open(): File<opened> {
+        ...
+    }
+
+    fn read(self: File, len: usize)
+        where self is opened
+        where this is opened
+        where self<is opened>
+    {
+        ...
+    }
+
+    is opened
+    on File<opened>
+    fn read() {
+        ...
+    }
+}
+
+
+// Typestates represent concrete types. ie, an if/else expression must yield
+// the same fully-resolved type in each branch. This is deliberately more
+// restrictive than it could be.
+
+// Maybe instead the non-shared states can be implicitly dropped? Maybe some
+// states can require they not be dropped, causing typecheck failure if they
+// would have been implicitly dropped when resolving branches?
+
+
+struct File {
+    fd: u64;
+} inhabits {
+    opened,
+    can_read,
+    can_write,
+    closed,
+} does/can {
+    fn static open(path: &FS::Path, sigil RO): File<is opened> {
+    fn static open(path: &FS::Path, sigil RW): File<is opened> {
+    fn static open(path: &FS::Path, sigil WO): File<is opened> {
+    fn static open(path: &FS::Path, sigil BIN): File<is opened> {
+        ...
+    }
+
+    fn static open<sigil T>(path: &FS::Path): auto
+    where T:
+        R | W | A | R+ | W+ | A+ | RB | WB | AB | RB+ | WB+ | AB+
+    {
+        let fd = static match T {
+        | R   -> { sys::open(path.c_str(), "r")   }
+        | W   -> { sys::open(path.c_str(), "w")   }
+        | A   -> { sys::open(path.c_str(), "a")   }
+        | RB  -> { sys::open(path.c_str(), "rb")  }
+        | WB  -> { sys::open(path.c_str(), "wb")  }
+        | AB  -> { sys::open(path.c_str(), "ab")  }
+        | R+  -> { sys::open(path.c_str(), "r+")  }
+        | W+  -> { sys::open(path.c_str(), "w+")  }
+        | A+  -> { sys::open(path.c_str(), "a+")  }
+        | RB+ -> { sys::open(path.c_str(), "rb+") }
+        | WB+ -> { sys::open(path.c_str(), "wb+") }
+        | AB+ -> { sys::open(path.c_str(), "ab+") }
+        };
+
+        return static match T {
+        | R   -> { File<is opened & can_read>{.fd=fd} }
+        | RB  -> { File<is opened & can_read>{.fd=fd} }
+        | W   -> { File<is opened & can_write>{.fd=fd} }
+        | A   -> { File<is opened & can_write>{.fd=fd} }
+        | WB  -> { File<is opened & can_write>{.fd=fd} }
+        | AB  -> { File<is opened & can_write>{.fd=fd} }
+        | R+  -> { File<is opened & can_write & can_read>{.fd=fd} }
+        | W+  -> { File<is opened & can_write & can_read>{.fd=fd} }
+        | A+  -> { File<is opened & can_write & can_read>{.fd=fd} }
+        | RB+ -> { File<is opened & can_write & can_read>{.fd=fd} }
+        | WB+ -> { File<is opened & can_write & can_read>{.fd=fd} }
+        | AB+ -> { File<is opened & can_write & can_read>{.fd=fd} }
+        };
+    }
+
+    fn read(self: File, len: usize)
+        where self is opened
+        where this is opened
+        where self<is opened>
+    {
+        ...
+    }
+
+    is opened
+    on File<opened>
+    fn read() {
+        ...
+    }
+}
+
+
+// Alternative idea, similar to "emulated typestates" in other languages. ie,
+// Rust typestate pattern.
+
+struct File among ReadableFile, WriteableFile, ReadWriteFile, ClosedFile {
+    struct ErrOpen {
+        let pub errno: i32;
+
+        fn pub what(): string {...}
+    }
+
+    variant OpenKind {
+        | Read
+        | ReadWrite
+        | WriteTrunc
+        | WriteAppend
+        | <etc>
+    }
+
+    fn static _open(path: &FS::Path, flags: u32): Result<File, ErrOpen> {
+        if {let fd = Sys::open(path.cstr, flags);} fd >= 0 {
+            return Ok({.fd=fd});
+        }
+
+        return Err({.errno = Sys::errno});
+    }
+
+    fn static pub open(path: &FS::Path, open_kind: OpenKind is Read):
+        Result<ReadableFile, ErrOpen>
+    {
+        // The "naive" way:
+        //
+        // let try_file = _open(path, Sys::O_RDONLY);
+        //
+        // match try_file {
+        // | Ok(file) -> return Ok(bitcast<ReadableFile>(file));
+        // | Err(err) -> return Err(err);
+        // }
+
+        // The "let the compiler do the figuring" way:
+
+        return _open(path, Sys::O_RDONLY);
+
+        // The key to the above is that the compiler will freely bitcast a
+        // struct type between any of its "among" types implicitly, as long as
+        // the cast happens within the implementation details of the struct.
+    }
+
+    // Trying different syntax and ideas.
+    //
+    // `&mut` or `mut &`? Do they mean different things for complex types?
+    //
+    // This function is templated, demanding a stack array of _at least_ a given
+    // size, and implicitly requesting how many bytes to read. Passing an array
+    // of a larger size will be implicitly casted down to a smaller array.
+    //
+    // `T: u32` says that the argument for T _is_ a u32 _value_, but the
+    // programmer decides which integer. `U = char` says the default _type_ for
+    // U is a `char`, but can be overridden.
+    fn pub read<Count: u32, U = char>(
+        self: mut &ReadableFile, read_into: &mut [Count]U
+    ) : Result<u32, ReadErr>
+        where Count: Count > 0 && Count <= Sys::SSIZE_MAX
+        where U: sizeof(U) == sizeof(byte)
+    {
+        // Getting a raw ptr to an array is unsafe; size information is lost and
+        // cannot be checked.
+        let raw_buf_ptr = unsafe { read_into.cptr };
+
+        let bytes_read = Sys::read(self.fd, raw_buf_ptr, Count);
+
+        if bytes_read == -1 {
+            return Err({.errno = Sys::errno});
+        }
+
+        return Ok(bytes_read);
+    }
+}
+
+
+===
+
+
+UFCS syntax options, plus arg rewriting in general:
+
+    // Default
+    bar1.complex(bar2);
+
+    // Switch which arg we're rewriting with.
+    (bar1 as rhs).complex(.lhs=bar2);
+    (bar1 as rhs).complex(lhs: bar2);
+    (bar1 as rhs).complex(lhs=bar2);
+    bar1.complex(bar2, _);
+    bar1.complex(lhs=bar2, rhs=_);
+    bar1.complex(rhs=bar2, lhs=_);
+    bar1.complex(rhs=_, lhs=bar2);
+    bar1.complex(_, rhs=bar2);
+    bar1.complex(_, .rhs=bar2);
+    bar1.complex(_, bar2);
+
+
+    // Explicit arg naming:
+    complex(lhs=bar1, rhs=bar2)
+
+    // If order remains constant, can omit some names:
+    complex(bar1, rhs=bar2)
+    complex(lhs=bar1, bar2)
+
+    // Arg reordering. Any reordering -> all names are explicit.
+    complex(rhs=bar1, lhs=bar2)
+
+    // Using a tuple as an argument:
+    fn complex(arg1: (int, int), arg2: int) {
+        ...
+    }
+
+    (1, 2).complex(3);
+
+    // Deconstructing a tuple as multiple arguments:
+    fn complex(arg1: int, arg2: int, arg3: int) {
+        ...
+    }
+
+    (1, 2).complex(_, _, 3);
+    (1, 2).complex(.1, 3, .0);
+
+
+===
+
+User stories:
+
+- Function that returns an object of a type that the function itself
+defines, making it impossible for a user to construct an instance of that
+type explicitly, type itself is opaque; function is only interface to producing
+that type.
+    - Enabled by function-scope struct?
+        - Possible in eg C++, via `auto` return type and returning
+        locally-declared/defined struct.
+        - But: Want explicit function signatures, always (?). Can't have
+        explicit return type while using `auto` return type.
+    - Enabled by module-private struct with module-public free constructor?
+        - Would still be useful to have helper functions within a module that
+        need privacy for their returned type, even to other functions in the
+        module?
+
+
+===
+
+Currying?
+
+fn three_args(i: u64, j: u64, k: u64): u64 {
+
+}
+
+fn add(x: u64, y: 64): u64 {
+    return x + y;
+}
+
+fn main() {
+    let var = three_args(1, 2, ...);
+    // or
+    let var = curry three_args 1 2;
+    // or
+    let var = three_args 1 2;
+
+
+    let add5 = add(5, ...);
+
+    let fived = [1, 2, 3, 4, 5].map(add5);
+}
+
+A "curried" function is simply syntax sugar for a closure that closes over some
+arguments, but leaves "slots" open for another, where the returned value is a
+closure function that takes arguments to fill those slots.
+
+let curried = three_args(1, .., 3);
+let curried = three_args(1, 2, ..);
+let curried = three_args(1, 2, ...);
+let curried = three_args(1, ...);
+let curried = three_args(1, .., ..);
+let curried = three_args(...);
+let curried = three_args(.., ...);
+let curried = three_args(.., .., ..);
+
+Or maybe we try to re-use underscore:
+
+let curried = three_args(1, _, 3);
+let curried = three_args(1, 2, _);
+let curried = three_args(1, 2, ..);
+let curried = three_args(1, ..);
+let curried = three_args(1, _, _);
+let curried = three_args(..);
+let curried = three_args(_, ..);
+let curried = three_args(_, _, _);
+
+Or "currying" is merely using a normal closure to accomplish the same thing:
+
+fn main() {
+    let var = fn (k: u64) {
+        return three_args(1, 2, k);
+    };
+}
+
+
+===
+
+
+Allocators: Could follow a vaguely zig style and be quite explicit about
+allocators.
+
+User story:
+
+- Need the flexibility/model of heap allocation, but want to be allocating off
+the stack. So some allocator object/abstraction is given a static amount of
+memory off the stack, and then this allocator can be passed to things that
+expect to be able to `malloc()` with it, which just yields pointers/slices of
+the statically-allocated stack memory.
+
+But then, how does a function take an allocator and _maybe_ heap allocate, but
+maybe not, when the function would need to be annotated with `heap`? Is there
+another way we can track function-level heap-allocation behavior that permits
+this in a way that doesn't penalize the use of the stack-heap allocator?
+
+Maybe allocators are passed in as template arguments? That might give a way to
+solve the above problem, but then prevents being able to pass in a dynamically
+initialized allocator as an actual function argument.
+
+
+===
+
+
+Haskell-style pattern-matching function definitions:
+
+func add_if_valid(_: ?f32, _: ?f32, _: string): ?f32
+with add_if_valid(Some(x), Some(y), z) -> return Some(x + y);
+with add_if_valid(_, _, _) -> return None;
+
+desugars to:
+
+func add_if_valid(x: ?f32, y: ?f32, z: string): ?f32 {
+    match (x, y) {
+    | (Some(x), Some(y)) -> return Some(x + y)
+    | (_, _) -> return None
+    }
+}
+
+
+===
+
+
+Explicit declaration of intent when passing/moving/copying objects:
+
+
+let var = heap MyObject {...};
+
+   let moved_to = mov var;
+// let copy_of  = cpy var; // Fails, var no longer valid.
+   let copy_of  = cpy moved_to;
+   let moved_2  = mov moved_to;
+   let ref_of   = ref moved_2;
+   let copied_2 = cpy moved_2;
+   let copied_3 = cpy ref_of;
+   let ref_2    = ref ref_of;
+// let moved_3  = mov ref_of;  // Fails, can't move a var through a ref.
+// let moved_3  = mov moved_2; // Fails, can't move a var that's borrowed.
+// <use ref_of and/or ref_2>   // If this is removed, the above move works.
+
+What is the default?
+
+
+===
+
+
+Composition:
+
+How to describe/implement a class with variable members and methods? ie, an
+object that has certain members if configured one way, different members
+configured another, and the same with methods? Think problems in C++-land where
+certain template instantiations do/do not need certain members/methods, but
+others do not/do.
+
+How is a performant wrapper-class implemented, with disable-able before/after
+methods?
+
+How is a container class whose job is to hold some set of arbitrary variables
+implemented? Either a,b,c, or a,c,d, or b,c,d, or a,c, or e, or nothing(?) ?
+
+How is dynamic dispatch implemented for disparate objects that all implement the
+same trait, but have wildly different combinations of other
+also-dynamically-dispatched methods/variables? a vtable for each trait,
+triple-dispatch? Double-dispatch via configuring the right vtable at the time
+the type is "erased" via pushing a concrete type into a container of trait
+types?
+
+// Wrapped can be any type, because all types can (potentially) have valid
+// dot-access on them due to UFCS.
+class Wrapper<Wrapped, BeforeFn = nil, AfterFn = nil>
+    with BeforeFn: {
+        //is nil || is Invocable
+
+        const if BeforeFn is nil {
+            true
+        }
+        else if BeforeFn !is Invocable {
+            false
+        }
+        else {
+            let ret_t = traits.return_t(BeforeFn);
+            let afterfn_takes = {
+                if AfterFn is Invocable {
+                    traits.fn_args(AfterFn)
+                }
+                else {
+                    nil
+                }
+            };
+            if ret_t is nil
+        }
+    }
+    with AfterFn: (is Invocable || is nil)
+{
+    let wrapped: Wrapped;
+
+    const if BeforeFn is nil && AfterFn is nil {
+        operator . (): &Wrapped {
+            return &wrapped;
+        }
+    }
+    else if BeforeFn !is nil && AfterFn is nil {
+        let before_fn: BeforeFn;
+
+        operator . (): &Wrapped {
+            before_fn();
+
+            return &wrapped;
+        }
+    }
+
+    const if BeforeFn !is nil {
+        let before_fn = BeforeFn;
+    }
+
+    const if AfterFn !is nil {
+        let after_fn = AfterFn;
+    }
+
+    // The critical element for a wrapper is a way to passthrough calls to
+    // the wrapping object into the wrapped object. Does this need to be
+    // arbitrarily deep? Or can it be explicit?
+    operator . (... args)
+}
+
+
+===
+
+
+User story: Imagine a C++ class where a data member is expected to be const,
+except initializing the member requires complex multi-stmt logic in some
+`init()` function. By the time `init()` is invoked, the data member must have
+already been initialized and is now const. The constness can be temporarily
+casted away in `init()` as a hack to re-initialize the member with the "real"
+value. This works but is hideous. How can this new language handle this case?
+
+Can this be handled with typestates, where after init the member becomes
+`const`?
+
+
+===
+
+
+Error handling sugar. Influence from Swift's `guard let`? Advanced `if let`?
+Some sort of quasi-"exception" logic?
+
+Consider:
+
+```
+fn maybe_add(val: Option<U32>, addend: u32): Option<u32> {
+    return match val {
+    | Some(x) -> Some(x + addend)
+    | None -> None
+    };
+}
+```
+vs
+```
+fn maybe_add(val: Option<U32>, addend: u32): Option<u32> {
+    if let Some(x) is val {
+        return Some(x + addend);
+    }
+
+    return None;
+}
+```
+vs
+```
+fn maybe_add(val: Option<U32>, addend: u32): Option<u32> {
+    try let Some(x) is val else {
+        return None;
+    }
+
+    return Some(x + addend);
+}
+```
+
+But consider:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    let mfd_1 = open(p_1, Read);
+    let mfd_2 = open(p_2, Read);
+
+    return match (mfd_1, mfd_2) {
+    | (Some(fd_1), Some(fd_2)) ->
+        let line_1 = readline(fd_1);
+        let line_2 = readline(fd_2);
+
+        match (line_1, line_2) {
+        | (Some(txt_1), Some(txt_2)) ->
+            let val_1 = txt_1.to_int();
+            let val_2 = txt_2.to_int();
+
+            match (val_1, val_2) {
+            | (Some(x), Some(y)) -> Some(x + y)
+            | _ -> None
+            }
+
+        | _ -> None
+        }
+
+    | _ -> None
+    }
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    if let
+        Some(fd_1) is open(p_1, Read) &&
+        Some(fd_2) is open(p_2, Read)
+    {
+        if let
+            Some(txt_1) is readline(fd_1) &&
+            Some(txt_2) is readline(fd_2)
+        {
+            if let
+                Some(x) is txt_1.to_int() &&
+                Some(y) is txt_2.to_int()
+            {
+                return Some(x + y);
+            }
+        }
+    }
+
+    return None;
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let
+        Some(fd_1) is open(p_1, Read) &&
+        Some(fd_2) is open(p_2, Read)
+    else {
+        return None;
+    }
+
+    try let
+        Some(txt_1) is readline(fd_1) &&
+        Some(txt_2) is readline(fd_2)
+    else {
+        return None;
+    }
+
+    try let
+        Some(x) is txt_1.to_int() &&
+        Some(y) is txt_2.to_int()
+    else {
+        return None;
+    }
+
+    return Some(x + y);
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let Some(fd_1) is open(p_1, Read) else { return None };
+    try let Some(fd_2) is open(p_2, Read) else { return None };
+
+    try let Some(txt_1) is readline(fd_1) else { return None };
+    try let Some(txt_2) is readline(fd_2) else { return None };
+
+    try let Some(x) is txt_1.to_int() else { return None };
+    try let Some(y) is txt_2.to_int() else { return None };
+
+    return Some(x + y);
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let Some(fd_1) is open(p_1, Read) catch { return None };
+    try let Some(fd_2) is open(p_2, Read) catch { return None };
+
+    try let Some(txt_1) is readline(fd_1) catch { return None };
+    try let Some(txt_2) is readline(fd_2) catch { return None };
+
+    try let Some(x) is txt_1.to_int() catch { return None };
+    try let Some(y) is txt_2.to_int() catch { return None };
+
+    return Some(x + y);
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        let Some(fd_1) is open(p_1, Read);
+        let Some(fd_2) is open(p_2, Read);
+
+        let Some(txt_1) is readline(fd_1);
+        let Some(txt_2) is readline(fd_2);
+
+        let Some(x) is txt_1.to_int();
+        let Some(y) is txt_2.to_int();
+
+        return Some(x + y);
+    }
+
+    return None;
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let
+        Some(fd_1) is open(p_1, Read) &&
+        Some(fd_2) is open(p_2, Read) &&
+
+        Some(txt_1) is readline(fd_1) &&
+        Some(txt_2) is readline(fd_2) &&
+
+        Some(x) is txt_1.to_int() &&
+        Some(y) is txt_2.to_int()
+    else {
+        return None;
+    }
+
+    return Some(x + y);
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let
+            Ok(fd_1) is open(p_1, Read) &&
+            Ok(fd_2) is open(p_2, Read)
+        catch Err with open_failed;
+
+        try let
+            Ok(txt_1) is readline(fd_1) &&
+            Ok(txt_2) is readline(fd_2)
+        catch Err with readline_failed;
+
+        try let
+            Ok(x) is txt_1.to_int() &&
+            Ok(y) is txt_2.to_int()
+        catch Err with to_int_failed;
+
+        return Some(x + y);
+    }
+    catch Err(err_str) is open_failed {
+        printf("Failed to open file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is readline_failed {
+        printf("Failed to read file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is to_int_failed {
+        printf("Failed to parse str to int: %s\n", err_str.c_str());
+    }
+
+    return None;
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let
+        Some(fd_1) is open(p_1, Read) catch Err with open_failed &&
+        Some(fd_2) is open(p_2, Read) catch Err with open_failed &&
+
+        Some(txt_1) is readline(fd_1) catch Err with read_failed &&
+        Some(txt_2) is readline(fd_2) catch Err with read_failed &&
+
+        Some(x) is txt_1.to_int() catch Err with to_int_failed &&
+        Some(y) is txt_2.to_int() catch Err with to_int_failed
+    catch Err(err_str) is open_failed {
+        printf("Failed to open file: %s\n", err_str.c_str());
+
+        return None;
+    }
+    catch Err(err_str) is readline_failed {
+        printf("Failed to read file: %s\n", err_str.c_str());
+
+        return None;
+    }
+    catch Err(err_str) is to_int_failed {
+        printf("Failed to parse str to int: %s\n", err_str.c_str());
+
+        return None;
+    }
+
+    return Some(x + y);
+}
+```
+vs
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try let
+        Some(fd_1) is open(p_1, Read) catch Err with open_failed &&
+        Some(fd_2) is open(p_2, Read) catch Err with open_failed &&
+
+        Some(txt_1) is readline(fd_1) catch Err with read_failed &&
+        Some(txt_2) is readline(fd_2) catch Err with read_failed &&
+
+        Some(x) is txt_1.to_int() catch Err with to_int_failed &&
+        Some(y) is txt_2.to_int() catch Err with to_int_failed
+    catch {
+        catch Err(err_str) is open_failed {
+            printf("Failed to open file: %s\n", err_str.c_str());
+        }
+        catch Err(err_str) is readline_failed {
+            printf("Failed to read file: %s\n", err_str.c_str());
+        }
+        catch Err(err_str) is to_int_failed {
+            printf("Failed to parse str to int: %s\n", err_str.c_str());
+        }
+
+        return None;
+    }
+
+    return Some(x + y);
+}
+```
+
+This one seems pretty good for a robust-ish solution:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let
+            Ok(fd_1) is open(p_1, Read) &&
+            Ok(fd_2) is open(p_2, Read)
+        catch Err with open_failed;
+
+        try let
+            Ok(txt_1) is readline(fd_1) &&
+            Ok(txt_2) is readline(fd_2)
+        catch Err with readline_failed;
+
+        try let
+            Ok(x) is txt_1.to_int() &&
+            Ok(y) is txt_2.to_int()
+        catch Err with to_int_failed;
+
+        return Some(x + y);
+    }
+    catch Err(err_str) is open_failed {
+        printf("Failed to open file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is readline_failed {
+        printf("Failed to read file: %s\n", err_str.c_str());
+    }
+    catch Err(err_str) is to_int_failed {
+        printf("Failed to parse str to int: %s\n", err_str.c_str());
+    }
+
+    return None;
+}
+```
+
+and the mini-version:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    try {
+        try let Ok(fd_1) is open(p_1, Read);
+        try let Ok(fd_2) is open(p_2, Read);
+
+        try let Ok(txt_1) is readline(fd_1);
+        try let Ok(txt_2) is readline(fd_2);
+
+        try let Ok(x) is txt_1.to_int();
+        try let Ok(y) is txt_2.to_int();
+
+        return Some(x + y);
+    }
+
+    return None;
+}
+```
+
+and possibly the "I am okay with exploding" version:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    do let Ok(fd_1) is open(p_1, Read);
+    do let Ok(fd_2) is open(p_2, Read);
+
+    do let Ok(txt_1) is readline(fd_1);
+    do let Ok(txt_2) is readline(fd_2);
+
+    do let Ok(x) is txt_1.to_int();
+    do let Ok(y) is txt_2.to_int();
+
+    return Some(x + y);
+}
+```
+
+Then, there is the monadic approach:
+
+Given:
+
+```
+variant Option<`a> {
+| Some(`a)
+| None
+} where {
+  fn then<`b>{Option<`b>}(self, f: fn{Option<`b>}(a: `a))
+    where a accepts self // the fn arg `a` must be able to take `self` as an arg
+  {
+    return match self {
+    | Some(a) -> a.f
+    | None -> None
+    };
+  }
+
+  // An alternate bind that accepts a function which returns an unwrapped value
+  fn then<`b>(self, f: fn(a: `a): `b): Option<`b>
+    where a accepts self
+    where `b != Option // Refuse to create a double-wrapped Option
+  {
+    return match self {
+    | Some(a) -> Some(a.f)
+    | None -> None
+    };
+  }
+
+  // Or perhaps we define "both" `bind` functions at once.
+  fn then<`b, wherebound `c>(self, f: fn(a: `a): `b): `c
+    where a accepts self
+    where `b == Option then `c = `b
+    or `c = Option<`b>
+  {
+    if const (`b == Option) {
+      return match self {
+      | Some(a) -> a.f
+      | None -> None
+      };
+    }
+    else {
+      return match self {
+      | Some(a) -> Some(a.f)
+      | None -> None
+      };
+    }
+  }
+}
+
+variant Result<`ok, `err> {
+  | Ok(`ok)
+  | Err(`err)
+
+  fn then<`q>(self, f: fn(a: `ok): Result<`q, `err>): Result<`q, `err>
+    where a accepts self
+  {
+    return match self {
+    | Ok(a) -> a.f
+    | Err(e) -> Err(e)
+    };
+  }
+}
+```
+
+Then:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+    let x = p_1.open(Read).then(readline).then(to_int);
+    let y = p_2.open(Read).then(readline).then(to_int);
+
+    return x.fold(u32::+, y);
+}
+```
+
+But the above is wasteful if the `x` case fails, since it's pointless to try to
+do the `y` case, so instead:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  try let Ok(x) = {
+    p_1
+    .open(Read)
+    .then(readline)
+    .then(to_int)
+  }
+  else {
+    return None
+  };
+
+  try let Ok(y) =
+    p_2.open(Read).then(readline).then(to_int) else { return None }
+  ;
+
+  return Some(x + y);
+}
+```
+
+Except the above doesn't handle the (likely) differing error cases for the
+different result types. Consider we have:
+
+```
+variant Result<`ok, `err> {
+  | Ok(`ok)
+  | Err(`err)
+
+  fn then<`new_ok>(self, f: fn(a: `ok): Result<`new_ok, `err>): Result<`q, `err>
+    where a accepts self
+  {
+    return match self {
+    | Ok(a) -> a.f
+    | Err(e) -> Err(e)
+    };
+  }
+
+  fn map_err<`new_err>(self): Result<`ok, `new_err>
+    where can { `err::into<`new_err> }
+  {
+    return match self {
+    | Ok(a) -> Ok(a)
+    | Err(e) -> Err(e.into<`new_err>())
+    };
+  }
+
+  // Maybe we can be clever with default arguments?
+  fn map_err<`new_err>(
+    self,
+    into_fn: fn {`new_err} (`err) = `err::into<`new_err>
+  )
+    : Result<`ok, `new_err>
+  {
+    return match self {
+    | Ok(a) -> Ok(a)
+    | Err(e) -> Err(e.into<`new_err>())
+    };
+  }
+}
+```
+
+Then:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  try let Ok(x) = {
+    p_1
+    .open(Read)     // Yields Result<File, Sys::IO::Err>
+    .then(readline) // Yields Result<String, Sys::IO::Err>
+    .map_err(fn(e: Sys::IO::Err): String { e.into<String>() })
+       // to_int() yields Result<u32, String>, so we need agreement for .then()
+    .then(to_int)
+  }
+  else {
+    return None
+  };
+
+  try let Ok(y) =
+    p_2.open(Read).then(readline).then(to_int) else { return None }
+  ;
+
+  return Some(x + y);
+}
+```
+
+And if we need to print those file IO errors if they happen:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  try let Ok(x) = {
+    p_1
+    .open(Read)
+    .then(readline) catch Err(e) {
+      printf("Err: %s\n", e.into<String>());
+
+      return None; // Bail out in the middle of the expression evaluation.
+    }
+    .err_to<String>()
+    .then(to_int)
+  }
+  else {
+    return None
+  };
+
+  try let Ok(y) =
+    p_2
+    .open(Read).then(readline) catch Err(e) {
+      e.into<String>.printf("%s\n", _);
+
+      forward // Some syntax for forwarding the existing value?
+    }
+    .err_to<String>()
+    .then(to_int)
+  else {
+    return None
+  };
+
+  return Some(x + y);
+}
+```
+
+Or perhaps a library-based approach for the same:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  try let Ok(x) = {
+    p_1
+    .open(Read)
+    .then(readline)
+    .on_err(
+      fn (e: Sys::IO::Err) {
+        printf("Err: %s\n", e.into<String>());
+      }
+    ) // Forwards the Result as-is
+    .err_to<String>()
+    .then(to_int)
+  }
+  else {
+    return None
+  };
+
+  try let Ok(y) =
+    p_2
+    .open(Read).then(readline) catch Err(e) {
+      e.into<String>.printf("%s\n", _);
+
+      return None;
+    }
+    .err_to<String>()
+    .then(to_int)
+  else {
+    return None
+  };
+
+  return Some(x + y);
+}
+```
+
+Or perhaps we go full-bore into language-level features:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  return Some(
+      p_1
+      .open(Read)
+      .then(readline) match {
+      | Ok(a) -> Ok<String, ToIntErr>(a)
+      | Err(e) -> Err<String, ToIntErr>(e.into<ToIntErr>())
+      }
+      .then(to_int) match {
+      | Ok(a) -> { a }
+      | Err(_) -> { return None; }
+      }
+    +
+      p_2
+      .open(Read)
+      .then(readline) match {
+      | Ok(a) -> Ok<String, ToIntErr>(a)
+      | Err(e) -> Err<String, ToIntErr>(e.into<ToIntErr>())
+      }
+      .then(to_int) match {
+      | Ok(a) -> { a }
+      | Err(_) -> { return None; }
+      }
+  );
+}
+```
+
+A version using mixins (which are basically functions except they're effectively
+copy-pasted into the AST where they're instantiated, which notably means they
+can abstract away a chunk of code but still be able to `return` from the
+"calling" function directly for short-circuiting):
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  mixin pipeline!(p: Path) {
+    p
+    .open(Read)
+    .then(readline) as res catch Err(e) {
+      e
+      .into<String>()
+      .printf("%s\n", _);
+
+      res
+    }
+    .err_to<String>()
+    .then(to_int<u32>) match {
+    | Ok(a) -> { a }
+    | Err(_) -> { return None; }
+    }
+  };
+
+  return Some(pipeline!(p_1) + pipeline!(p_2));
+}
+```
+
+And perhaps further minimized using an unwrapping syntax:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  mixin pipeline!(p: Path) {
+    p
+    .open(Read)
+    .then(readline) as res catch Err(e) {
+      e.into<String>().printf("%s\n", _);
+
+      res
+    }
+    .err_to<String>()
+    .then(to_int<u32>)
+    .unwrap!() // Where this is a MIXIN provided by Option, which
+               // on failure invokes `return None;`, which will cause return
+               // in THIS function.
+  };
+
+  return Some(pipeline!(p_1) + pipeline!(p_2));
+}
+```
+
+Where the mixin is defined as:
+
+```
+variant Option<`a> {
+| Some(`a)
+| None
+}
+where
+{
+  mixin unwrap!(opt: Option<`a>) {
+    match opt {
+    | Some(a) -> { a }
+    | None -> { return None; }
+    }
+  }
+}
+```
+
+And the final result, assuming we don't care about printing intermediate
+failures:
+
+```
+fn maybe_add_file_vals(p_1: Path, p_2: Path): Option<u32> {
+  mixin pipeline!(p: Path) {
+    p.open(Read).then(readline).err_to<String>().then(to_int<u32>).unwrap!()
+  };
+
+  return Some(pipeline!(p_1) + pipeline!(p_2));
+}
+```
+
+
+===
+
+
+Function syntax.
+
+Without generics:
+
+```
+// Return value.
+fn foo(a: T, b: Q): R {
+  ...
+}
+
+// No return value.
+fn foo(a: T, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo(a: T, b: Q) -> R {
+  ...
+}
+
+// No return value.
+fn foo(a: T, b: Q) {
+  ...
+}
+
+fn foo(a: T, b: Q) -> () {
+  ...
+}
+```
+
+```
+// Return value.
+fn () foo(a: T, b: Q) {
+  ...
+}
+
+// No return value.
+fn void foo(a: T, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo(R)(a: T, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo()(a: T, b: Q) {
+  ...
+}
+
+fn foo(a: T, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo -> R (a: T, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo -> () (a: T, b: Q) {
+  ...
+}
+
+fn foo(a: T, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo: R (a: T, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo: () (a: T, b: Q) {
+  ...
+}
+
+fn foo(a: T, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo[R](a: T, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo(a: T, b: Q) {
+  ...
+}
+```
+
+And with generics:
+
+```
+// Return value.
+fn foo<`t, `r>(a: `t, b: Q): `r {
+  ...
+}
+
+// No return value.
+fn foo<`t>(a: `t, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo<`t, `r>: `r (a: `t, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo<`t>(a: `t, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo<`t, `r> -> `r (a: `t, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo<`t>(a: `t, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo<`t, `r>(`r)(a: `t, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo<`t>()(a: `t, b: Q) {
+  ...
+}
+
+fn foo<`t>(a: `t, b: Q) {
+  ...
+}
+```
+
+```
+// Return value.
+fn foo<`t, `r>[`r](a: `t, b: Q) {
+  ...
+}
+
+// No return value.
+fn foo<`t>(a: `t, b: Q) {
+  ...
+}
+```
+
+Possible anonymous function type syntax given the above options:
+
+```
+fn(a: T, b: Q): R
+fn(a: T, b: Q) -> R
+fn(R)(a: T, b: Q)
+fn R (a: T, b: Q)
+fn: R (a: T, b: Q)
+fn -> R (a: T, b: Q)
+fn[R](a: T, b: Q)
+fn{R}(a: T, b: Q)
+
+fn<`a, `r>(a: `a, b: Q): `r
+fn<`a, `r>(a: `a, b: Q) -> `r
+fn<`a, `r>(`r)(a: `a, b: Q)
+fn<`a, `r>: `r (a: `a, b: Q)
+fn<`a, `r> -> `r (a: `a, b: Q)
+fn<`a, `r>[`r](a: `a, b: Q)
+fn<`a, `r>{`r}(a: `a, b: Q)
+```
+
+Some are more gross than others when passed as an argument to a non-trivial
+function:
+
+```
+fn bar(x: Z, f: fn(T, Q): R): S { ... }
+fn bar(x: Z, f: fn(T, Q) -> R) -> S { ... }
+fn bar(S)(x: Z, f: fn(R)(T, Q)) { ... }
+fn S bar(x: Z, f: fn R (T, Q)) { ... }
+fn bar S (x: Z, f: fn R (T, Q)) { ... }
+fn bar: S (x: Z, f: fn: R (T, Q)) { ... }
+fn bar -> S (x: Z, f: fn -> R (T, Q)) { ... }
+fn bar[S](x: Z, f: fn[R](T, Q)) { ... }
+fn bar{S}(x: Z, f: fn{R}(T, Q)) { ... }
+```
+
+Considerations:
+
+- The `[...]` syntax may be needed if we need explicit "closing-over" lists for
+variables captured in a closure.
+- A syntax where the return type is listed before the template parameters list
+could be needlessly confusing.
+
+
+===
+
+
+RAII considerations:
+
+RAII is clearly a very nice, effective pattern in C++. C++ is also a language
+with a substantial number of "magic"/implicit features, where it is difficult
+to impossible to tell at a glance, with no further context, what is actually
+happening in what otherwise looks like a normal function (when objects are
+involved). Any operator could be overloaded, any object could have semantics on
+destruction, whether a copy/move constructor is involved at any point is usually
+not explicit, etc.
+
+If this new language has straightforward C++-style RAII but demands to be
+explicit elsewhere, there is an inconsistency clash. But without RAII, certain
+patterns that RAII solves cleanly can become a problem for "end-user"
+programmers (auto-closing of files when they go out of scope, auto-freeing
+heap memory, etc).
+
+We can make the type system force you to be explicit about these things, so it's
+a matter of whether that's sufficiently ergonomic. eg, each type that needs some
+sort of "on destruction" semantic could be implemented with typestates, plus
+support to add an additional feature for typestates, such that:
+
+- (New optional typestate feature): All type states prior to the terminal
+"destruction" state disallow going out of scope.
+- The function that allows transitioning to the "destruction" state is the
+function that must be run as part of object destruction.
+
+ie:
+
+```
+class SmartPtr<T> among SmartPtr<T>, DestructableSmartPtr
+where SmartPtr<T> is nodestruct {
+    let ptr: T;
+
+    fn init(): SmartPtr<T> {
+        do let Some(ptr) is Sys::malloc<T>();
+        return SmartPtr<T> {.ptr=ptr};
+    }
+
+    fn free(self: mov SmartPtr<T>): DestructableSmartPtr {
+        Sys::free(self.ptr);
+
+        return DestructableSmartPtr;
+    }
+}
+where DestructableSmartPtr {}
+
+How does this work when such objects are placed in containers? Is a "destructor"
+still a function that gets called automatically in some contexts? Is it always
+called manually, so the container implementation simply needs to know what to
+call? Are destructors at least all named the same (ie, `fn ~()`)? How does this
+tie in with "built-in" containters, ie, dynamic arrays, hashmaps, sets?
+
+A typestate approach becomes conceptually heavyweight.
+
+We could optionally permit destructors to return a value, and compose them with
+the `ignore` feature. That way, for destructors for which failure is impossible,
+they are written to return void, and may be invoked implicitly when they go out
+of scope. Then, for destructors which can fail, they are written to a return a
+value and the compiler will detect that the return value is not being addressed
+and error unless the user explicitly calls the destructor (and either uses the
+return value or ignores it). Further, some destructors may be able to "fail",
+which could be potentially interesting, but in most cases the user would still
+choose to ignore the failure. In this case, the library writer would indicate
+the destructor return value is `ignorable`, and the implicit destruction would
+again be the default, with the option for the user to explicitly run the
+destructor.
+
+```
+class File {
+    let fh: Sys::FileHandle;
+
+    fn open(path: Path, mode: Mode): Option<File> {
+        let fh = Sys::open(path, mode);
+
+        if (fh == -1) {
+            return None;
+        }
+
+        return Some(File {.fh = fh});
+    }
+
+    fn ~(): ignore Result<(), Sys::Errno> {
+        let result = Sys::close(fh);
+
+        if (result == -1) {
+            return Err(errno);
+        }
+
+        return Ok;
+    }
+}
+```
+
+
+===
+
+
+Haskell-style variant constructor named fields, and accessing common ones.
+
+```
+variant Expr {
+| Add(pos: (int, int), Expr, Expr)
+| Sub(pos: (int, int), Expr, Expr)
+| Val(pos: (int, int), Expr, Expr)
+}
+
+fn main() {
+    let expr_list = get_list_of_exprs();
+
+    // Each `e` could be any `Expr` constructor. But, all share the same named
+    // field `pos`, so it's always safe to try to access such a field. May
+    // require magic in the compiler to check the tag, if the field is not
+    // always at the same aligned position (eg, not always the first field).
+    for e in expr_list {
+        printf("Pos Line: [%d], Pos Col: [%d]\n", e.pos.0, e.pos.1);
+    }
+}
+```
+
+vs
+
+```
+variant Expr where
+    let pos: (int, int);
+{
+| Add(Expr, Expr)
+| Sub(Expr, Expr)
+| Val(Expr, Expr)
+}
+
+// ie, all constructors implicitly have a `pos` first field. This seems like it
+// could easily become confusing, since actual `Expr` construction through an
+// actual constructor is no longer symmetric (declaration has "two" fields per
+// constructor, but really there's three needed to construct an actual Expr via
+// a constructor). Maybe just need to try it out.
+```
+
+What about cases where only some constructors make sense to have such a field,
+but other constructors always statically know what that field should be if
+ever accessed?
+
+```
+variant Expr {
+| Add(t: my_type, Expr, Expr)
+| Sub(t: my_type, Expr, Expr)
+| U32Val(t: my_type = my_type::U32, u32)
+| F32Val(t: my_type = my_type::F32, f32)
+}
+
+// This doesn't require additional space, but possibly marginally more CPU, to
+// process the "bare type" values. Allows the `expr.t` syntax to work even when
+// it doesn't make sense to actually allow the user to set a particular field.
+```
+
+
+===
+
+
+"Monads"?
+
+```
+variant Option<`a> where
+    fn _return(v: `a): Option<`a> { return Some(v); }
+{
+| Some(v: `a) where
+    fn bind(f: fn(`a): Option<`a>): Option<`a> { return f(v); }
+| None where
+    fn bind(f: fn(`a): Option<`a>): Option<`a> { return None; }
+}
+```
+
+or perhaps UFCS and a bit of magic? (ed: nope, doesn't work)
+
+```
+variant Option<`a> {
+| Some(`a)
+| None
+}
+
+fn _return<T, V isa variant, C isa constructor<V>>(value: T): V {
+    return C(value);
+}
+
+fn bind<T, V isa variant>(vari: V, f: fn(T): V): V {
+    return <...>
+    // Nope, this is where we need constructor-specific logic.
+}
+```
+
+
+===
+
+
+Format strings as a dedicated type, a la OCaml?
+
+
+===
+
+
+Built-in containers with built-in operators: dynamic arrays, hashmaps, sets.
+
+Dynamic arrays can be appended to, erased from, indexed, etc.
+
+Hashmaps are unique-key-to-arbitrary-value containers.
+
+Sets are like hashmaps, but with no associated value, and certain dedicated
+operators.
+
+Can hashmaps and sets be unified? Is a hashmap with nil as a value a set? Do
+set operations make sense for a hashmap that does have a non-nil value?
+
+
+Set operations:
+
+<|> : Union
+<&> : Intersection
+<-> : A <-> B yields the unique elements of A.
+etc.
+
+
+===
+
+
+Variadic templated functions? What does an N-argument `max(...)` func look like?
+
+```
+fn max<T>(first_arg: T, rest_args: ...T): T {
+    let mut so_far = first_arg;
+    varargfor(a : rest_args) {
+        so_far = if a > so_far { a } else { so_far };
+    }
+    return so_far;
+}
+```
+
+That seems pretty dirty. New keyword that only works for variadic arguments that
+happen to all be the same type? Garbage. What about a list-based impl?
+
+```
+fn max<T>(args: ref [dynamic]T): T {
+    let mut so_far: T = T.min;
+
+    for (arg : args) {
+        so_far = if arg > so_far { arg } else { so_far };
+    }
+
+    return so_far;
+}
+```
+
+Also terrible, because `max<i32>([])` is whatever `i32.min` is, which is just a
+bad API.
+
+What about:
+
+```
+fn max<T>(args: T)
+    where T does T.size // It is meaningful to grab this property, which is only
+                        // true for built-in containers.
+    where T.size >= 2   // Enforce a particular size at compile time, which is
+                        // only possible for statically-sized stack allocated
+                        // arrays (maybe also true for statically-initialized
+                        // other built-in datastructures? Static map?)
+{
+    let mut so_far: T.elem_t = T.elem_t.min;
+
+    for (arg : args) {
+        so_far = if arg > so_far { arg } else { so_far };
+    }
+
+    return so_far;
+}
+```
+
+Hmm. Depends on quite a bit of functionality. What about `...` as a C++-style
+fold (or repeat) operator?:
+
+```
+fn max<T>(init: T, rest: ...T): T {
+    let mut so_far = init;
+
+    ... so_far = if so_far > rest { so_far } else { rest };
+
+    // Which expands to:
+    //
+    // so_far = if so_far > rest[0] { so_far } else { rest[0] };
+    // so_far = if so_far > rest[1] { so_far } else { rest[1] };
+    // so_far = if so_far > rest[2] { so_far } else { rest[2] };
+    // so_far = if so_far > rest[3] { so_far } else { rest[3] };
+    // ...
+    // so_far = if so_far > rest[N] { so_far } else { rest[N] };
+
+    return so_far;
+}
+```
+
+What about sum?
+
+```
+fn sum<T>(init: T, rest: ...T): T {
+    return init ... + rest;
+
+    // Which expands to:
+    //
+    // return init + rest[0] + rest[1] + rest[2] + ... + rest[N];
+}
+```
+
+What about passthrough to another function that takes varargs?
+
+```
+fn weird_printf<T>(args: ...T)
+    where T is Traits::integral
+{
+    let mut fmt = "[%d]";
+    ... fmt = fmt ~ " [%d]"; // Does `...` simply repeat for however many in T?
+
+    // Expanding to:
+    //
+    // fmt = fmt ~ " [%d]"; args[0]
+    // fmt = fmt ~ " [%d]"; args[1]
+    // fmt = fmt ~ " [%d]"; args[2]
+    // ...
+    // fmt = fmt ~ " [%d]"; args[N]
+
+    printf(fmt.cstr, ... args);
+
+    // Expanding to:
+    //
+    // printf(fmt.cstr, args[0], args[1], args[2], ..., args[N]);
+}
+```
+
+What would a variadic function that has heterogeneous types in `rest` look like?
+Does it look like the better examples above, in that T is already heterogeneous
+in those examples, and as long as the generated (folded?) code typechecks, it's
+okay?
+
+Do we instead need a little more expressiveness, like with C++ parameter packs?
+
+```
+fn mixed<type ...Ts>(args: ...Ts)
+    where TCommon = Traits::common_t(...Ts)
+: TCommon { ... }
+```
+
+Do we need to bother with more complex syntax, like C++? Or can we do something
+else?
+
+```
+fn mixed(args: ... `Ts)
+// Backtick, `, indicates a type variable?
+// And, ... `, indicates a parameter pack?
+//
+// Surely pre-declaring the template types buys us something. Ah, perhaps being
+// able to take pointers to the function itself? Okay.
+```
+
+So maybe:
+
+```
+fn mixed<...Ts>(args: ...Ts)
+    where T = Traits::common_t(...Ts)
+: T { ... }
+
+fn main() {
+    let f = mixed<i32, i64>;
+}
+```
+
+How do we count how many elements are in a parameter pack? Property?
+
+```
+fn mixed<...Ts>(args: ...Ts): i32 {
+    return Ts.size;
+}
+```
+
+What would a more intelligent version of `weird_printf` look like?
+
+```
+fn weird_printf<T>(args: ...T) {
+    let mut fmt: string;
+
+    ... fmt = static if args.type.is_integer {
+        fmt ~ "[%d]"
+    } else if args.type.is_float {
+        fmt ~ "[%f]"
+    } else if args.type.is_string {
+        fmt ~ "[%s]"
+    } else {
+        fmt ~ "[%ignore]"
+    };
+
+    printf(fmt.cstr, ... args);
+}
+```
+
+What do we need to be able to write a type-safe `printf`, instead of leaning on
+C's unsafe `printf`? Is this entirely compiler magic, or is there a way to
+"encode" the rules?
+
+
+===
+
+
+Syntax for templated variants?
+
+```
+variant Option<T> {
+| Some(T)
+| None
+}
+```
+vs
+```
+variant Option T {
+| Some(T)
+| None
+}
+```
+vs
+```
+variant Option `T {
+| Some(`T)
+| None
+}
+```
+vs
+```
+variant `T Option {
+| Some(`T)
+| None
+}
+```
+vs
+```
+variant Option {
+| Some(`a)
+| None
+}
+```
+vs
+```
+variant Option<`a> {
+| Some(`a)
+| None
+}
+```
+
+
+===
+
+
+Maybe contracts can be applied to construction of variants (and structs?).
+
+ie:
+
+variant Range {
+| Greater(i)
+| Lesser(i)
+| FromTo(i, j) assert i < j
+}
+
+
+===
+
+
+Maybe functions can accept particular variant constructors as arguments, which
+means we need a way to enforce a variable is a particular variant at that point.
+
+Maybe we don't need this with `if let` syntax.
+
+
+===
+
+
+Can we leverage lowering to get an advanced form of `if let`?
+
+  let opt = Some(42);
+  let res = Ok("hello");
+
+  if
+  =?=
+      opt is Some(i) && res is Ok(_)
+  =?=
+      let Some(i) = opt && let Ok(_) = res
+  =?=
+      match opt is Some(i) && match res is Ok(_)
+  =?=
+  {
+      ...
+  }
+
+
+  if opt is Some(i) && res is Ok(_) {
+    printf("Value is [%d]\n", i);
+  }
+
+Lowered to:
+
+  {
+    match opt {
+    | Some(i) ->
+        match res {
+        | Ok(_) -> {
+            printf("Value is [%d]\n", i);
+          }
+
+        | Err(_) -> {}
+        }
+
+    | None -> {}
+    }
+  }
+
+And
+
+  let val = if opt is Some(i) && res is Ok(_) {
+    i;
+  }
+  else {
+    10
+  };
+
+Lowered to:
+
+  let val = {
+    let _tmp = match opt {
+    | Some(i) ->
+        match res {
+        | Ok(_) -> i
+        | Err(_) -> 10
+        }
+    | None -> 10
+    };
+
+    _tmp
+  }
+
+And can we leverage this to declare variables assigned to arbitrary expressions?
+
+  if opt is Some(i) && i * 10 is new_var && new_var < 50 {
+    ...
+  }
+
+Lowered to:
+
+  {
+    let i: i32;
+    let new_var: i32;
+
+    match opt {
+    | Some(i) ->
+        match i * 10 {
+        | new_var ->
+            match new_var < 50 {
+            | true -> ...
+            | false -> {}
+            }
+        }
+
+    | None -> {}
+    }
+  }
+
+
+===
+
+
+Statically-sized arrays are useful in narrow contexts. Heap-allocated arrays are
+useful in the most general context, but require heap management.
+
+Variable-length arrays are a middleground. They cannot be grown and are thus not
+as general as heap-managed arrays, but being able to dynamically choose their
+size before construction makes them useful in many more cases than static
+arrays.
+
+However:
+
+A static array knows its size at compiletime and functions (including generic
+functions) can be written to take a specific array size at call time:
+
+  fn populate_array(arr: ref [10]i32) { ... }
+  fn frobulate_array<T, size>(arr: ref [size]T) { ... }
+
+  fn main() {
+    let arr_one: [10]i32;
+    populate_array(ref arr_one);
+
+    let arr_two: [100]bool;
+    frobulate_array<bool, 100>(ref arr);
+  }
+
+but variable-length arrays by definition don't know their size at compile time.
+What we _don't_ want to do is get in the business of treating VLAs as-if they
+were heap-managed, when they're still const-size arrays. Consider:
+
+- We don't want to discriminate in the typesystem that an unsized array
+reference is _like_ a heap-managed array, and is mutable, but cannot be resized.
+
+- We'd rather it was clear at the function boundary that what you're dealing
+with is a stack-allocated array, not a heap-allocated array.
+
+- We want to be able to pass VLAs as-if they were statically-sized arrays,
+rather than treating them as heap-allocated resizable arrays, because that
+is the more natural/obvious position.
+
+How do we reconcile the lack of knowledge about the size of the array at
+compiletime with the desire to be able to treat it as a static array at the
+function boundary, but without putting all trust into the programmer to get it
+right every time?
+
+VLAs necessarily already depend on runtime logic, so it's not a stretch to
+introduce additional runtime logic to enforce expectations. It would be the
+same logic the programmer _should_ write, but injected at compiletime.
+
+So: We support a cast from a VLA to its equivalent static array, ...
+
+This is impossible. The actual code for the function itself needs a static
+size at compile time. No way around that without runtime checks.
+
+ALSO: If we don't allow VLAs (stack `alloca`s), then it becomes more possible to
+analyze stack space consumption.
