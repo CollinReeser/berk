@@ -17,8 +17,7 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
     | RBool -> Llvm.i1_type llvm_ctxt
 
     | RString ->
-        let llvm_char_t = Llvm.i8_type llvm_ctxt in
-        let llvm_str_t = Llvm.pointer_type llvm_char_t in
+        let llvm_str_t = Llvm.pointer_type2 llvm_ctxt in
         llvm_str_t
 
     | RArray(elem_typ, sz) ->
@@ -85,8 +84,9 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
 
         _rast_t_to_llvm_t largest_tuple
 
-    | RRef(pointed_t)
-    | RPtr(pointed_t) -> Llvm.pointer_type (_rast_t_to_llvm_t pointed_t)
+    | RRef(_)
+    | RPtr(_) ->
+        Llvm.pointer_type2 llvm_ctxt
 
     | RByteArray(actual_t) ->
         let llvm_actual_t = _rast_t_to_llvm_t actual_t in
@@ -94,10 +94,11 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
         let byte_array_t = RArray(RU8, sizeof) in
         _rast_t_to_llvm_t byte_array_t
 
-    | RFunction(ret_t, args_t_lst) ->
-        let llvm_ret_t = _rast_t_to_llvm_t ret_t in
+    (* | RFunction(ret_t, args_t_lst) -> *)
+    | RFunction(_, _) ->
+        (* let llvm_ret_t = _rast_t_to_llvm_t ret_t in *)
 
-        let args_to_llvm args_t_lst =
+        (* let args_to_llvm args_t_lst =
           let rec _args_to_rev_llvm llvm_t_lst_so_far args_t_lst =
             begin match args_t_lst with
             | [] -> (llvm_t_lst_so_far, false)
@@ -112,20 +113,20 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
           let (rev_llvm_t_lst, is_var_arg) = _args_to_rev_llvm [] args_t_lst in
 
           (List.rev rev_llvm_t_lst, is_var_arg)
-        in
+        in *)
 
-        let (llvm_args_t_lst, is_var_arg) = args_to_llvm args_t_lst in
-        let llvm_args_t_arr = Array.of_list llvm_args_t_lst in
+        (* let (llvm_args_t_lst, is_var_arg) = args_to_llvm args_t_lst in
+        let llvm_args_t_arr = Array.of_list llvm_args_t_lst in *)
 
-        let func_t = begin if is_var_arg then
+        (* let func_t = begin if is_var_arg then
           Llvm.var_arg_function_type llvm_ret_t llvm_args_t_arr
         else
           Llvm.function_type llvm_ret_t llvm_args_t_arr
-        end in
+        end in *)
 
         (* We always work with function _pointers_ as a layer of abstraction,
         as raw LLVM function types are sizeless and can't be allocated for. *)
-        Llvm.pointer_type func_t
+        Llvm.pointer_type2 llvm_ctxt
 
     | RVarArgSentinel ->
         failwith "Should not need to determine type for var arg"
@@ -220,8 +221,11 @@ let initialize_mpm the_mpm =
   Llvm_ipo.add_global_optimizer the_mpm ;
   (* Remove unused arguments to functions. *)
   Llvm_ipo.add_dead_arg_elimination the_mpm ;
+
   (* Pass instead by-value any small RO by-reference args. *)
-  Llvm_ipo.add_argument_promotion the_mpm ;
+  (* Available in LLVM 14 bindings, but not LLVM 15. *)
+  (* Llvm_ipo.add_argument_promotion the_mpm ; *)
+
   (* Annotate functions with attributes indicating various RO behavior. *)
   Llvm_ipo.add_function_attrs the_mpm ;
   (* Inline small functions. *)

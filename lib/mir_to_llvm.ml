@@ -107,13 +107,47 @@ let codegen_constant
 
       let indices = Array.of_list [
         Llvm.const_int i32_t 0;
-        Llvm.const_int i32_t 0;
+        (* Llvm.const_int i32_t 0; *)
       ] in
+
+      let llvm_char_t = Llvm.i8_type llvm_ctxt in
+
+      Printf.printf
+        "llvm_char_t: %!"
+      ;
+      Llvm.dump_type llvm_char_t ;
+      Printf.printf
+        "\n%!"
+      ;
+      Printf.printf
+        "llvm_str: %!"
+      ;
+      Llvm.dump_value llvm_str ;
+      Printf.printf
+        "\n%!"
+      ;
+      Printf.printf
+        "global_str: %!"
+      ;
+      Llvm.dump_value global_str ;
+      Printf.printf
+        "\n%!"
+      ;
+
+      Printf.printf "End print llvm_char_t\n%!";
+
+      (* let llvm_ptr_t = Llvm.pointer_type2 llvm_ctxt in *)
+
       (* We don't want the pointer to the statically sized array, but rather a
       more "raw" pointer to the first element, as the LLVM-side type of our
       string values is a "raw" pointer to some bytes (as opposed to a pointer
       to a structure or statically-sized array). *)
-      let llvm_gep = Llvm.build_gep global_str indices "strgeptmp" builder in
+      let llvm_gep =
+        Llvm.build_gep2 llvm_char_t global_str indices "strgeptmp" builder
+        (* Llvm.build_gep2 llvm_ptr_t global_str indices "strgeptmp" builder *)
+      in
+
+      Printf.printf "End Llvm.build_gep2\n%!";
 
       llvm_gep
 
@@ -167,7 +201,15 @@ let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
   as a sanity check against the MIR being well-formed, ie, the MIR must also
   have fully unique names everywhere, just like LLVM. *)
   let call_result =
-    Llvm.build_call llvm_func_val llvm_args result_name builder |>
+    let llvm_func_t = Llvm.type_of llvm_func_val in
+
+    let _ = begin
+      Printf.printf "LLVM DUMP VALUE: [[[" ;
+      Llvm.dump_value llvm_func_val ;
+      Printf.printf "]]]\n\n%!"
+    end in
+
+    Llvm.build_call2 llvm_func_t llvm_func_val llvm_args result_name builder |>
     if result_name = "" then
       Fun.id
     else
@@ -176,6 +218,12 @@ let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
 
   (* Hint that this should be a tailcall if possible. *)
   let _ = Llvm.set_tail_call true call_result in
+
+  let _ = begin
+    Printf.printf "CALL_RESULT: [[[%!" ;
+    Llvm.dump_value call_result ;
+    Printf.printf "]]]\n%!"
+  end in
 
   (func_ctxt, call_result)
 ;;
@@ -222,7 +270,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | Load({lname=name_value; _}, {lname=name_alloca; _}) ->
+  | Load({lname=name_value; t=loaded_t; _}, {lname=name_alloca; _}) ->
       let alloca = try
         StrMap.find name_alloca func_ctxt.cur_vars
       with Not_found ->
@@ -231,8 +279,10 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
         )
       in
 
+      let llvm_loaded_t = func_ctxt.mod_ctxt.rast_t_to_llvm_t loaded_t in
+
       let value =
-        Llvm.build_load alloca name_value builder |>
+        Llvm.build_load2 llvm_loaded_t alloca name_value builder |>
         enforce_mir_llvm_name_agreement name_value
       in
 
@@ -274,7 +324,7 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       func_ctxt
 
-  | PtrTo({lname; _}, indices, {lname=agg_name; _}) ->
+  | PtrTo({lname; t=pointed_t; _}, indices, {lname=agg_name; _}) ->
       let index_to_llvm idx = begin match idx with
         | Static(i) ->
             ValU32(i) |> codegen_constant llvm_ctxt func_ctxt builder
@@ -284,11 +334,23 @@ let codegen_bb_instr llvm_ctxt builder func_ctxt instr =
 
       let llvm_indices = Array.of_list (List.map index_to_llvm indices) in
       let agg_value = StrMap.find agg_name func_ctxt.cur_vars in
+      let llvm_pointed_t = func_ctxt.mod_ctxt.rast_t_to_llvm_t pointed_t in
+
+      Printf.printf
+        "llvm_pointed_t: %!"
+      ;
+      Llvm.dump_type llvm_pointed_t ;
+      Printf.printf
+        "\n%!"
+      ;
+      Printf.printf "End print llvm_pointed_t\n%!";
 
       let llvm_gep =
-        Llvm.build_gep agg_value llvm_indices lname builder |>
+        Llvm.build_gep2 llvm_pointed_t agg_value llvm_indices lname builder |>
         enforce_mir_llvm_name_agreement lname
       in
+
+      Printf.printf "End Llvm.build_gep2\n%!";
 
       let func_ctxt = {
         func_ctxt with cur_vars = StrMap.add lname llvm_gep func_ctxt.cur_vars
@@ -589,12 +651,19 @@ let codegen_func_mir
   (* Validate the generated code, checking for consistency. *)
   let _ = begin
     match Llvm_analysis.verify_function new_func with
-    | true -> ()
+    | true ->
+        Printf.printf "Valid function generated\n%s\n"
+          (Llvm.string_of_llvalue new_func) ;
+        Printf.printf "\n%!";
+        ()
+
     | false ->
       begin
         Printf.printf "invalid function generated\n%s\n"
           (Llvm.string_of_llvalue new_func) ;
-        Llvm_analysis.assert_valid_function new_func ;
+        Printf.printf "%!";
+        (* Llvm_analysis.assert_valid_function new_func ; *)
+        Printf.printf "\n%!";
         ()
       end
   end in
@@ -603,12 +672,14 @@ let codegen_func_mir
     if mod_ctxt.optimize then
       (* Optimize the function. *)
       let did_fpm_do = Llvm.PassManager.run_function new_func the_fpm in
-      Printf.printf "Did the FPM do function-level opts on [%s]? [%B]\n"
+      Printf.printf "Did the FPM do function-level opts on [%s]? [%B]\n%!"
         mir_ctxt.f_name did_fpm_do ;
       ()
     else
       ()
   end in
+
+  Printf.printf "Exiting codegen_func_mir\n%!";
 
   mod_ctxt
 ;;
@@ -635,9 +706,29 @@ let codegen_func_mirs
     ) mod_gen_ctxt mir_ctxts
   in
 
+  let _ = Printf.printf "Dumping module...\n%!" in
+  let _ = Printf.printf "====================================\n%!" in
+  let _ = Llvm.dump_module mod_gen_ctxt.llvm_mod in
+  let _ = Printf.printf "====================================\n%!" in
+
   let _ = begin
     if mod_gen_ctxt.validate then
-      let _ = Llvm_analysis.assert_valid_module mod_gen_ctxt.llvm_mod in
+      let _ = begin
+        match Llvm_analysis.verify_module mod_gen_ctxt.llvm_mod with
+        | None ->
+            ()
+
+        | Some(reason) ->
+            let _ =
+              Printf.printf
+                "Llvm_analysis.verify_module failed with [\n%s\n]\n%!"
+                reason
+            in
+            let _ = Printf.printf "Attempting to assert valid module...\n%!" in
+            let _ = Llvm_analysis.assert_valid_module mod_gen_ctxt.llvm_mod in
+            let _ = Printf.printf "Asserted valid module!\n%!" in
+            ()
+      end in
       ()
     else
       ()
