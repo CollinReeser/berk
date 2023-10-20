@@ -701,55 +701,6 @@ and type_check_stmts tc_ctxt stmts =
       let (tc_ctxt_final, stmts_tced) = type_check_stmts tc_ctxt_updated xs in
       (tc_ctxt_final, stmt_tced :: stmts_tced)
 
-(* Given a list of expressions, attempt to collapse/"unify" the types each
-expression claims to have, with the expectation that they all ultimately agree
-with each other, with respect to type variable mappings. *)
-and collapse_expr_type_alternates_n tc_ctxt expr_lst =
-  let expr_t_lst = List.map expr_type expr_lst in
-  let expr_t_2_tuples = list_to_2_tuples expr_t_lst in
-  let (tvars_to_types, _) =
-    List.fold_left_map (
-      fun map_so_far (lhs_t, rhs_t) ->
-        let map_up = map_tvars_to_types ~init_map:map_so_far lhs_t rhs_t in
-        (map_up, ())
-    ) StrMap.empty expr_t_2_tuples
-  in
-  let expr_t_concretified_lst =
-    List.map (concretify_unbound_types tvars_to_types) expr_t_lst
-  in
-  let agreement_candidate_t = common_type_of_lst expr_t_concretified_lst in
-
-  let expr_resolved_injected_lst =
-    List.map (inject_type_into_expr agreement_candidate_t) expr_lst
-  in
-
-  let expr_resolved_lst =
-    List.map (type_check_expr tc_ctxt agreement_candidate_t) expr_resolved_injected_lst
-  in
-
-  let expr_t_resolved_lst = List.map expr_type expr_resolved_injected_lst in
-
-  let agreement_t = common_type_of_lst expr_t_resolved_lst in
-
-  (
-    agreement_t,
-    expr_resolved_lst
-  )
-
-and collapse_expr_type_alternates_2 tc_ctxt lhs_expr rhs_expr =
-  let (agreement_t, collapsed) =
-    collapse_expr_type_alternates_n tc_ctxt [lhs_expr; rhs_expr]
-  in
-  match collapsed with
-  | [lhs_expr_collapsed; rhs_expr_collapsed] ->
-    (
-      agreement_t,
-      lhs_expr_collapsed,
-      rhs_expr_collapsed
-    )
-  | _ -> failwith "Collapse did not yield same-size list on output"
-
-
 (* expected_t is what type the expression is expected to evaluate to. We
 normally don't care about this, because the stmt-level typecheck will ensure the
 expression is the right type. However, in cases of eg variants/structs that
