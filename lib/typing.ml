@@ -21,7 +21,6 @@ type berk_t =
   (* A ref to a type is like a pointer to a value, but the ref itself cannot be
   re-assigned, and it cannot outlive the referenced value. *)
   | Ref of berk_t
-  | Ptr of berk_t
   | Tuple of berk_t list
   | Array of berk_t * int
   | Variant of string * v_ctor list
@@ -84,10 +83,6 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
 
   | Ref (typ) ->
       Printf.sprintf "ref %s"
-        (fmt_type ~pretty_unbound:pretty_unbound typ)
-
-  | Ptr (typ) ->
-      Printf.sprintf "ptr %s"
         (fmt_type ~pretty_unbound:pretty_unbound typ)
 
   | Function (ret_t, arg_t_lst) ->
@@ -172,9 +167,8 @@ let rec has_default_value t =
       time; there is no "default constructor". *)
       false
 
-  | Ref(_)
-  | Ptr(_) ->
-      (* References and pointers must always point to something. *)
+  | Ref(_) ->
+      (* References must always point to something. *)
       false
 
   | Function(_, _) ->
@@ -402,8 +396,7 @@ let rec type_convertible_to from_t to_t =
         else false
       else false
 
-  | (Ref(lhs_t), Ref(rhs_t))
-  | (Ptr(lhs_t), Ptr(rhs_t)) ->
+  | (Ref(lhs_t), Ref(rhs_t)) ->
       type_convertible_to lhs_t rhs_t
 
   (* A type is implicitly convertible to a reference to that type. *)
@@ -608,8 +601,7 @@ let rec sizeof_type t =
   | Function(_, _) -> 16
   (* FIXME: Not true yet, but will be if/when function ptrs become fat ptrs. *)
   | F128 -> 16
-  | Ref(_)
-  | Ptr(_) -> 8
+  | Ref(_) -> 8
   | U64 | I64 | F64 -> 8
   | U32 | I32 | F32 -> 4
   | U16 | I16 -> 2
@@ -747,16 +739,6 @@ let unwrap_aggregate_indexable_reference (indexable_t : berk_t) i =
 ;;
 
 
-let unwrap_ptr ptr_t =
-  match ptr_t with
-  | Ptr(t) -> t
-  | Array(t, _) -> t
-  | _ ->
-      failwith (
-        Printf.sprintf "Cannot unwrap non-ptr type [%s]" (fmt_type ptr_t)
-      )
-;;
-
 let unwrap_ref ref_t =
   match ref_t with
   | Ref(t) -> t
@@ -764,13 +746,6 @@ let unwrap_ref ref_t =
       failwith (
         Printf.sprintf "Cannot unwrap non-ref type [%s]" (fmt_type ref_t)
       )
-;;
-
-
-let is_unwrappable ptr_t =
-  match ptr_t with
-  | Ptr(_) -> true
-  | _ -> false
 ;;
 
 
@@ -815,13 +790,6 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
       in
 
       Ref(refed_concretified_t)
-
-  | Ptr(pointed_t) ->
-      let pointed_concretified_t =
-        concretify_unbound_types tvar_to_t pointed_t
-      in
-
-      Ptr(pointed_concretified_t)
 
   | Tuple(tuple_typs) ->
       let typs_concretified =
@@ -878,8 +846,7 @@ let rec is_concrete_type ?(verbose=false) typ =
   | String
   | Nil -> true
 
-  | Ref(t)
-  | Ptr(t) -> _is_concrete_type t
+  | Ref(t) -> _is_concrete_type t
 
   | VarArgSentinel -> true
 
@@ -987,10 +954,6 @@ let rec merge_types lhs_orig_t rhs_orig_t : berk_t =
     | (Nil,  Nil)  -> Nil
     | (String, String) -> String
     | (VarArgSentinel, VarArgSentinel) -> VarArgSentinel
-
-    | (Ptr(lhs_t), Ptr(rhs_t)) ->
-        let merged_t = _merge_types lhs_t rhs_t in
-        Ptr(merged_t)
 
     | (Tuple(lhs_ts), Tuple(rhs_ts)) ->
         let merged_ts = List.map2 _merge_types lhs_ts rhs_ts in
@@ -1116,8 +1079,7 @@ let map_tvars_to_types
     | (VarArgSentinel, VarArgSentinel) ->
         map_so_far
 
-    | (Ref(lhs_t), Ref(rhs_t))
-    | (Ptr(lhs_t), Ptr(rhs_t)) ->
+    | (Ref(lhs_t), Ref(rhs_t)) ->
         _map_tvars_to_types map_so_far lhs_t rhs_t
 
     (* A reference to a type can be transparently treated as the type itself. *)
@@ -1177,8 +1139,7 @@ let get_tvars typ =
     | VarArgSentinel
     | Undecided -> so_far
 
-    | Ref(t)
-    | Ptr(t) -> _get_tvars so_far t
+    | Ref(t) -> _get_tvars so_far t
 
     | Tuple(tuple_typs) ->
         List.fold_left _get_tvars so_far tuple_typs
@@ -1272,9 +1233,6 @@ let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
   | (Ref(lhs), Ref(rhs)) ->
       is_same_type lhs rhs
 
-  | (Ptr(lhs), Ptr(rhs)) ->
-      is_same_type lhs rhs
-
   | (Array(lhs_t, lhs_i), Array(rhs_t, rhs_i)) ->
       (lhs_i = rhs_i) && (is_same_type lhs_t rhs_t)
 
@@ -1327,7 +1285,6 @@ let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
   | (Nil, _)
   | (VarArgSentinel, _)
   | (Ref(_), _)
-  | (Ptr(_), _)
   | (Array(_, _), _)
   | (Tuple(_), _)
   | (Function(_), _)

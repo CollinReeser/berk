@@ -2063,7 +2063,6 @@ and generate_value_patts t : pattern list =
       List.map (fun ts_patt -> PTuple(t, ts_patt)) ts_patts_cart_prod
 
   | Ref(_) -> failwith "Unimplemented"
-  | Ptr(_) -> failwith "Unimplemented"
   | Function(_, _) -> failwith "Unimplemented"
 
   | Bool -> [PBool(true); PBool(false)]

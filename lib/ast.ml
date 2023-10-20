@@ -1203,7 +1203,6 @@ let rec default_expr_for_t t =
   | UnboundType(_, _)
   | VarArgSentinel
   | Ref(_)
-  | Ptr(_)
   | Variant(_, _)
   | Function(_, _) ->
       failwith (
@@ -1694,7 +1693,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         )
 
     | (Ref(_), _) -> failwith "Unimplemented"
-    | (Ptr(_), _) -> failwith "Unimplemented"
 ;;
 
 

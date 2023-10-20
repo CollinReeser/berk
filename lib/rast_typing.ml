@@ -72,10 +72,6 @@ let rec berk_t_to_rast_t (t : berk_t) : rast_t =
       let refed_rt = berk_t_to_rast_t refed_t in
       RRef(refed_rt)
 
-  | Ptr(pointed_t) ->
-      let pointed_rt = berk_t_to_rast_t pointed_t in
-      RPtr(pointed_rt)
-
   | Tuple(elem_ts) ->
       let elem_rts = List.map berk_t_to_rast_t elem_ts in
       RTuple(elem_rts)
