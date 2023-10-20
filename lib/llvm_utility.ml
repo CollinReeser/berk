@@ -85,7 +85,6 @@ let rast_t_to_llvm_t llvm_sizeof llvm_ctxt =
 
         _rast_t_to_llvm_t largest_tuple
 
-    | RRef(pointed_t)
     | RPtr(pointed_t) -> Llvm.pointer_type (_rast_t_to_llvm_t pointed_t)
 
     | RByteArray(actual_t) ->

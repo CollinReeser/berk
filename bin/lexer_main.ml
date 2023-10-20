@@ -302,28 +302,40 @@ let () =
       ultra_multi_vars[9][19][29][39] = false;
 
       ignore printf(
-        "Change zro, multi-dimensional: [%hhd]\n",
-        ultra_multi_vars[9][19][29][39]
+        "Change zro, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        ultra_multi_vars[9][19][29][39],
+        layer_one[19][29][39],
+        layer_two[29][39],
+        layer_thr[39]
       );
 
       layer_thr[39] = true;
 
       ignore printf(
-        "Change one, multi-dimensional: [%hhd]\n",
+        "Change one, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        ultra_multi_vars[9][19][29][39],
+        layer_one[19][29][39],
+        layer_two[29][39],
         layer_thr[39]
       );
 
       layer_two[29][39] = false;
 
       ignore printf(
-        "Change two, multi-dimensional: [%hhd]\n",
-        layer_one[19][29][39]
+        "Change two, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        ultra_multi_vars[9][19][29][39],
+        layer_one[19][29][39],
+        layer_two[29][39],
+        layer_thr[39]
       );
 
       layer_one[19][29][39] = true;
 
       ignore printf(
-        "Change thr, multi-dimensional: [%hhd]\n",
+        "Change thr, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        ultra_multi_vars[9][19][29][39],
+        layer_one[19][29][39],
+        layer_two[29][39],
         layer_thr[39]
       );
 

@@ -24,7 +24,6 @@ type rast_t =
   "superimposed type" to itself be a tuple. *)
   | RSuperTuple of rast_t list list
   | RArray of rast_t * int
-  | RRef of rast_t
   | RPtr of rast_t
   | RFunction of rast_t * rast_t list
   | RVarArgSentinel
@@ -69,8 +68,8 @@ let rec berk_t_to_rast_t (t : berk_t) : rast_t =
   | VarArgSentinel -> RVarArgSentinel
 
   | Ref(refed_t) ->
-      let refed_rt = berk_t_to_rast_t refed_t in
-      RRef(refed_rt)
+      let pointed_rt = berk_t_to_rast_t refed_t in
+      RPtr(pointed_rt)
 
   | Tuple(elem_ts) ->
       let elem_rts = List.map berk_t_to_rast_t elem_ts in
@@ -192,10 +191,6 @@ and fmt_rtype (rast_type : rast_t) : string =
       let tuples_fmt = fmt_join_strs " | " tuple_fmt_xs in
       Printf.sprintf "(%s)" tuples_fmt
 
-  | RRef (typ) ->
-      Printf.sprintf "ref %s"
-        (fmt_rtype typ)
-
   | RPtr (typ) ->
       Printf.sprintf "ptr %s"
         (fmt_rtype typ)
@@ -222,7 +217,6 @@ let rec sizeof_rtype (t : rast_t) =
   (* FIXME: Not true yet, but will be if/when function ptrs become fat ptrs. *)
   | RF128 -> 16
 
-  | RRef(_)
   | RPtr(_) -> 8
 
   | RString -> 8
@@ -296,7 +290,6 @@ let rec is_same_type (lhs : rast_t) (rhs : rast_t) : bool =
   | (RVarArgSentinel, RVarArgSentinel) ->
       true
 
-  | (RRef(lhs), RRef(rhs))
   | (RPtr(lhs), RPtr(rhs))
   | (RByteArray(lhs), RByteArray(rhs)) ->
       is_same_type lhs rhs
@@ -340,7 +333,6 @@ let rec is_same_type (lhs : rast_t) (rhs : rast_t) : bool =
   | (RString, _)
   | (RNil, _)
   | (RVarArgSentinel, _)
-  | (RRef(_), _)
   | (RPtr(_), _)
   | (RArray(_, _), _)
   | (RTuple(_), _)
@@ -446,10 +438,9 @@ and common_type_of_lst lst : rast_t =
   | x::xs -> List.fold_left common_type_of_lr x xs
 ;;
 
-let rec unwrap_indexable (indexable_t : rast_t) =
+let unwrap_indexable (indexable_t : rast_t) =
   match indexable_t with
   | RArray(t, _) -> t
-  | RRef(inner_indexable_t) -> unwrap_indexable inner_indexable_t
   | _ ->
       failwith (
         Printf.sprintf "Cannot unwrap non-indexable type: [%s]"
@@ -457,12 +448,12 @@ let rec unwrap_indexable (indexable_t : rast_t) =
       )
 ;;
 
-let unwrap_indexable_reference (indexable_t : rast_t) =
+let unwrap_indexable_pointer (indexable_t : rast_t) =
   match indexable_t with
-  | RRef(RArray(arr_elem_t, _)) ->
-      RRef(arr_elem_t)
+  | RPtr(RArray(arr_elem_t, _)) ->
+      RPtr(arr_elem_t)
 
-  | RRef(
+  | RPtr(
       (
         RU64 | RU32 | RU16 | RU8 |
         RI64 | RI32 | RI16 | RI8 |
@@ -472,16 +463,16 @@ let unwrap_indexable_reference (indexable_t : rast_t) =
     ) ->
       inner_t
 
-  | RRef(inner_t) ->
+  | RPtr(inner_t) ->
       failwith (
         Printf.sprintf
-          "Unwrapping ref to [ %s ] unimplemented"
+          "Unwrapping ptr to [ %s ] unimplemented"
           (fmt_rtype inner_t)
       )
 
   | _ ->
       failwith (
-        Printf.sprintf "Cannot unwrap non-reference type: [ %s ]"
+        Printf.sprintf "Cannot unwrap non-pointer type: [ %s ]"
           (fmt_rtype indexable_t)
       )
 ;;
@@ -501,39 +492,29 @@ let unwrap_aggregate_indexable (indexable_t : rast_t) i =
       )
 ;;
 
-let unwrap_aggregate_indexable_reference (indexable_t : rast_t) i =
+let unwrap_aggregate_indexable_pointer (indexable_t : rast_t) i =
   match indexable_t with
-  | RRef(RTuple(_) as tuple_t) ->
+  | RPtr(RTuple(_) as tuple_t) ->
       let inner_t = unwrap_aggregate_indexable tuple_t i in
-      RRef(inner_t)
+      RPtr(inner_t)
 
-  | RRef(inner_t) ->
+  | RPtr(inner_t) ->
       failwith (
         Printf.sprintf
-          "Unwrapping ref to [ %s ] unimplemented"
+          "Unwrapping ptr to [ %s ] unimplemented"
           (fmt_rtype inner_t)
       )
 
   | _ ->
       failwith (
-        Printf.sprintf "Cannot unwrap non-reference type: [ %s ]"
+        Printf.sprintf "Cannot unwrap non-pointer type: [ %s ]"
           (fmt_rtype indexable_t)
       )
 ;;
 
-let unwrap_ref ref_t =
-  match ref_t with
-  | RRef(t) -> t
-  | _ ->
-      failwith (
-        Printf.sprintf "Cannot unwrap non-ref type [%s]" (fmt_rtype ref_t)
-      )
-;;
-
-let unwrap_ptr (ptr_t : rast_t) =
+let unwrap_ptr ptr_t =
   match ptr_t with
   | RPtr(t) -> t
-  | RArray(t, _) -> t
   | _ ->
       failwith (
         Printf.sprintf "Cannot unwrap non-ptr type [%s]" (fmt_rtype ptr_t)
