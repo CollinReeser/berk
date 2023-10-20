@@ -728,6 +728,16 @@ let () =
         .ufcs_add(10);
       ignore printf("fancy_ufcs: [%d](25)\n", fancy_ufcs);
 
+      // UFCS allows underscores to indicate the position in the function call
+      // into which the LHS dotted argument is inserted.
+      ignore printf(
+        "Underscore UFCS:\n [%d] (-5)\n [%d] (-14)\n [%d] (-23)\n [%d] (46)\n",
+        1.ufcs_sub_add(4, 10),
+        1.ufcs_sub_add(_, 5, 20),
+        1.ufcs_sub_add(6, _, 30),
+        1.ufcs_sub_add(7, 40, _)
+      );
+
       // Can match against integer literals.
       let my_int_match = 5;
       match my_int_match {
@@ -858,14 +868,6 @@ let () =
       if_is_expr_test();
 
       phi_test(10, 20);
-
-      ignore printf(
-        "Underscore UFCS:\n [%d] (-5)\n [%d] (-14)\n [%d] (-23)\n [%d] (46)\n",
-        1.ufcs_sub_add(4, 10),
-        1.ufcs_sub_add(_, 5, 20),
-        1.ufcs_sub_add(6, _, 30),
-        1.ufcs_sub_add(7, 40, _)
-      );
 
       return 0;
     }
