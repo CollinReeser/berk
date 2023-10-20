@@ -60,9 +60,16 @@ and expr =
   | FuncCall of berk_t * ident_t * expr list
   (* An invocation of a named function in UFCS style. ie, given an expression:
     a1.func_name(a2, a3)
-  the expr is re-written to be `func_name(a1, a2, a3)`
+  the expr is re-written to be `func_name(a1, a2, a3)`.
+
+  The `a1` argument does not need to refer to the zero'th-position argument in
+  the function call. The presence of an underscore `_` allows specifying which
+  argument is being set by `a1`, such as:
+    a1.func_name(_, a2, a3) // same as above
+    a2.func_name(a1, _, a3) // replace second argument instead
+    a3.func_name(a1, a2, _) // replace third argument instead
   *)
-  | UfcsCall of berk_t * expr * ident_t * expr list
+  | UfcsCall of berk_t * expr * ident_t * int * expr list
   (* An indirect invocation of a function resolved from an expression. *)
   | ExprInvoke of berk_t * expr * expr list
   (* An expression representing a statically-sized array. *)
@@ -314,7 +321,7 @@ let rec dump_expr_ast ?(ind="") expr =
         (fmt_type t)
         name
         dumped_e_args
-  | UfcsCall(t, e, name, e_args) ->
+  | UfcsCall(t, e, name, underscore_pos, e_args) ->
       let ind_next = ind ^ " " in
       let dumped_e_args =
         begin if List.length e_args > 0 then
@@ -328,10 +335,11 @@ let rec dump_expr_ast ?(ind="") expr =
           "[]"
         end
       in
-      sprintf "UfcsCall(%s,\n%s%s, %s, %s)"
+      sprintf "UfcsCall(%s,\n%s%s (at idx %d), %s, %s)"
         (fmt_type t)
         ind_next
         (dump_expr_ast ~ind:ind_next e)
+        underscore_pos
         name
         dumped_e_args
   | ExprInvoke(t, e, e_args) ->
@@ -799,12 +807,13 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
         id
         (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
 
-  | UfcsCall(_, expr, id, exprs) ->
-      Printf.sprintf "%s%s%s.%s(%s)"
+  | UfcsCall(_, expr, id, underscore_pos, exprs) ->
+      Printf.sprintf "%s%s%s.%s((_ at idx %d) %s)"
         init_ind
         typ_s_rev
         (fmt_expr ~print_typ:print_typ expr)
         id
+        underscore_pos
         (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " exprs)
 
   | ExprInvoke(_, exp, exprs) ->
@@ -900,7 +909,7 @@ and expr_type exp =
   | IfIsThenElseExpr(typ, _, _, _) -> typ
   | WhileExpr(typ, _, _, _) -> typ
   | FuncCall(typ, _, _) -> typ
-  | UfcsCall(typ, _, _, _) -> typ
+  | UfcsCall(typ, _, _, _, _) -> typ
   | ExprInvoke(typ, _, _) -> typ
   | ArrayExpr(typ, _) -> typ
   | IndexExpr(typ, _, _) -> typ
@@ -1984,14 +1993,17 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         in
         (unique_varnames, FuncCall(t, func_name, exps_rewritten))
 
-    | UfcsCall(t, exp, func_name, exps) ->
+    | UfcsCall(t, exp, func_name, underscore_pos, exps) ->
         let (unique_varnames, exp_rewritten) =
           _rewrite_exp unique_varnames exp
         in
         let (unique_varnames, exps_rewritten) =
           List.fold_left_map _rewrite_exp unique_varnames exps
         in
-        (unique_varnames, UfcsCall(t, exp_rewritten, func_name, exps_rewritten))
+        (
+          unique_varnames,
+          UfcsCall(t, exp_rewritten, func_name, underscore_pos, exps_rewritten)
+        )
 
     | BlockExpr(t, stmts, exp) ->
         let (unique_varnames, stmts_rewritten) =

@@ -102,8 +102,10 @@ let rec expr_to_rexpr expr : rexpr =
 
       RExprInvoke(rt, re_func, re_args)
 
-  | UfcsCall(t, e_arg_first, name, e_args_rest) ->
-      let e_args_all = e_arg_first :: e_args_rest in
+  | UfcsCall(t, e_arg_first, name, underscore_pos, e_args_rest) ->
+      (* Inject the e_arg_first into the correct spot in e_args_all depending on
+      its position as indicated by the (possibly implicit) underscore. *)
+      let e_args_all = insert e_args_rest underscore_pos e_arg_first in
 
       let rewritten_as_func_call = FuncCall(t, name, e_args_all) in
 

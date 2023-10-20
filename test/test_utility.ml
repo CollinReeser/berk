@@ -42,6 +42,12 @@ let test_partition_i expected i ls () =
     ~expected:expected
     ~actual:(partition_i i ls)
 
+let test_insert expected lst idx elem () =
+  Alcotest.(check' (list string))
+    ~msg:"insert"
+    ~expected:expected
+    ~actual:(insert lst idx elem)
+
 let () =
   let open Alcotest in
   run "Utility" [
@@ -163,6 +169,28 @@ let () =
         test_partition_i
           ([1; 2; 3], [])
           3 [1; 2; 3]
+      );
+    ];
+    "insert", [
+      test_case "insert" `Quick (
+        test_insert
+          ["new"]
+          [] 0 "new"
+      );
+      test_case "insert" `Quick (
+        test_insert
+          ["new"; "old"; "old"]
+          ["old"; "old"] 0 "new"
+      );
+      test_case "insert" `Quick (
+        test_insert
+          ["old"; "new"; "old"]
+          ["old"; "old"] 1 "new"
+      );
+      test_case "insert" `Quick (
+        test_insert
+          ["old"; "old"; "new"]
+          ["old"; "old"] 2 "new"
       );
     ];
   ]

@@ -1238,6 +1238,73 @@ and parse_func_call_args ?(ind="") tokens : (token list * expr list) =
 
   _parse_func_call_args ~ind:ind_next tokens []
 
+(* As parse_func_call_args but also seeks the position of an argument indicated
+only by an underscore, `_`. *)
+and parse_func_call_args_w_underscore
+  ?(ind="") tokens : (token list * expr list * int option)
+=
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  let rec _parse_func_call_args_w_underscore
+    ?(ind="") tokens exps_so_far cur_pos under_pos
+  =
+    let ind_next = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    (* Either parse an underscore, or parse a general argument expression. *)
+    let (rest, exps_so_far, under_pos) = begin
+      begin match tokens with
+      | Underscore(_) :: rest ->
+          begin match under_pos with
+          | None -> (rest, exps_so_far, Some(cur_pos))
+          | Some(prev_pos) ->
+              failwith (
+                Printf.sprintf
+                  (
+                    "Found underscore while parsing func args at arg " ^^
+                    "position [%d] but already noted underscore at " ^^
+                    "position [%d]"
+                  )
+                  cur_pos
+                  prev_pos
+              )
+          end
+
+      | _ ->
+        let (rest, exp) = parse_expr ~ind:ind_next tokens in
+        let exps_so_far = exps_so_far @ [exp] in
+        (rest, exps_so_far, under_pos)
+
+      end
+    end in
+
+    begin match rest with
+    | RParen(_) :: rest ->
+        (rest, exps_so_far, under_pos)
+
+    | Comma(_) :: rest ->
+        _parse_func_call_args_w_underscore
+          ~ind:ind_next rest exps_so_far (cur_pos + 1) under_pos
+
+    | tok :: _ ->
+        let fmted = fmt_token tok in
+        failwith (
+          Printf.sprintf
+            "Unexpected token [%s] (args), expected among `,`|`)`." fmted
+        )
+    | [] -> failwith "Unexpected EOF while parsing func call arg list."
+    end
+  in
+
+  _parse_func_call_args_w_underscore ~ind:ind_next tokens [] 0 None
+
 
 (* Parse invocation of a function pointer, eg:
   .()
@@ -1260,18 +1327,30 @@ and parse_func_var_call ?(ind="") tokens exp : (token list * expr) =
 
 (* Parse a UFCS-style call, eg:
   .func_name()
-  .other_func(arg1, arg2)
+  .other_func(arg1, _, arg3)
+  .other_func(arg2, arg3)
 *)
 and parse_ufcs_call ?(ind="") tokens exp : (token list * expr) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
   begin match tokens with
+  (* .func_name() *)
   | Dot(_) :: LowIdent(_, name) :: LParen(_) :: RParen(_) :: rest ->
-      (rest, UfcsCall(Undecided, exp, name, []))
+      (rest, UfcsCall(Undecided, exp, name, 0, []))
 
+  (* .other_func(arg1, _, arg3) *)
+  (* .other_func(arg2, arg2) *)
   | Dot(_) :: LowIdent(_, name) :: LParen(_) :: rest ->
-      let (rest, args) = parse_func_call_args ~ind:ind_next rest in
-      (rest, UfcsCall(Undecided, exp, name, args))
+      let (rest, args, underscore_pos) =
+        parse_func_call_args_w_underscore ~ind:ind_next rest
+      in
+      begin match underscore_pos with
+      | Some(under_pos) ->
+          (rest, UfcsCall(Undecided, exp, name, under_pos, args))
+
+      | None ->
+          (rest, UfcsCall(Undecided, exp, name, 0, args))
+      end
 
   | _ -> raise Backtrack
   end

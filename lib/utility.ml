@@ -7,6 +7,46 @@ let replace lst n elem =
   List.mapi (fun i x -> if i = n then elem else x) lst;;
 ;;
 
+(* Given a list, an index, and an element, return a new list with the given
+element injected into the new list at the given index. Negative indexes and
+indices beyond the end of the list will assert. *)
+let insert lst idx elem =
+  let _ =
+    if idx < 0 then
+      failwith (Printf.sprintf "Cannot insert() into negative index [%d]" idx)
+    else
+      ()
+  in
+
+  (* Build a _reversed_ list with the element at the desired position.
+
+  Note that the insertion index may become negative over the course of this
+  iteration, which is okay, because it must have passed `0` on its way there
+  (or we assert failure).
+  *)
+  let rec _insert remain n accum_rev =
+    begin match (remain, n) with
+    | ([], _) ->
+        if n = 0 then
+          elem :: accum_rev
+        else if n < 0 then
+          accum_rev
+        else
+          failwith (
+            Printf.sprintf
+              "Cannot insert() beyond end of list: idx [%d], list len [%d]"
+              idx
+              (List.length lst)
+          )
+
+    | (_, 0) ->           _insert remain (n - 1) (elem :: accum_rev)
+    | (cur :: rest, _) -> _insert rest   (n - 1) (cur  :: accum_rev)
+    end
+  in
+
+  List.rev (_insert lst idx [])
+;;
+
 let take lst n =
   let rec _take accum remain n =
     begin match (remain, n) with

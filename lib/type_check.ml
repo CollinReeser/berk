@@ -231,7 +231,7 @@ and is_concrete_expr ?(verbose=false) expr =
       (_is_concrete_type typ) &&
         (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
 
-  | UfcsCall(typ, exp, _, exprs) ->
+  | UfcsCall(typ, exp, _, _, exprs) ->
       (_is_concrete_type typ) &&
         (_is_concrete_expr exp) &&
         (List.fold_left (&&) true (List.map _is_concrete_expr exprs))
@@ -1133,7 +1133,7 @@ and type_check_expr
 
         FuncCall(f_ret_t, f_name, exprs_typechecked)
 
-    | UfcsCall(_, exp, f_name, exprs) ->
+    | UfcsCall(_, exp, f_name, underscore_pos, exprs) ->
         let {f_name; f_params; f_ret_t} =
           StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs
         in
@@ -1142,7 +1142,7 @@ and type_check_expr
         function call. Later, a UFCS call might also be a method call, where
         we may need to do some additional checking. Unclear yet. *)
 
-        let exprs = exp :: exprs in
+        let exprs = insert exprs underscore_pos exp in
 
         let (params_non_variadic_t_lst, is_var_arg) =
           get_static_f_params f_params
