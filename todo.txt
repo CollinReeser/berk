@@ -26,6 +26,10 @@ TODO:
     [ ] - Support indexing variant field without match if all ctors have it
     [ ] - Address TODOs
     [ ] - Compile-time check disallowing identical non-volatile const exprs (catches copy-paste bugs). Debate: Sometimes stuff only _seems_ identical.
+    [ ] - `mixin`s
+    [ ] - Closures
+    [ ] - UFCS into some other arg spot than 0'th, indicated by `_`
+    [ ] - Generator support
   Refactors and Simplifications:
     [X] - Simplify lval_to_alloca
     [X] - Rename `StaticIndex` into `TupleIndex`
