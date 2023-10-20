@@ -589,12 +589,19 @@ let codegen_func_mir
   (* Validate the generated code, checking for consistency. *)
   let _ = begin
     match Llvm_analysis.verify_function new_func with
-    | true -> ()
+    | true ->
+        Printf.printf "Valid function generated\n%s\n"
+          (Llvm.string_of_llvalue new_func) ;
+        Printf.printf "\n%!";
+        ()
+
     | false ->
       begin
         Printf.printf "invalid function generated\n%s\n"
           (Llvm.string_of_llvalue new_func) ;
+        Printf.printf "%!";
         Llvm_analysis.assert_valid_function new_func ;
+        Printf.printf "\n%!";
         ()
       end
   end in
@@ -603,7 +610,7 @@ let codegen_func_mir
     if mod_ctxt.optimize then
       (* Optimize the function. *)
       let did_fpm_do = Llvm.PassManager.run_function new_func the_fpm in
-      Printf.printf "Did the FPM do function-level opts on [%s]? [%B]\n"
+      Printf.printf "Did the FPM do function-level opts on [%s]? [%B]\n%!"
         mir_ctxt.f_name did_fpm_do ;
       ()
     else
@@ -635,9 +642,29 @@ let codegen_func_mirs
     ) mod_gen_ctxt mir_ctxts
   in
 
+  let _ = Printf.printf "Dumping module...\n%!" in
+  let _ = Printf.printf "====================================\n%!" in
+  let _ = Llvm.dump_module mod_gen_ctxt.llvm_mod in
+  let _ = Printf.printf "====================================\n%!" in
+
   let _ = begin
     if mod_gen_ctxt.validate then
-      let _ = Llvm_analysis.assert_valid_module mod_gen_ctxt.llvm_mod in
+      let _ = begin
+        match Llvm_analysis.verify_module mod_gen_ctxt.llvm_mod with
+        | None ->
+            ()
+
+        | Some(reason) ->
+            let _ =
+              Printf.printf
+                "Llvm_analysis.verify_module failed with [\n%s\n]\n%!"
+                reason
+            in
+            let _ = Printf.printf "Attempting to assert valid module...\n%!" in
+            let _ = Llvm_analysis.assert_valid_module mod_gen_ctxt.llvm_mod in
+            let _ = Printf.printf "Asserted valid module!\n%!" in
+            ()
+      end in
       ()
     else
       ()
