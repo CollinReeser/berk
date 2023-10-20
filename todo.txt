@@ -16,6 +16,7 @@ TODO:
     [X] - Support for UFCS
     [X] - Support matching integers/integer ranges in match expr
     [X] - Arbitrarily-complex stack-allocated datastructures (beyond basic arr)
+    [X] - UFCS into some other arg spot than 0'th, indicated by `_`
     [ ] - Disallow redundant overlapping integer ranges in match expr
     [ ] - Support for variant field labels
     [ ] - Add parsing support for truncate/extend
@@ -28,7 +29,6 @@ TODO:
     [ ] - Compile-time check disallowing identical non-volatile const exprs (catches copy-paste bugs). Debate: Sometimes stuff only _seems_ identical.
     [ ] - `mixin`s
     [ ] - Closures
-    [ ] - UFCS into some other arg spot than 0'th, indicated by `_`
     [ ] - Generator support
   Refactors and Simplifications:
     [X] - Simplify lval_to_alloca
