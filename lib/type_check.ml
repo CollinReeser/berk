@@ -2002,19 +2002,19 @@ and generate_value_patts t : pattern list =
   | U64 | U32 | U16 | U8
   | I64 | I32 | I16 | I8 -> [PInt(Undecided, IRangeAll)]
 
-  | F128 | F64 | F32 -> failwith "Unimplemented"
+  | F128 | F64 | F32 -> failwith "generate_value_patts: F*: Unimplemented"
 
-  | String -> failwith "Unimplemented"
+  | String -> failwith "generate_value_patts: String: Unimplemented"
 
-  | Array(_, _) -> failwith "Unimplemented"
+  | Array(_, _) -> failwith "generate_value_patts: Array: Unimplemented"
 
   | Tuple(ts) ->
       let ts_patts = List.map generate_value_patts ts in
       let ts_patts_cart_prod = cartesian_product ts_patts in
       List.map (fun ts_patt -> PTuple(t, ts_patt)) ts_patts_cart_prod
 
-  | Ref(_) -> failwith "Unimplemented"
-  | Function(_, _) -> failwith "Unimplemented"
+  | Ref(_) -> failwith "generate_value_patts: Ref: Unimplemented"
+  | Function(_, _) -> failwith "generate_value_patts: Function: Unimplemented"
 
   | Bool -> [PBool(true); PBool(false)]
 
