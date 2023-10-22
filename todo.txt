@@ -68,4 +68,5 @@ TODO:
     [X] - Fix LLVM instruction dominance issue involving repeat variable names
     [ ] - Fix chained tuple index parse fail due to float confusion, `tup.1.2`
     [ ] - Fix permitting immutable reference values passed as mutable func args
+    [ ] - Fix re-use of iter var in successive `while`s causing infinite loops.
     [ ] - Address FIXMEs

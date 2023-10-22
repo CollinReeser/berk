@@ -18,6 +18,7 @@ let () =
 
   let source_text = {|
     extern fn printf(fmt: string, ...): i32
+    extern fn rand(): i32
 
     variant Empty {}
 
@@ -55,18 +56,56 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
-    fn swap(mut ref_x: ref i32, mut ref_y: ref i32) {
-      ignore printf(
-        "  swap(): Pre-Swap : ref_x.*: [%d], ref_y.*: [%d]\n", ref_x.*, ref_y.*
-      );
+    fn get_random_number(): i32 {
+      return rand() % 1000;
+    }
 
+    fn swap(mut ref_x: ref i32, mut ref_y: ref i32) {
       let tmp = ref_x.*;
       ref_x.* = ref_y.*;
       ref_y.* = tmp;
 
-      ignore printf(
-        "  swap(): Post-Swap: ref_x.*: [%d], ref_y.*: [%d]\n", ref_x.*, ref_y.*
-      );
+      return;
+    }
+
+    fn populate_array_with_random(mut arr: ref [8]i32) {
+      while {let mut i = 0;} i < 8 {
+        ignore printf("Pre-rand arr val : [%d]\n", arr.*[i]);
+
+        i = i + 1;
+      }
+
+      while {let mut j = 0;} j < 8 {
+        arr.*[j] = get_random_number();
+
+        j = j + 1;
+      }
+
+      while {let mut k = 0;} k < 8 {
+        ignore printf("Post-rand arr val: [%d]\n", arr.*[k]);
+
+        k = k + 1;
+      }
+
+      return;
+    }
+
+    fn sort_array(mut arr: ref [8]i32) {
+      while {let mut i = 0;} i < 8 {
+        let mut ref_i_val = ref arr.*[i];
+
+        while {let mut j = i + 1;} j < 8 {
+          let mut ref_j_val = ref arr.*[j];
+
+          if ref_i_val.* > ref_j_val.* {
+            swap(ref_i_val, ref_j_val);
+          }
+
+          j = j + 1;
+        }
+
+        i = i + 1;
+      }
 
       return;
     }
@@ -1366,6 +1405,31 @@ let () =
         "main()  : Post-swap: ref_x.*: [%d], ref_y.*: [%d]\n",
         ref_x_to_be_swapped.*, ref_y_to_be_swapped.*
       );
+
+      ignore printf("Random number: [%d]\n", get_random_number());
+
+      let mut my_random_array: [8]i32;
+      let mut ref_my_random_array = ref my_random_array;
+
+      populate_array_with_random(ref_my_random_array);
+
+      while {let mut iter_rand_arr = 0;} iter_rand_arr < 8 {
+        ignore printf(
+          "Arr val       : [%d]\n", my_random_array[iter_rand_arr]
+        );
+
+        iter_rand_arr = iter_rand_arr + 1;
+      }
+
+      sort_array(ref_my_random_array);
+
+      while {let mut iter_rand_arr_sorted = 0;} iter_rand_arr_sorted < 8 {
+        ignore printf(
+          "Sorted arr val: [%d]\n", my_random_array[iter_rand_arr_sorted]
+        );
+
+        iter_rand_arr_sorted = iter_rand_arr_sorted + 1;
+      }
 
       return 0;
     }
