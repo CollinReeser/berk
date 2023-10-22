@@ -56,18 +56,39 @@ let () =
     }
 
     fn tuple_interior_references() {
-      let mut tup = (1, 2, 3);
-      let mut tup_ref = ref tup.1;
+      let mut tup = (1, 2, "hello!");
+      let mut tup_ref_1 = ref tup.1;
+      let mut tup_ref_2 = ref tup.2;
 
-      ignore printf("tup.1: [%d], tup_ref.*: [%d]\n", tup.1, tup_ref.*);
+      ignore printf(
+        "tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
+        tup.1,
+        tup_ref_1.*,
+        tup.2,
+        tup_ref_2.*
+      );
 
       tup.1 = 20;
+      tup.2 = "greetings!";
 
-      ignore printf("tup.1: [%d], tup_ref.*: [%d]\n", tup.1, tup_ref.*);
+      ignore printf(
+        "tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
+        tup.1,
+        tup_ref_1.*,
+        tup.2,
+        tup_ref_2.*
+      );
 
-      tup_ref.* = 200;
+      tup_ref_1.* = 200;
+      tup_ref_2.* = "farewell!";
 
-      ignore printf("tup.1: [%d], tup_ref.*: [%d]\n", tup.1, tup_ref.*);
+      ignore printf(
+        "tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
+        tup.1,
+        tup_ref_1.*,
+        tup.2,
+        tup_ref_2.*
+      );
 
       return;
     }
