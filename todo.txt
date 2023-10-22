@@ -17,6 +17,9 @@ TODO:
     [X] - Support matching integers/integer ranges in match expr
     [X] - Arbitrarily-complex stack-allocated datastructures (beyond basic arr)
     [X] - UFCS into some other arg spot than 0'th, indicated by `_`
+    [X] - Support references to non-aggregate variables
+    [X] - Support references into arbitrary layers of a complex aggregate
+    [X] - Support taking references to temporaries + temp lifetime extension
     [ ] - Disallow redundant overlapping integer ranges in match expr
     [ ] - Support for variant field labels
     [ ] - Add parsing support for truncate/extend
@@ -63,4 +66,5 @@ TODO:
     [X] - Fix being unable to re-use `as` variable names in disparate match arms
     [X] - Fix LLVM instruction dominance issue involving repeat variable names
     [ ] - Fix chained tuple index parse fail due to float confusion, `tup.1.2`
+    [ ] - Fix permitting immutable reference values passed as mutable func args
     [ ] - Address FIXMEs
