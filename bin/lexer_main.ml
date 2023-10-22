@@ -357,6 +357,50 @@ let () =
       return;
     }
 
+    fn copies_of_references() {
+      ignore printf("copies_of_references()\n");
+
+      let mut x = 10;
+      let mut ref_x = ref x;
+      let mut cpy_ref_x = ref_x;
+
+      ignore printf(
+        "  x: [%d], ref_x.*: [%d], cpy_ref_x.*: [%d]\n",
+        x,
+        ref_x.*,
+        cpy_ref_x.*
+      );
+
+      x = 20;
+
+      ignore printf(
+        "  x: [%d], ref_x.*: [%d], cpy_ref_x.*: [%d]\n",
+        x,
+        ref_x.*,
+        cpy_ref_x.*
+      );
+
+      ref_x.* = 20;
+
+      ignore printf(
+        "  x: [%d], ref_x.*: [%d], cpy_ref_x.*: [%d]\n",
+        x,
+        ref_x.*,
+        cpy_ref_x.*
+      );
+
+      cpy_ref_x.* = 30;
+
+      ignore printf(
+        "  x: [%d], ref_x.*: [%d], cpy_ref_x.*: [%d]\n",
+        x,
+        ref_x.*,
+        cpy_ref_x.*
+      );
+
+      return;
+    }
+
     fn if_is_expr_test() {
       if Some(5) is Some(i) {
         ignore printf("if_is_expr_test [%d] (5)\n", i);
@@ -1205,6 +1249,8 @@ let () =
       tuple_interior_references();
 
       complex_references();
+
+      copies_of_references();
 
       return 0;
     }
