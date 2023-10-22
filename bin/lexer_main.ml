@@ -55,6 +55,43 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    fn tuple_references() {
+      let mut tup = (1, 2, "hello!");
+      let mut tup_ref = ref tup;
+
+      ignore printf(
+        "tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
+        tup.1,
+        tup_ref.*.1,
+        tup.2,
+        tup_ref.*.2
+      );
+
+      tup.1 = 20;
+      tup.2 = "greetings!";
+
+      ignore printf(
+        "tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
+        tup.1,
+        tup_ref.*.1,
+        tup.2,
+        tup_ref.*.2
+      );
+
+      tup_ref.*.1 = 200;
+      tup_ref.*.2 = "farewell!";
+
+      ignore printf(
+        "tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
+        tup.1,
+        tup_ref.*.1,
+        tup.2,
+        tup_ref.*.2
+      );
+
+      return;
+    }
+
     fn tuple_interior_references() {
       let mut tup = (1, 2, "hello!");
       let mut tup_ref_1 = ref tup.1;
@@ -1014,6 +1051,8 @@ let () =
       ref_array_direct();
 
       complex_variable_references();
+
+      tuple_references();
 
       tuple_interior_references();
 
