@@ -1543,7 +1543,7 @@ let () =
 
   let timing_program_end = Unix.gettimeofday () in
 
-  (* Calcuclate and print timing info for compiler stages. *)
+  (* Calculate and print timing info for compiler stages. *)
   let _ = begin
     let timing_lex = timing_lex_end -. timing_lex_start in
     let timing_parse = timing_parse_end -. timing_parse_start in
