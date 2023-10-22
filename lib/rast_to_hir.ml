@@ -47,36 +47,12 @@ let rec indexable_expr_to_hir hctxt hscope idxable =
       | None ->
           (* This is a named, non-function-arg variable. *)
 
-          (* Yield a _pointer to_ an indexable type. *)
+          (* Yield the variable itself, ie, the _pointer to_ the variable
+          value. *)
 
-          (* If the variable type itself is already a pointer, we need to load
-          that pointer value from the stack, and then return a pointer to the
-          loaded pointer. Else, yield a pointer to the variable. *)
-          let (hctxt, hscope, decl, decl_t) =
-            begin match t with
-            | RPtr(_) ->
-                (* If the variable holds a pointer, we need to load
-                that pointer value from its variable stack location. *)
-                let decl_var = (RPtr(t), name) in
-
-                let (hctxt, tmp_ptr) = get_tmp_name hctxt in
-                let decl_ptr = (t, tmp_ptr) in
-                let instr = Instr(HValueLoad(decl_ptr, decl_var)) in
-                let instrs = instr :: hscope.instructions in
-                let hscope = {hscope with instructions = instrs} in
-                (hctxt, hscope, decl_ptr, t)
-
-            | _ ->
-                (* If the variable is a non-pointer, then assume it's
-                the indexable type we expect, and yield a pointer to it
-                (which is really a pointer to its stack location). *)
-                let decl_t = RPtr(t) in
-                let decl_ptr = (decl_t, name) in
-                (hctxt, hscope, decl_ptr, decl_t)
-            end
-          in
-
-          (hctxt, hscope, decl, [], decl_t)
+          let decl_t = RPtr(t) in
+          let decl_ptr = (decl_t, name) in
+          (hctxt, hscope, decl_ptr, [], decl_t)
       end
 
   (* An inner indexing operation means we have another layer of the target
@@ -118,6 +94,57 @@ let rec indexable_expr_to_hir hctxt hscope idxable =
 
       (hctxt, hscope, inner_idxable, inner_idx :: idxs_rev, elem_t)
 
+  (* If we actually need to perform a dereference because we've hit a layer of
+  indirection, then we need to collate the indices we've potentially collected
+  so far, generate a dynamic index to load using those indices, load that
+  pointer, and clear our indices-so-far collection since we just loaded them. *)
+  | RDerefAddr(_, inner_derefable_expr) ->
+      (* Recurse and acquire the resolved indexable expression up to this point,
+      including any indices we need to navigate the indexable expression. *)
+      let (hctxt, hscope, inner_idxable, idxs_rev, ptr_t) =
+        indexable_expr_to_hir hctxt hscope inner_derefable_expr
+      in
+
+      (* Get our calculated pointer to the address we're going to dereference.
+
+      If we haven't already collected any indices, then we don't need to
+      calculate a dynamic index, because we're just going to dereference a
+      pointer we already have in-hand (i.e., a reference variable). *)
+      let (hctxt, hscope, decl_ptr) =
+        let idxs = List.rev idxs_rev in
+
+        if List.length idxs > 0 then
+          let (hctxt, tmp) = get_tmp_name hctxt in
+          let decl_ptr = (ptr_t, tmp) in
+          let instr = Instr(HDynamicIndex(decl_ptr, idxs, inner_idxable)) in
+          let instrs = instr :: hscope.instructions in
+          let hscope = {hscope with instructions = instrs} in
+          (hctxt, hscope, decl_ptr)
+
+        else
+          (hctxt, hscope, inner_idxable)
+      in
+
+      (* We expect that the type we got back from our recursion is itself some
+      layer of indirection that we can unwrap, where that unwrap should itself
+      yield a some other indexable (pointer, array, etc). *)
+      let elem_t = unwrap_indexable_pointer ptr_t in
+
+      (* Load that address, which should yield to us a pointer that can then
+      be loaded from, assigned to, or indexed further. *)
+      let (hctxt, hscope, decl_lval) =
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (elem_t, tmp) in
+        let instr = Instr(HValueLoad(decl, decl_ptr)) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {hscope with instructions = instrs} in
+        (hctxt, hscope, decl)
+      in
+
+      (* Note again that we clear the indices calculated before this point,
+      since we've already used them in a load. *)
+      (hctxt, hscope, decl_lval, [], elem_t)
+
   | _ ->
       failwith (
         Printf.sprintf (
@@ -128,7 +155,7 @@ let rec indexable_expr_to_hir hctxt hscope idxable =
   end
 
 
-and rexpr_to_hir hctxt hscope rexpr
+and rexpr_to_hir ?(autoload=true) hctxt hscope rexpr
   : (hir_ctxt * hir_scope * hir_variable)
 =
 
@@ -242,6 +269,56 @@ and rexpr_to_hir hctxt hscope rexpr
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl)
+
+  (* Taking the address of a named variable means merely acquiring the existing
+  pointer to the variable. *)
+  | RAddressOf(ptr_t, RValVar(_, name)) ->
+      let (hctxt, tmp_address) = get_tmp_name hctxt in
+      let decl_address = (ptr_t, tmp_address) in
+      (* The variable is _really_ a pointer to that type.
+
+      TODO: We should uniformly treat variables as pointers to a type instead of
+      pretending they are their direct type. *)
+      let var = HValVar(ptr_t, name) in
+      let instr = Instr(HValueAssign(decl_address, var)) in
+
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+      (hctxt, hscope, decl_address)
+
+  (* TODO: We need handling for the case where we're taking the address of
+  a value that is not rooted in some named variable, ie, a true temporary. In
+  that case, we'll need to store the true temporary to the stack, and yield
+  the pointer to that location. *)
+
+  (* Taking the address of an expression that is not a named variable, but is
+  still _accessible from_ a named variable, means evaluating the expression as
+  far as possible, but without loading the evaluated pointer and instead just
+  taking the pointer itself as our value. e.g., if we're taking the address of
+  an inner array of a multidimensional array, or even the bottom value after
+  fully indexing an array, and that array is ultimately owned by a named
+  variable, then we just make sure we don't actually _load_ the indexed value,
+  but rather use the pointer to it itself. *)
+  | RAddressOf(_, exp) ->
+      (* Evaluate the expression, with autoload disabled. This will yield a
+      pointer to the value back to us. *)
+      let (hctxt, hscope, exp_var) =
+        rexpr_to_hir ~autoload:false hctxt hscope exp
+      in
+
+      (hctxt, hscope, exp_var)
+
+  (* Dereferencing an address means loading the pointer. *)
+  | RDerefAddr(t, exp) ->
+      let (hctxt, hscope, exp_var) = rexpr_to_hir hctxt hscope exp in
+
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let instr = Instr(HValueLoad(decl, exp_var)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+      (hctxt, hscope, decl)
+
 
   | RUnOp(t, op, exp) ->
       let (hctxt, hscope, rhs_var) = rexpr_to_hir hctxt hscope exp in
@@ -419,6 +496,16 @@ and rexpr_to_hir hctxt hscope rexpr
           pointer to the indexed value, we're done. *)
           (hctxt, hscope, decl_ptr)
 
+        else if
+          (not autoload) &&
+          is_same_type pointed_elem_t index_result_t
+        then
+          (* If the expected result of the top-level index operation is the
+          value itself (and which must be a base type and not something that
+          needs further indexing), _but_ we were instructed not to autoload
+          the value, then return the pointer to the value. *)
+          (hctxt, hscope, decl_ptr)
+
         else if is_same_type pointed_elem_t index_result_t then
           (* If the expected result of the top-level index operation is the
           value itself (and which must be a base type and not something that
@@ -442,12 +529,6 @@ and rexpr_to_hir hctxt hscope rexpr
       (hctxt, hscope, decl_result)
 
   | RIndexExpr(index_result_t, idx_expr, idxable_expr) ->
-      Printf.printf
-        "RIndexExpr(%s, %s, %s)\n"
-        (fmt_rtype index_result_t)
-        (fmt_rexpr idx_expr)
-        (fmt_rexpr idxable_expr) ;
-
       (* Generate the first-level dynamic index value. *)
       let (hctxt, hscope, idx) = rexpr_to_hir hctxt hscope idx_expr in
 
@@ -475,6 +556,16 @@ and rexpr_to_hir hctxt hscope rexpr
         if is_same_type elem_t index_result_t then
           (* If the expected result of the top-level index operation is just the
           pointer to the indexed value, we're done. *)
+          (hctxt, hscope, decl_ptr)
+
+        else if
+          (not autoload) &&
+          is_same_type pointed_elem_t index_result_t
+        then
+          (* If the expected result of the top-level index operation is the
+          value itself (and which must be a base type and not something that
+          needs further indexing), _but_ we were instructed not to autoload
+          the value, then return the pointer to the value. *)
           (hctxt, hscope, decl_ptr)
 
         else if is_same_type pointed_elem_t index_result_t then
@@ -1178,13 +1269,6 @@ and initialize_decls hctxt hscope decls =
         let hscope = {hscope with instructions = instrs} in
         (hctxt, hscope)
 
-    | RPtr(_) ->
-        Printf.printf
-          "initialize_decls._initialize_decl for [ %s ] unimplemented.\n%!"
-          (fmt_rtype ptr_t);
-
-        (hctxt, hscope)
-
     | _ ->
         failwith (
           Printf.sprintf
@@ -1211,13 +1295,25 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       (hctxt, hscope)
 
   (* Declare, evaluate the expr for, and assign, a new named variable. *)
-  | RDeclStmt(name, _, rexpr) ->
+  | RDeclStmt(name, expected_t, rexpr) ->
       (* NOTE: The declared type is not used. We might be doing some sort of an
       internal representational transformation and want to use the resultant
       transformation type, not the high-level original type. *)
 
       let (hctxt, hscope, hvar) = rexpr_to_hir hctxt hscope rexpr in
       let hvar_t = hir_variable_type hvar in
+
+      let _ =
+        if is_same_type expected_t hvar_t then
+          ()
+        else
+          failwith (
+            Printf.sprintf
+              "Got unexpected disagreement in RHS type: expected: [ %s ] vs got: [ %s ]"
+              (fmt_rtype expected_t)
+              (fmt_rtype hvar_t)
+          )
+      in
 
       let decl_store = (RPtr(hvar_t), name) in
       let decls = decl_store :: hscope.declarations in
@@ -1282,6 +1378,7 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       in
 
       let instr = Instr(HValueStore(decl_lval, rhs_hvar)) in
+
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
 

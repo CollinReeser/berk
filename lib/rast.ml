@@ -35,6 +35,12 @@ type rexpr =
   | RValRawArray of rast_t
 
   | RValCast of rast_t * cast_op * rexpr
+
+  (* Get the address of a value as a pointer. *)
+  | RAddressOf of rast_t * rexpr
+  (* Dereference an address to get the pointed-to value. *)
+  | RDerefAddr of rast_t * rexpr
+
   | RUnOp of rast_t * un_op * rexpr
   | RBinOp of rast_t * rbin_op * rexpr * rexpr
 
@@ -125,6 +131,8 @@ let rexpr_type exp : rast_t =
   | RValFunc(typ, _) -> typ
   | RValRawArray(typ) -> typ
   | RValCast(typ, _, _) -> typ
+  | RAddressOf(typ, _) -> typ
+  | RDerefAddr(typ, _) -> typ
   | RUnOp(typ, _, _) -> typ
   | RBinOp(typ, _, _, _) -> typ
   | RBlockExpr(typ, _, _) -> typ
@@ -197,6 +205,18 @@ let rec fmt_rexpr ?(init_ind=false) ?(ind="") ?(print_typ = false) re : string =
         init_ind
         op_fmt
         (fmt_rtype target_rt)
+        (fmt_rexpr ~print_typ:print_typ exp)
+        typ_s
+
+  | RAddressOf (_, exp) ->
+      Printf.sprintf "%s(addressof %s)%s"
+        init_ind
+        (fmt_rexpr ~print_typ:print_typ exp)
+        typ_s
+
+  | RDerefAddr (_, exp) ->
+      Printf.sprintf "%s(derefaddr %s)%s"
+        init_ind
         (fmt_rexpr ~print_typ:print_typ exp)
         typ_s
 

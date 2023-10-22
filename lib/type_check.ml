@@ -175,6 +175,8 @@ and is_concrete_expr ?(verbose=false) expr =
 
   | ValRawArray(typ) -> _is_concrete_type typ
 
+  | RefOf(typ, expr)
+  | DerefOf(typ, expr)
   | ValCast(typ, _, expr)
   | UnOp(typ, _, expr)
   | TupleIndexExpr(typ, _, expr) ->
@@ -614,6 +616,12 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
             let lval_idx_tc = ALIndex(inner_t, idx_exp_tc) in
 
             (inner_t, lval_idx_tc)
+
+        | ALDeref(_) ->
+            let inner_t = unwrap_ref cur_t in
+            let lval_idx_tc = ALDeref(inner_t) in
+
+            (inner_t, lval_idx_tc)
         end
       in
 
@@ -798,6 +806,30 @@ and type_check_expr
         end
 
     | ValRawArray(t) -> ValRawArray(t)
+
+    | RefOf(_, exp) ->
+        let exp_typechecked = _type_check_expr exp in
+        let exp_t = expr_type exp_typechecked in
+
+        (* This helper function ensures we don't double-wrap a reference type.
+        *)
+        let ref_exp_t = wrap_ref exp_t in
+
+        RefOf(ref_exp_t, exp_typechecked)
+
+    | DerefOf(_, exp) ->
+        let exp_typechecked = _type_check_expr exp in
+        let exp_t = expr_type exp_typechecked in
+
+        begin match exp_t with
+        | Ref(inner_t) -> DerefOf(inner_t, exp_typechecked)
+        | _ ->
+          failwith (
+            Printf.sprintf "Cannot dereference non-reference type [%s] for [%s]"
+              (fmt_type exp_t)
+              (fmt_expr exp_typechecked)
+          )
+        end
 
     | ValCast(target_t, op, exp) ->
         let exp_typechecked = _type_check_expr exp in
@@ -1241,7 +1273,10 @@ and type_check_expr
                 yield a _reference_ to that indexable type, that would require
                 further indexing. *)
                 let yielded_t =
-                  if is_indexable_type elem_typ then Ref(elem_typ) else elem_typ
+                  if is_indexable_type elem_typ then
+                    wrap_ref elem_typ
+                  else
+                    elem_typ
                 in
 
                 begin match idx_typechecked with
@@ -1259,7 +1294,15 @@ and type_check_expr
                     )
                 end
 
-            | _ -> failwith "Unexpected index target in index expr"
+            | _ ->
+                failwith (
+                  Printf.sprintf
+                    "Unexpected index target [%s] in index expr [%s]; [%s] [%s]"
+                    (fmt_type arr_t)
+                    (fmt_expr ~print_typ:true exp)
+                    (fmt_type arr_t)
+                    (fmt_type idx_t)
+                )
             end
           else
             failwith (
@@ -1284,7 +1327,10 @@ and type_check_expr
               yield a _reference_ to that indexable type, that would require
               further indexing. *)
               let yielded_t =
-                if is_indexable_type elem_typ then Ref(elem_typ) else elem_typ
+                if is_indexable_type elem_typ then
+                  wrap_ref elem_typ
+                else
+                  elem_typ
               in
 
               TupleIndexExpr(yielded_t, idx, agg_typechecked)

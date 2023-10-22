@@ -453,6 +453,9 @@ let unwrap_indexable_pointer (indexable_t : rast_t) =
   | RPtr(RArray(arr_elem_t, _)) ->
       RPtr(arr_elem_t)
 
+  | RPtr(RPtr(inner_t)) ->
+      RPtr(inner_t)
+
   | RPtr(
       (
         RU64 | RU32 | RU16 | RU8 |
@@ -461,7 +464,13 @@ let unwrap_indexable_pointer (indexable_t : rast_t) =
         RBool | RString
       ) as inner_t
     ) ->
-      inner_t
+      failwith (
+        Printf.sprintf
+          "unwrap_indexable_pointer: RPtr(%s) -> %s\n%!"
+          (fmt_rtype inner_t)
+          (fmt_rtype inner_t)
+        ;
+      )
 
   | RPtr(inner_t) ->
       failwith (

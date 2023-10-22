@@ -39,10 +39,20 @@ let rec expr_to_rexpr expr : rexpr =
       let re = expr_to_rexpr e in
       RValCast(rt, op, re)
 
-  | UnOp(t, op, e) ->
+  | RefOf(t, e) ->
       let rt = berk_t_to_rast_t t in
       let re = expr_to_rexpr e in
-      RUnOp(rt, op, re)
+      RAddressOf(rt, re)
+
+  | DerefOf(t, e) ->
+      let rt = berk_t_to_rast_t t in
+      let re = expr_to_rexpr e in
+      RDerefAddr(rt, re)
+
+  | UnOp(t, LNot, e) ->
+      let rt = berk_t_to_rast_t t in
+      let re = expr_to_rexpr e in
+      RUnOp(rt, LNot, re)
 
   | BinOp(t, LOr, e_lhs, e_rhs) ->
       let rt = berk_t_to_rast_t t in
@@ -312,6 +322,10 @@ and assign_idx_lval_to_rexpr_index rexpr (idxs : assign_idx_lval list) : rexpr =
             let indexed_rt = berk_t_to_rast_t indexed_t in
             let re = expr_to_rexpr e in
             RIndexExpr(indexed_rt, re, cur_exp)
+
+        | ALDeref(derefed_t) ->
+            let derefed_rt = berk_t_to_rast_t derefed_t in
+            RDerefAddr(derefed_rt, cur_exp)
         end
     ) rexpr idxs
   in

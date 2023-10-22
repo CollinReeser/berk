@@ -38,6 +38,15 @@ and expr =
   | ValRawArray of berk_t
 
   | ValCast of berk_t * cast_op * expr
+
+  (* Represents taking a reference to the given expression, where the LHS type
+  is the reference type of the expression's type. *)
+  | RefOf of berk_t * expr
+
+  (* Represents dereferencing the given expression, where the LHS type is the
+  dereferenced type of the expression's type. *)
+  | DerefOf of berk_t * expr
+
   | UnOp of berk_t * un_op * expr
   | BinOp of berk_t * bin_op * expr * expr
   (* Sequence of statements followed by an expression, where if the expression
@@ -151,6 +160,9 @@ and assign_idx_lval =
   after indexing. *)
   | ALIndex of berk_t * expr
 
+  (* Dereference a reference type. *)
+  | ALDeref of berk_t
+
 and expr_stmt_mod = {
   (* Whether or not it's permitted to ignore the result of the associated
   expression. If the expression yields non-nil, then `ignore` must be assigned
@@ -225,6 +237,20 @@ let rec dump_expr_ast ?(ind="") expr =
       sprintf "ValCast(%s, %s,\n%s%s\n%s)"
         (fmt_type t)
         (fmt_cast_op op)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | RefOf(t, e) ->
+      let ind_next = ind ^ " " in
+      sprintf "RefOf(%s, \n%s%s\n%s)"
+        (fmt_type t)
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | DerefOf(t, e) ->
+      let ind_next = ind ^ " " in
+      sprintf "DerefOf(%s, \n%s%s\n%s)"
+        (fmt_type t)
         ind_next
         (dump_expr_ast ~ind:ind_next e)
         ind
@@ -430,6 +456,9 @@ and dump_assign_idx_lval_ast ?(ind="") assign_idx_lval =
         (dump_expr_ast ~ind:ind_next e)
         (fmt_type indexed_t)
         ind
+  | ALDeref(derefed_t) ->
+      sprintf "ALDeref(%s)"
+        (fmt_type derefed_t)
   end
 
 and dump_stmt_ast ?(ind="") stmt =
@@ -689,6 +718,18 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
         (fmt_expr ~print_typ:print_typ exp)
         typ_s
 
+  | RefOf (_, exp) ->
+      Printf.sprintf "%s(ref (%s))%s"
+        init_ind
+        (fmt_expr ~print_typ:print_typ exp)
+        typ_s
+
+  | DerefOf (_, exp) ->
+      Printf.sprintf "%s(deref (%s))%s"
+        init_ind
+        (fmt_expr ~print_typ:print_typ exp)
+        typ_s
+
   | UnOp (_, op, exp) ->
       Printf.sprintf "%s(%s %s)%s"
         init_ind
@@ -902,6 +943,8 @@ and expr_type exp =
   | ValName(typ, _) -> typ
   | ValRawArray(typ) -> typ
   | ValCast(typ, _, _) -> typ
+  | RefOf(typ, _) -> typ
+  | DerefOf(typ, _) -> typ
   | UnOp(typ, _, _) -> typ
   | BinOp(typ, _, _, _) -> typ
   | BlockExpr(typ, _, _) -> typ
@@ -1021,6 +1064,9 @@ and fmt_assign_lval_idx ?(print_typ = false) lval_idx =
   | ALIndex(indexed_t, exp) ->
       let t_fmt = if print_typ then ":" ^ (fmt_type indexed_t) else "" in
       Printf.sprintf "[%s]%s" (fmt_expr ~print_typ:print_typ exp) t_fmt
+  | ALDeref(derefed_t) ->
+      let t_fmt = if print_typ then ":" ^ (fmt_type derefed_t) else "" in
+      Printf.sprintf "deref %s" t_fmt
   end
 
 and fmt_stmt ?(print_typ = false) ind stmt =
@@ -1474,6 +1520,59 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         in
         TupleIndexExpr(injected_t, idx, tup_exp_injected)
 
+    (* Ref of ref is unacceptable. *)
+    | (Ref(Ref(inner_t)), exp) ->
+        let exp_t = expr_type exp in
+        failwith (
+          Printf.sprintf
+            (
+              "inject_type_into_expr: shouldn't have passed ref of ref: " ^^
+              "[%s] <> [%s] for [%s]"
+            )
+            (fmt_type (Ref(Ref(inner_t))))
+            (fmt_type exp_t)
+            (fmt_expr exp)
+        )
+
+    (* Injecting a reference type into an expression requires the expression to
+    already be a reference. *)
+    | (Ref(_), exp) ->
+        let exp_t = expr_type exp in
+
+        begin if is_same_type injected_t exp_t then
+          exp
+        else
+          failwith (
+            Printf.sprintf
+              "inject_type_into_expr: [%s] != [%s] for [%s]: Unimplemented"
+              (fmt_type injected_t)
+              (fmt_type exp_t)
+              (fmt_expr exp)
+          )
+        end
+
+    (* Permitted to inject a bare type into an expression that dereferences to
+    that type. *)
+    | (_, DerefOf(deref_t, ref_exp)) ->
+        begin if is_same_type injected_t deref_t then
+          (* We wrap our injection type as a reference so that we can inject
+          it into the reference expression. Internally, we expect the injected
+          type to at some point get unwrapped to "complete" the injection. *)
+          let injected_ref_t = wrap_ref injected_t in
+          let injected_ref_exp =
+            inject_type_into_expr ~ind:(ind ^ "  ") injected_ref_t ref_exp
+          in
+          DerefOf(injected_t, injected_ref_exp)
+        else
+          failwith (
+            Printf.sprintf
+              "inject_type_into_expr: [%s] != [%s] for [%s]: Unimplemented"
+              (fmt_type injected_t)
+              (fmt_type deref_t)
+              (fmt_expr exp)
+          )
+        end
+
     | (Array(elem_t, sz), ArrayExpr(_, elem_lst)) ->
         let elem_t_lst = List.init sz (fun _ -> elem_t) in
         let elem_exp_injected_lst =
@@ -1691,8 +1790,6 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
             "Cannot inject function type into non-func value: [[ %s ]]"
             (fmt_expr ~print_typ:true exp)
         )
-
-    | (Ref(_), _) -> failwith "Unimplemented"
 ;;
 
 
@@ -1903,6 +2000,18 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           _rewrite_exp unique_varnames arr_exp
         in
         (unique_varnames, IndexExpr(t, idx_exp_rewritten, arr_exp_rewritten))
+
+    | RefOf(t, exp) ->
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        (unique_varnames, RefOf(t, exp_rewritten))
+
+    | DerefOf(t, exp) ->
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        (unique_varnames, DerefOf(t, exp_rewritten))
 
     | UnOp(t, op, exp) ->
         let (unique_varnames, exp_rewritten) =

@@ -55,6 +55,87 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    fn complex_variable_references() {
+      let mut x = 5;
+      let mut ref_x = ref x;
+
+      ignore printf("x: [%d], ref_x: [%d]\n", x, ref_x.*);
+
+      x = 50;
+      ignore printf("x: [%d], ref_x: [%d]\n", x, ref_x.*);
+
+      ref_x.* = 100;
+      ignore printf("x: [%d], ref_x: [%d]\n", x, ref_x.*);
+
+      let y = 10;
+
+      // Test being able to dereference a temporary reference.
+      let z = ref_x.* + (ref y).*;
+
+      ignore printf(
+        "x: [%d], ref_x: [%d], y: [%d] (10), z: [%d] (110)\n",
+        x,
+        ref_x.*,
+        y,
+        z
+      );
+
+      return;
+    }
+
+    fn ref_array_direct() {
+      let mut ultra_multi_vars: [10][20]i32;
+      let mut ref_direct = ref ultra_multi_vars[9][19];
+
+      ultra_multi_vars[9][19] = 1001;
+
+      if
+        ref_direct.* == ultra_multi_vars[9][19] &&
+        ref_direct.* == 1001 &&
+        ultra_multi_vars[9][19] == 1001
+      {
+        ignore printf(
+          "Direct references work! [%d] [%d] (%d)\n",
+          ref_direct.*,
+          ultra_multi_vars[9][19],
+          1001
+        );
+      }
+      else {
+        ignore printf(
+          "FAILURE in ref_array_direct! [%d] [%d] (%d)\n",
+          ref_direct.*,
+          ultra_multi_vars[9][19],
+          1001
+        );
+      }
+
+      ref_direct.* = 2002;
+
+      if
+        ref_direct.* == ultra_multi_vars[9][19] &&
+        ref_direct.* == 2002 &&
+        ultra_multi_vars[9][19] == 2002
+      {
+        ignore printf(
+          "Direct references work! [%d] [%d] (%d)\n",
+          ref_direct.*,
+          ultra_multi_vars[9][19],
+          2002
+        );
+      }
+      else {
+        ignore printf(
+          "FAILURE in ref_array_direct! [%d] [%d] (%d)\n",
+          ref_direct.*,
+          ultra_multi_vars[9][19],
+          2002
+        );
+      }
+
+      return;
+    }
+
     fn if_is_expr_test() {
       if Some(5) is Some(i) {
         ignore printf("if_is_expr_test [%d] (5)\n", i);
@@ -294,49 +375,60 @@ let () =
         iter = iter + 1;
       }
 
-      let mut ultra_multi_vars: [10][20][30][40]bool;
-      let mut layer_one: ref [20][30][40]bool = ultra_multi_vars[9];
-      let mut layer_two: ref [30][40]bool = layer_one[19];
-      let mut layer_thr: ref [40]bool = layer_two[29];
+      let mut ultra_multi_vars: [10][20][30][40]i32;
+      let mut ref_layer_one: ref [20][30][40]i32 = ref ultra_multi_vars[9];
+      let mut indir_ref_layer_two = ref ref_layer_one.*[19];
+      let mut indir_ref_layer_thr: ref [40]i32 = ref indir_ref_layer_two.*[29];
 
-      ultra_multi_vars[9][19][29][39] = false;
+      let mut ref_layer_two = ref ultra_multi_vars[9][19];
+      let mut ref_layer_thr = ref ultra_multi_vars[9][19][29];
+
+      ultra_multi_vars[9][19][29][39] = 100;
 
       ignore printf(
-        "Change zro, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        "Change zro, multi-dimensional: [%d], [%d], [%d], [%d], [%d], [%d]\n",
         ultra_multi_vars[9][19][29][39],
-        layer_one[19][29][39],
-        layer_two[29][39],
-        layer_thr[39]
+        ref_layer_one.*[19][29][39],
+        indir_ref_layer_two.*[29][39],
+        indir_ref_layer_thr.*[39],
+        ref_layer_two.*[29][39],
+        ref_layer_thr.*[39]
       );
 
-      layer_thr[39] = true;
+      let indir_ref_layer_thr_value = indir_ref_layer_thr.*[39];
+      indir_ref_layer_thr.*[39] = 200;
 
       ignore printf(
-        "Change one, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        "Change one, multi-dimensional: [%d], [%d], [%d], [%d]\n",
         ultra_multi_vars[9][19][29][39],
-        layer_one[19][29][39],
-        layer_two[29][39],
-        layer_thr[39]
+        ref_layer_one.*[19][29][39],
+        indir_ref_layer_two.*[29][39],
+        indir_ref_layer_thr.*[39]
       );
 
-      layer_two[29][39] = false;
+      let indir_ref_layer_two_value = indir_ref_layer_two.*[29][39];
+      indir_ref_layer_two.*[29][39] = 300;
 
       ignore printf(
-        "Change two, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        "Change two, multi-dimensional: [%d], [%d], [%d], [%d]\n",
         ultra_multi_vars[9][19][29][39],
-        layer_one[19][29][39],
-        layer_two[29][39],
-        layer_thr[39]
+        ref_layer_one.*[19][29][39],
+        indir_ref_layer_two.*[29][39],
+        indir_ref_layer_thr.*[39]
       );
 
-      layer_one[19][29][39] = true;
+      let ref_layer_one_value = ref_layer_one.*[19][29][39];
+      ref_layer_one.*[19][29][39] = 400;
 
       ignore printf(
-        "Change thr, multi-dimensional: [%hhd], [%hhd], [%hhd], [%hhd]\n",
+        "Change thr, multi-dimensional: [%d], [%d], [%d], [%d], [%d], [%d], [%d]\n",
         ultra_multi_vars[9][19][29][39],
-        layer_one[19][29][39],
-        layer_two[29][39],
-        layer_thr[39]
+        ref_layer_one.*[19][29][39],
+        indir_ref_layer_two.*[29][39],
+        indir_ref_layer_thr.*[39],
+        indir_ref_layer_thr_value,
+        indir_ref_layer_two_value,
+        ref_layer_one_value
       );
 
       collatz(5);
@@ -615,7 +707,7 @@ let () =
         5.ufcs_identity().ufcs_add(10).ufcs_mult(3).ufcs_sub_add(20, 15);
 
       ignore printf("ufcs_identity_test: [%d] (5?)\n", ufcs_identity_test);
-      ignore printf("ufcs_identity_chained: [%d]\n", ufcs_identity_chained);
+      ignore printf("ufcs_identity_chained: [%d] (5?)\n", ufcs_identity_chained);
       ignore printf("ufcs_add_test: [%d] (15?)\n", ufcs_add_test);
       ignore printf("ufcs_math_chain: [%d] (50?)\n", ufcs_math_chain);
 
@@ -880,6 +972,10 @@ let () =
       if_is_expr_test();
 
       phi_test(10, 20);
+
+      ref_array_direct();
+
+      complex_variable_references();
 
       return 0;
     }

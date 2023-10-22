@@ -739,13 +739,32 @@ let unwrap_aggregate_indexable_reference (indexable_t : berk_t) i =
 ;;
 
 
-let unwrap_ref ref_t =
-  match ref_t with
-  | Ref(t) -> t
+(* Unwrap a reference around a type, if there is one. If there are multiple
+layers of reference around a type, errors, to detect improper reference handling
+elsewhere. *)
+let unwrap_ref t =
+  match t with
+  | Ref(Ref(_)) ->
+      failwith (
+        Printf.sprintf "Found double-wrapped reference type: [%s]" (fmt_type t)
+      )
+  | Ref(inner_t) -> inner_t
   | _ ->
       failwith (
-        Printf.sprintf "Cannot unwrap non-ref type [%s]" (fmt_type ref_t)
+        Printf.sprintf
+          "Unexpectedly attempting to unwrap non-ref: [%s]"
+          (fmt_type t)
       )
+;;
+
+(* Wrap the given type as a reference to that type. This is primarily useful
+for avoiding "double-wrapping" a type, as at most only one layer of reference to
+a type ever makes sense. *)
+let wrap_ref t =
+  begin match t with
+  | Ref(_) -> t
+  | _ -> Ref(t)
+  end
 ;;
 
 

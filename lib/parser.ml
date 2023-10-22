@@ -776,6 +776,28 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
     end
   in
 
+  (* Parse `.*` *)
+  let _parse_assign_deref
+    ?(ind="") tokens : (token list * assign_idx_lval)
+  =
+    let _ = begin
+      if ind <> "" then
+        begin
+          Printf.printf "%sParsing: [%s] with [%s]\n"
+            ind __FUNCTION__ (fmt_next_token tokens) ;
+          (ind ^ " ")
+        end
+      else ind
+    end in
+
+    begin match tokens with
+    | Dot(_) :: Star(_) :: rest ->
+        (rest, ALDeref(Undecided))
+
+    | _ -> raise Backtrack
+    end
+  in
+
   (* Parse `.<literal-integer>` *)
   let _parse_assign_tuple_index
     ?(ind="") tokens : (token list * assign_idx_lval)
@@ -817,6 +839,10 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
         _parse_assign_index rest (idx :: idxs_so_far_rev)
       with Backtrack ->
       try
+        let (rest, idx) = _parse_assign_deref ~ind:ind_next rest in
+        _parse_assign_index rest (idx :: idxs_so_far_rev)
+      with Backtrack ->
+      try
         let (rest, idx) = _parse_assign_tuple_index ~ind:ind_next rest in
         _parse_assign_index rest (idx :: idxs_so_far_rev)
       with Backtrack ->
@@ -831,7 +857,7 @@ and parse_assign_stmt ?(ind="") tokens : (token list * stmt) =
       let (rest, exp) = parse_expr ~ind:ind_next rest in
       (rest, AssignStmt(name, Undecided, [], exp))
 
-  (* complex_datastructure[i + 2][6].2.3[4] = ... *)
+  (* complex_datastructure.*[i + 2][6].2.3[4] = ... *)
   | LowIdent(_, name) :: rest ->
       let (rest, idxs_rev) = _parse_assign_index ~ind:ind_next rest [] in
       let idxs = List.rev idxs_rev in
@@ -1094,6 +1120,10 @@ and parse_unary ?(ind="") tokens : (token list * expr) =
       let (rest, exp) = parse_value ~ind:ind_next rest in
       (rest, UnOp(Undecided, LNot, exp))
 
+  | KWRef(_) :: rest ->
+      let (rest, exp) = parse_value ~ind:ind_next rest in
+      (rest, RefOf(Undecided, exp))
+
   | _ ->
       parse_value ~ind:ind_next tokens
   end
@@ -1144,6 +1174,12 @@ and parse_value ?(ind="") tokens : (token list * expr) =
       try
         let (rest, exp_chain) =
           parse_array_index ~ind:ind_next rest exp_so_far
+        in
+        _parse_value rest exp_chain
+      with Backtrack ->
+      try
+        let (rest, exp_chain) =
+          parse_deref ~ind:ind_next rest exp_so_far
         in
         _parse_value rest exp_chain
       with Backtrack ->
@@ -1388,6 +1424,20 @@ and parse_tuple_index ?(ind="") tokens exp : (token list * expr) =
   begin match tokens with
   | Dot(_) :: Integer(_, i) :: rest ->
       (rest, TupleIndexExpr(Undecided, i, exp))
+
+  | _ -> raise Backtrack
+  end
+
+
+(* Parse dereferencing a variable, ie:
+  .*
+ *)
+and parse_deref ?(ind="") tokens exp : (token list * expr) =
+  let _ = print_trace ind __FUNCTION__ tokens in
+
+  begin match tokens with
+  | Dot(_) :: Star(_) :: rest ->
+      (rest, DerefOf(Undecided, exp))
 
   | _ -> raise Backtrack
   end
