@@ -1406,6 +1406,14 @@ let () =
         ref_x_to_be_swapped.*, ref_y_to_be_swapped.*
       );
 
+      // Demonstrate passing references to variables as an unnamed reference.
+      swap(ref x_to_be_swapped, ref y_to_be_swapped);
+
+      ignore printf(
+        "main()  : Swap-back: ref_x.*: [%d], ref_y.*: [%d]\n",
+        x_to_be_swapped, y_to_be_swapped
+      );
+
       ignore printf("Random number: [%d]\n", get_random_number());
 
       let mut my_random_array: [8]i32;
