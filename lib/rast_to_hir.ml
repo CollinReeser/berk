@@ -1406,7 +1406,6 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       in
 
       let instr = Instr(HValueStore(decl_lval, rhs_hvar)) in
-
       let instrs = instr :: hscope.instructions in
       let hscope = {hscope with instructions = instrs} in
 

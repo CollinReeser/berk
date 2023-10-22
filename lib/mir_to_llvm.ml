@@ -590,14 +590,14 @@ let codegen_func_mir
   let _ = begin
     match Llvm_analysis.verify_function new_func with
     | true ->
-        Printf.printf "Valid function generated\n%s\n"
+        Printf.printf "MIR-generated LLVM:\n\n%s\n"
           (Llvm.string_of_llvalue new_func) ;
         Printf.printf "\n%!";
         ()
 
     | false ->
       begin
-        Printf.printf "invalid function generated\n%s\n"
+        Printf.printf "Invalid LLVM generated:\n\n%s\n"
           (Llvm.string_of_llvalue new_func) ;
         Printf.printf "%!";
         Llvm_analysis.assert_valid_function new_func ;
