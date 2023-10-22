@@ -55,6 +55,22 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    fn swap(mut ref_x: ref i32, mut ref_y: ref i32) {
+      ignore printf(
+        "  swap(): Pre-Swap : ref_x.*: [%d], ref_y.*: [%d]\n", ref_x.*, ref_y.*
+      );
+
+      let tmp = ref_x.*;
+      ref_x.* = ref_y.*;
+      ref_y.* = tmp;
+
+      ignore printf(
+        "  swap(): Post-Swap: ref_x.*: [%d], ref_y.*: [%d]\n", ref_x.*, ref_y.*
+      );
+
+      return;
+    }
+
     fn ref_of_temporary() {
       ignore printf("ref_of_temporary()\n");
 
@@ -1333,6 +1349,24 @@ let () =
 
       copies_of_references();
 
+      let x_to_be_swapped = 10;
+      let y_to_be_swapped = 20;
+
+      let ref_x_to_be_swapped = ref x_to_be_swapped;
+      let ref_y_to_be_swapped = ref y_to_be_swapped;
+
+      ignore printf(
+        "main()  : Pre-swap : ref_x.*: [%d], ref_y.*: [%d]\n",
+        ref_x_to_be_swapped.*, ref_y_to_be_swapped.*
+      );
+
+      swap(ref_x_to_be_swapped, ref_y_to_be_swapped);
+
+      ignore printf(
+        "main()  : Post-swap: ref_x.*: [%d], ref_y.*: [%d]\n",
+        ref_x_to_be_swapped.*, ref_y_to_be_swapped.*
+      );
+
       return 0;
     }
   |} in
@@ -1484,6 +1518,7 @@ let () =
 
   let mod_gen_ctxt : module_gen_context = {
     func_sigs = StrMap.empty;
+    llvm_ctxt = llvm_ctxt;
     llvm_mod = the_module;
     data_layout_mod = data_layout_mod;
     rast_t_to_llvm_t = rast_t_to_llvm_t llvm_sizeof llvm_ctxt;

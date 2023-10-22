@@ -20,6 +20,7 @@ TODO:
     [X] - Support references to non-aggregate variables
     [X] - Support references into arbitrary layers of a complex aggregate
     [X] - Support taking references to temporaries + temp lifetime extension
+    [X] - Support passing references as function arguments
     [ ] - Disallow redundant overlapping integer ranges in match expr
     [ ] - Support for variant field labels
     [ ] - Add parsing support for truncate/extend

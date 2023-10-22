@@ -33,27 +33,12 @@ let rec indexable_expr_to_hir hctxt hscope idxable =
   (* A named variable is already an alloca'd value accessible via pointer
   on the stack. We want to merely yield that variable pointer. *)
   | RValVar(t, name) ->
-      (* Check whether the given name represents a function argument. *)
-      begin match (StrMap.find_opt name hctxt.func_vars) with
-      | Some((t, i)) ->
-          (* This name refers to a function argument. *)
-          failwith (
-            Printf.sprintf (
-              "RAST->HIR: RIndexExpr: indexing into func-arg " ^^
-              "unimplemented: %s: %s # %d"
-            ) name (fmt_rtype t) i
-          )
+      (* Yield the variable itself, ie, the _pointer to_ the variable
+      value. *)
 
-      | None ->
-          (* This is a named, non-function-arg variable. *)
-
-          (* Yield the variable itself, ie, the _pointer to_ the variable
-          value. *)
-
-          let decl_t = RPtr(t) in
-          let decl_ptr = (decl_t, name) in
-          (hctxt, hscope, decl_ptr, [], decl_t)
-      end
+      let decl_t = RPtr(t) in
+      let decl_ptr = (decl_t, name) in
+      (hctxt, hscope, decl_ptr, [], decl_t)
 
   (* An inner indexing operation means we have another layer of the target
   type to unwrap. We also want to do all indexing in one shot, so we
@@ -161,32 +146,17 @@ and rexpr_to_hir ?(autoload=true) hctxt hscope rexpr
 
   begin match rexpr with
   | RValVar(t, name) ->
-      (* Check whether the given name represents a function argument. *)
-      begin match (StrMap.find_opt name hctxt.func_vars) with
-      | Some((t, i)) ->
-          (* This name refers to a function argument. *)
-          let (hctxt, tmp) = get_tmp_name hctxt in
-          let decl = (t, tmp) in
-          let instr = Instr(HArgToVar(decl, name, i)) in
-          let instrs = instr :: hscope.instructions in
-          let hscope = {hscope with instructions = instrs} in
-          (hctxt, hscope, decl)
-
-      | None ->
-          (* This was not a function argument.
-
-          The real, internal type of a variable is actually a pointer to its
-          apparent type, because variable values are stored on the stack and
-          really variables themselves are the pointers to this stack location.
-          *)
-          let (hctxt, tmp) = get_tmp_name hctxt in
-          let decl = (t, tmp) in
-          let var = (RPtr(t), name) in
-          let instr = Instr(HValueLoad(decl, var)) in
-          let instrs = instr :: hscope.instructions in
-          let hscope = {hscope with instructions = instrs} in
-          (hctxt, hscope, decl)
-      end
+      (* The real, internal type of a variable is actually a pointer to its
+      apparent type, because variable values are stored on the stack and
+      really variables themselves are the pointers to this stack location.
+      *)
+      let (hctxt, tmp) = get_tmp_name hctxt in
+      let decl = (t, tmp) in
+      let var = (RPtr(t), name) in
+      let instr = Instr(HValueLoad(decl, var)) in
+      let instrs = instr :: hscope.instructions in
+      let hscope = {hscope with instructions = instrs} in
+      (hctxt, hscope, decl)
 
   | RValFunc(func_t, func_name) ->
       let (hctxt, tmp) = get_tmp_name hctxt in
@@ -1423,33 +1393,47 @@ let rfunc_decl_t_to_hfunc_decl_t {rf_name; rf_params; rf_ret_t} : hfunc_decl_t =
 ;;
 
 
-let populate_hctxt_with_func_args hctxt {hf_params; _} : hir_ctxt =
-  let (hctxt, _) =
+let populate_hscope_with_func_arg_vars
+  hctxt hscope {hf_params; _} : (hir_ctxt * hir_scope)
+=
+  let (hctxt, hscope, _) =
     List.fold_left (
-      fun (hctxt, i) (name, t) ->
-        let func_vars' = StrMap.add name (t, i) hctxt.func_vars in
-        let hctxt = {hctxt with func_vars = func_vars'} in
+      fun (hctxt, hscope, i) (name, t) ->
+        let (hctxt, tmp_arg) = get_tmp_name hctxt in
+        let decl_arg = (t, tmp_arg) in
+        let decl_var = (RPtr(t), name) in
+        let instr_argvar = Instr(HArgToVar(decl_arg, name, i)) in
+        let instr_store = Instr(HValueStore(decl_var, decl_arg)) in
+        let decls = decl_var :: hscope.declarations in
+        let instrs = instr_store :: instr_argvar :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
 
-        (hctxt, (i + 1))
-    ) (hctxt, 0) hf_params
+        (hctxt, hscope, i + 1)
+
+    ) (hctxt, hscope, 0) hf_params
   in
 
-  hctxt
+  (hctxt, hscope)
 ;;
 
 
 let rfunc_def_t_to_hfunc_def_t {rf_decl; rf_stmts} : hfunc_def_t =
   let hf_decl = rfunc_decl_t_to_hfunc_decl_t rf_decl in
 
-  (* Initialize a ctxt with the function arguments. *)
-  let hctxt = populate_hctxt_with_func_args default_hir_ctxt hf_decl in
+  let hf_scope = empty_scope in
+  let hctxt = default_hir_ctxt in
+
+  (* Initialize the scope with the function argument variables. *)
+  let (hctxt, hf_scope) =
+    populate_hscope_with_func_arg_vars hctxt hf_scope hf_decl
+  in
 
   let (_, hf_scope) =
     List.fold_left (
       fun (hctxt, hf_scope) rstmt ->
         let (hctxt, hf_scope) = rstmt_to_hir hctxt hf_scope rstmt in
         (hctxt, hf_scope)
-    ) (hctxt, empty_scope) rf_stmts
+    ) (hctxt, hf_scope) rf_stmts
   in
 
   (* The declarations and instructions in an HIR scope are populated in reverse.

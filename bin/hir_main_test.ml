@@ -863,6 +863,7 @@ let () =
 
   let mod_gen_ctxt : module_gen_context = {
     func_sigs = StrMap.empty;
+    llvm_ctxt = llvm_ctxt;
     llvm_mod = the_module;
     data_layout_mod = data_layout_mod;
     rast_t_to_llvm_t = rast_t_to_llvm_t llvm_sizeof llvm_ctxt;

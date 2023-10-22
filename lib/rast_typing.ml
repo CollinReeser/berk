@@ -366,6 +366,34 @@ let rec is_bitwise_same_type lhs rhs =
   end
 ;;
 
+
+(* Very basic assessment on whether a type represents an immediate value, i.e.,
+a non-reference/pointer type that is passed around directly.
+
+This is useful for e.g. determining if a function call can be tail-call hinted,
+etc, as tail-calls must not access the stack of the caller.
+
+TODO: This can probably be relaxed to permit more types.
+*)
+let is_immediate_type t =
+  begin match t with
+  | RU64
+  | RU32
+  | RU16
+  | RU8
+  | RI64
+  | RI32
+  | RI16
+  | RI8
+  | RF128
+  | RF64
+  | RF32
+  | RBool -> true
+
+  | _ -> false
+  end
+;;
+
 (* Determine the common type between two. ie, if they're not the same type, but
 one is convertible to the other, yield the common type. *)
 let rec common_type_of_lr (lhs : rast_t) (rhs : rast_t) : rast_t =

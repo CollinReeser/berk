@@ -6,6 +6,7 @@ module StrMap = Map.Make(String)
 
 type module_gen_context = {
   func_sigs: Llvm.llvalue StrMap.t;
+  llvm_ctxt: Llvm.llcontext;
   llvm_mod: Llvm.llmodule;
   data_layout_mod: Llvm_target.DataLayout.t;
   rast_t_to_llvm_t: rast_t -> Llvm.lltype;
@@ -143,6 +144,50 @@ let codegen_aggregate builder t vals =
   _codegen_aggregate vals undef_aggregate 0
 ;;
 
+
+(* Given a (curried) Llvm function for applying attributes to paramaters, apply
+appropriate attributes to the parameters. Used to apply attributes both to
+functions themselves and to callsites of those functions. *)
+let apply_attributes_to_parameters add_attr_fn mod_ctxt param_ts =
+  List.iteri (
+    fun i param_t ->
+      begin match param_t with
+      | RPtr(refed_t) ->
+          let llvm_t = mod_ctxt.rast_t_to_llvm_t refed_t in
+          let llvm_t_size = Int64.of_int (mod_ctxt.llvm_sizeof llvm_t) in
+
+          (* Add the `dereferenceable` attribute to parameters taken by
+          reference. This informs the optimizer that the called function is
+          capable of modifying the value of the referred-to variable. Without
+          this, the optimizer may treat the function as being unable to modify
+          the referred-to values, which can in turn lead the optimizer to
+          generate incorrect code. *)
+          let deref_attr =
+            Llvm.create_enum_attr
+              mod_ctxt.llvm_ctxt "dereferenceable" llvm_t_size
+          in
+          let _ = add_attr_fn deref_attr (Llvm.AttrIndex.Param(i)) in
+
+          (* Add the `noundef` and `nonnull` attributes, which are implied
+          by being a reference, and also go along with the `dereferenceable`
+          attribute. *)
+          let noundef_attr =
+            Llvm.create_enum_attr mod_ctxt.llvm_ctxt "noundef" Int64.zero
+          in
+          let nonnull_attr =
+            Llvm.create_enum_attr mod_ctxt.llvm_ctxt "nonnull" Int64.zero
+          in
+          let _ = add_attr_fn noundef_attr (Llvm.AttrIndex.Param(i)) in
+          let _ = add_attr_fn nonnull_attr (Llvm.AttrIndex.Param(i)) in
+          ()
+
+      | _ ->
+          ()
+      end
+  ) param_ts
+;;
+
+
 let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
   (* Note that this may either be a "direct" function, ie a direct call to
   a function signature, or it may be a call against a _pointer to_ a function.
@@ -174,8 +219,28 @@ let codegen_call ?(result_name="") func_ctxt builder {lname=func_name; _} args =
       enforce_mir_llvm_name_agreement result_name
   in
 
-  (* Hint that this should be a tailcall if possible. *)
-  let _ = Llvm.set_tail_call true call_result in
+  let arg_ts = List.map (fun {t; _} -> t) args in
+
+  (* Apply attributes to the call. *)
+  let _ =
+    apply_attributes_to_parameters
+      (Llvm.add_call_site_attr call_result)
+      func_ctxt.mod_ctxt
+      arg_ts
+  in
+
+  (* Hint that this should be a tailcall if possible.
+
+  NOTE: This is only permissible for functions guaranteed not to access the
+  stack of the caller (as if the tailcall optimization is applied, the caller
+  stack would no longer exist). *)
+  let _ =
+    if List.for_all is_immediate_type arg_ts  then
+      let _ = Llvm.set_tail_call true call_result in
+      ()
+    else
+      ()
+  in
 
   (func_ctxt, call_result)
 ;;
@@ -561,6 +626,14 @@ let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_rt; _} =
     else Llvm.function_type llvm_ret_t llvm_param_t_arr
   in
   let new_func = Llvm.declare_function f_name func_sig_t mod_ctxt.llvm_mod in
+
+  (* Add parameter attributes to the parameters of the function. *)
+  let _ =
+    apply_attributes_to_parameters
+      (Llvm.add_function_attr new_func)
+      mod_ctxt
+      (List.map (fun (_, param_t) -> param_t) f_params)
+  in
 
   (* Add this new function to our codegen context; doing this now, rather than
   at the _end_ of function codegen, is what permits self recursion. *)
