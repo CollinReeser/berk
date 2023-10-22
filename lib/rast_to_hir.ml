@@ -312,12 +312,22 @@ and rexpr_to_hir ?(autoload=true) hctxt hscope rexpr
   | RDerefAddr(t, exp) ->
       let (hctxt, hscope, exp_var) = rexpr_to_hir hctxt hscope exp in
 
-      let (hctxt, tmp) = get_tmp_name hctxt in
-      let decl = (t, tmp) in
-      let instr = Instr(HValueLoad(decl, exp_var)) in
-      let instrs = instr :: hscope.instructions in
-      let hscope = {hscope with instructions = instrs} in
-      (hctxt, hscope, decl)
+      Printf.printf "rexpr_to_hir:\n  RDerefAddr( %s , %s ): %s -- autoload: [%b]\n%!"
+        (fmt_rtype t)
+        (fmt_rexpr ~print_typ:true exp)
+        (fmt_hir_variable exp_var)
+        autoload
+      ;
+
+      if autoload then
+        let (hctxt, tmp) = get_tmp_name hctxt in
+        let decl = (t, tmp) in
+        let instr = Instr(HValueLoad(decl, exp_var)) in
+        let instrs = instr :: hscope.instructions in
+        let hscope = {hscope with instructions = instrs} in
+        (hctxt, hscope, decl)
+      else
+        (hctxt, hscope, exp_var)
 
 
   | RUnOp(t, op, exp) ->

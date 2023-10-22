@@ -55,12 +55,103 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    fn complex_references() {
+      ignore printf("complex_references()\n");
+
+      let mut complex: [14][21](i32, bool, string);
+      let mut ref_1 = ref complex;
+      let mut ref_2 = ref complex[13];
+      let mut ref_3 = ref complex[13][20];
+      let mut ref_4 = ref complex[13][20].2;
+
+      let mut ref_indirect_1_1 = ref ref_1.*;
+      let mut ref_indirect_1_2 = ref ref_1.*[13];
+      let mut ref_indirect_1_3 = ref ref_1.*[13][20];
+      let mut ref_indirect_1_4 = ref ref_1.*[13][20].2;
+
+      let mut ref_indirect_2_2 = ref ref_2.*;
+      let mut ref_indirect_2_3 = ref ref_2.*[20];
+      let mut ref_indirect_2_4 = ref ref_2.*[20].2;
+
+      let mut ref_indirect_3_3 = ref ref_3.*;
+      let mut ref_indirect_3_4 = ref ref_3.*.2;
+
+      let mut ref_indirect_4_4 = ref ref_4.*;
+
+      complex[13][20].2 = "#";
+
+      ignore printf(
+        "[%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
+        complex[13][20].2,
+        ref_1.*[13][20].2,
+        ref_2.*[20].2,
+        ref_3.*.2,
+        ref_4.*,
+        ref_indirect_1_1.*[13][20].2,
+        ref_indirect_1_2.*[20].2,
+        ref_indirect_1_3.*.2,
+        ref_indirect_1_4.*,
+        ref_indirect_2_2.*[20].2,
+        ref_indirect_2_3.*.2,
+        ref_indirect_2_4.*,
+        ref_indirect_3_3.*.2,
+        ref_indirect_3_4.*,
+        ref_indirect_4_4.*
+      );
+
+      ref_indirect_4_4.* = "?";
+
+      ignore printf(
+        "[%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
+        complex[13][20].2,
+        ref_1.*[13][20].2,
+        ref_2.*[20].2,
+        ref_3.*.2,
+        ref_4.*,
+        ref_indirect_1_1.*[13][20].2,
+        ref_indirect_1_2.*[20].2,
+        ref_indirect_1_3.*.2,
+        ref_indirect_1_4.*,
+        ref_indirect_2_2.*[20].2,
+        ref_indirect_2_3.*.2,
+        ref_indirect_2_4.*,
+        ref_indirect_3_3.*.2,
+        ref_indirect_3_4.*,
+        ref_indirect_4_4.*
+      );
+
+      ref_indirect_2_2.*[20].2 = "!";
+
+      ignore printf(
+        "[%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
+        complex[13][20].2,
+        ref_1.*[13][20].2,
+        ref_2.*[20].2,
+        ref_3.*.2,
+        ref_4.*,
+        ref_indirect_1_1.*[13][20].2,
+        ref_indirect_1_2.*[20].2,
+        ref_indirect_1_3.*.2,
+        ref_indirect_1_4.*,
+        ref_indirect_2_2.*[20].2,
+        ref_indirect_2_3.*.2,
+        ref_indirect_2_4.*,
+        ref_indirect_3_3.*.2,
+        ref_indirect_3_4.*,
+        ref_indirect_4_4.*
+      );
+
+      return;
+    }
+
     fn tuple_references() {
+      ignore printf("tuple_references()\n");
+
       let mut tup = (1, 2, "hello!");
       let mut tup_ref = ref tup;
 
       ignore printf(
-        "tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
+        "  tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
         tup.1,
         tup_ref.*.1,
         tup.2,
@@ -71,7 +162,7 @@ let () =
       tup.2 = "greetings!";
 
       ignore printf(
-        "tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
+        "  tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
         tup.1,
         tup_ref.*.1,
         tup.2,
@@ -82,7 +173,7 @@ let () =
       tup_ref.*.2 = "farewell!";
 
       ignore printf(
-        "tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
+        "  tup.1: [%d], tup_ref.*.1: [%d], tup.2: [%s], tup_ref.*.2: [%s], \n",
         tup.1,
         tup_ref.*.1,
         tup.2,
@@ -93,12 +184,14 @@ let () =
     }
 
     fn tuple_interior_references() {
+      ignore printf("tuple_interior_references()\n");
+
       let mut tup = (1, 2, "hello!");
       let mut tup_ref_1 = ref tup.1;
       let mut tup_ref_2 = ref tup.2;
 
       ignore printf(
-        "tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
+        "  tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
         tup.1,
         tup_ref_1.*,
         tup.2,
@@ -109,7 +202,7 @@ let () =
       tup.2 = "greetings!";
 
       ignore printf(
-        "tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
+        "  tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
         tup.1,
         tup_ref_1.*,
         tup.2,
@@ -120,7 +213,7 @@ let () =
       tup_ref_2.* = "farewell!";
 
       ignore printf(
-        "tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
+        "  tup.1: [%d], tup_ref_1.*: [%d], tup.2: [%s], tup_ref_2.*: [%s]\n",
         tup.1,
         tup_ref_1.*,
         tup.2,
@@ -131,16 +224,18 @@ let () =
     }
 
     fn complex_variable_references() {
+      ignore printf("complex_variable_references()\n");
+
       let mut x = 5;
       let mut ref_x = ref x;
 
-      ignore printf("x: [%d], ref_x: [%d]\n", x, ref_x.*);
+      ignore printf("  x: [%d], ref_x: [%d]\n", x, ref_x.*);
 
       x = 50;
-      ignore printf("x: [%d], ref_x: [%d]\n", x, ref_x.*);
+      ignore printf("  x: [%d], ref_x: [%d]\n", x, ref_x.*);
 
       ref_x.* = 100;
-      ignore printf("x: [%d], ref_x: [%d]\n", x, ref_x.*);
+      ignore printf("  x: [%d], ref_x: [%d]\n", x, ref_x.*);
 
       let y = 10;
 
@@ -148,7 +243,7 @@ let () =
       let z = ref_x.* + (ref y).*;
 
       ignore printf(
-        "x: [%d], ref_x: [%d], y: [%d] (10), z: [%d] (110)\n",
+        "  x: [%d], ref_x: [%d], y: [%d] (10), z: [%d] (110)\n",
         x,
         ref_x.*,
         y,
@@ -159,6 +254,8 @@ let () =
     }
 
     fn ref_array_direct() {
+      ignore printf("ref_array_direct()\n");
+
       let mut ultra_multi_vars: [10][20]i32;
       let mut ref_direct = ref ultra_multi_vars[9][19];
 
@@ -170,7 +267,7 @@ let () =
         ultra_multi_vars[9][19] == 1001
       {
         ignore printf(
-          "Direct references work! [%d] [%d] (%d)\n",
+          "  Direct references work! [%d] [%d] (%d)\n",
           ref_direct.*,
           ultra_multi_vars[9][19],
           1001
@@ -178,7 +275,7 @@ let () =
       }
       else {
         ignore printf(
-          "FAILURE in ref_array_direct! [%d] [%d] (%d)\n",
+          "  FAILURE in ref_array_direct! [%d] [%d] (%d)\n",
           ref_direct.*,
           ultra_multi_vars[9][19],
           1001
@@ -193,7 +290,7 @@ let () =
         ultra_multi_vars[9][19] == 2002
       {
         ignore printf(
-          "Direct references work! [%d] [%d] (%d)\n",
+          "  Direct references work! [%d] [%d] (%d)\n",
           ref_direct.*,
           ultra_multi_vars[9][19],
           2002
@@ -201,12 +298,61 @@ let () =
       }
       else {
         ignore printf(
-          "FAILURE in ref_array_direct! [%d] [%d] (%d)\n",
+          "  FAILURE in ref_array_direct! [%d] [%d] (%d)\n",
           ref_direct.*,
           ultra_multi_vars[9][19],
           2002
         );
       }
+
+      return;
+    }
+
+    fn ref_deref_ref() {
+      ignore printf("ref_deref_ref()\n");
+
+      let mut x = 10;
+      let mut ref_x = ref x;
+      let ref_deref_x = ref_x.*;
+      let mut ref_deref_ref_x = ref ref_x.*;
+
+      ignore printf(
+        "  x: [%d], ref_x: [%d], ref_deref_x: [%d], ref_deref_ref_x: [%d]\n",
+        x,
+        ref_x.*,
+        ref_deref_x,
+        ref_deref_ref_x.*
+      );
+
+      x = 20;
+
+      ignore printf(
+        "  x: [%d], ref_x: [%d], ref_deref_x: [%d], ref_deref_ref_x: [%d]\n",
+        x,
+        ref_x.*,
+        ref_deref_x,
+        ref_deref_ref_x.*
+      );
+
+      ref_x.* = 30;
+
+      ignore printf(
+        "  x: [%d], ref_x: [%d], ref_deref_x: [%d], ref_deref_ref_x: [%d]\n",
+        x,
+        ref_x.*,
+        ref_deref_x,
+        ref_deref_ref_x.*
+      );
+
+      ref_deref_ref_x.* = 40;
+
+      ignore printf(
+        "  x: [%d], ref_x: [%d], ref_deref_x: [%d], ref_deref_ref_x: [%d]\n",
+        x,
+        ref_x.*,
+        ref_deref_x,
+        ref_deref_ref_x.*
+      );
 
       return;
     }
@@ -1048,6 +1194,8 @@ let () =
 
       phi_test(10, 20);
 
+      ref_deref_ref();
+
       ref_array_direct();
 
       complex_variable_references();
@@ -1055,6 +1203,8 @@ let () =
       tuple_references();
 
       tuple_interior_references();
+
+      complex_references();
 
       return 0;
     }
