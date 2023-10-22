@@ -55,6 +55,85 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    fn ref_of_temporary() {
+      ignore printf("ref_of_temporary()\n");
+
+      let mut ref_tmp = ref 10;
+      let mut ref_alt = ref_tmp;
+      let ref_imm = ref_alt;
+
+      ignore printf(
+        "  ref_tmp: [%d], ref_alt: [%d], ref_imm: [%d]\n",
+        ref_tmp.*, ref_alt.*, ref_imm.*
+      );
+
+      ref_tmp.* = 20;
+
+      ignore printf(
+        "  ref_tmp: [%d], ref_alt: [%d], ref_imm: [%d]\n",
+        ref_tmp.*, ref_alt.*, ref_imm.*
+      );
+
+      ref_alt.* = 30;
+
+      ignore printf(
+        "  ref_tmp: [%d], ref_alt: [%d], ref_imm: [%d]\n",
+        ref_tmp.*, ref_alt.*, ref_imm.*
+      );
+
+      let mut ref_binary = ref (10 + 20);
+      let ref_binary_imm = ref_binary;
+
+      ignore printf(
+        "  ref_binary: [%d], ref_binary_imm: [%d]\n",
+        ref_binary.*, ref_binary_imm.*
+      );
+
+      ref_binary.* = 60;
+
+      ignore printf(
+        "  ref_binary: [%d], ref_binary_imm: [%d]\n",
+        ref_binary.*, ref_binary_imm.*
+      );
+
+      let mut ref_block_expr = ref {
+        let ref_lhs = ref 100;
+        let ref_rhs = ref 200;
+
+        ref_lhs.* + ref_rhs.*
+      };
+      let ref_block_expr_imm = ref_block_expr;
+
+      ignore printf(
+        "  ref_block_expr: [%d], ref_block_expr_imm: [%d]\n",
+        ref_block_expr.*, ref_block_expr_imm.*
+      );
+
+      ref_block_expr.* = 600;
+
+      ignore printf(
+        "  ref_block_expr: [%d], ref_block_expr_imm: [%d]\n",
+        ref_block_expr.*, ref_block_expr_imm.*
+      );
+
+      let mut ref_complex = ref ((ref 400).* + (ref 350).*);
+      let ref_complex_imm = ref_complex;
+
+      ignore printf(
+        "  ref_complex: [%d], ref_complex_imm: [%d]\n",
+        ref_complex.*, ref_complex_imm.*
+      );
+
+      ref_complex.* = 900;
+
+      ignore printf(
+        "  ref_complex: [%d], ref_complex_imm: [%d]\n",
+        ref_complex.*, ref_complex_imm.*
+      );
+
+      return;
+    }
+
     fn complex_references() {
       ignore printf("complex_references()\n");
 
@@ -81,7 +160,7 @@ let () =
       complex[13][20].2 = "#";
 
       ignore printf(
-        "[%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
+        "  [%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
         complex[13][20].2,
         ref_1.*[13][20].2,
         ref_2.*[20].2,
@@ -102,7 +181,7 @@ let () =
       ref_indirect_4_4.* = "?";
 
       ignore printf(
-        "[%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
+        "  [%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
         complex[13][20].2,
         ref_1.*[13][20].2,
         ref_2.*[20].2,
@@ -123,7 +202,7 @@ let () =
       ref_indirect_2_2.*[20].2 = "!";
 
       ignore printf(
-        "[%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
+        "  [%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s][%s]\n",
         complex[13][20].2,
         ref_1.*[13][20].2,
         ref_2.*[20].2,
@@ -1249,6 +1328,8 @@ let () =
       tuple_interior_references();
 
       complex_references();
+
+      ref_of_temporary();
 
       copies_of_references();
 

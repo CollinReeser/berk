@@ -286,38 +286,56 @@ and rexpr_to_hir ?(autoload=true) hctxt hscope rexpr
       let hscope = {hscope with instructions = instrs} in
       (hctxt, hscope, decl_address)
 
-  (* TODO: We need handling for the case where we're taking the address of
-  a value that is not rooted in some named variable, ie, a true temporary. In
-  that case, we'll need to store the true temporary to the stack, and yield
-  the pointer to that location. *)
+  (* There are two paths this can take:
 
-  (* Taking the address of an expression that is not a named variable, but is
+  (1) Taking the address of an expression that is not a named variable, but is
   still _accessible from_ a named variable, means evaluating the expression as
   far as possible, but without loading the evaluated pointer and instead just
   taking the pointer itself as our value. e.g., if we're taking the address of
   an inner array of a multidimensional array, or even the bottom value after
   fully indexing an array, and that array is ultimately owned by a named
   variable, then we just make sure we don't actually _load_ the indexed value,
-  but rather use the pointer to it itself. *)
-  | RAddressOf(_, exp) ->
+  but rather use the pointer to it itself.
+
+  (2) Taking the address of a true temporary, ie, a value that is not reached
+  via dereferencing/indexing on a named variable. A raw value not already stored
+  on the stack. In this case, since we want the address, we go out of our way to
+  store the temporary to the stack, pretend it is a (inaccessible) named
+  variable, and continue as if we were taking a reference to that variable.
+  *)
+  | RAddressOf(t, exp) ->
       (* Evaluate the expression, with autoload disabled. This will yield a
       pointer to the value back to us. *)
       let (hctxt, hscope, exp_var) =
         rexpr_to_hir ~autoload:false hctxt hscope exp
       in
 
-      (hctxt, hscope, exp_var)
+      begin if is_true_temporary exp then
+        (* The value we got from the evaluation of the expression is a true
+        temporary, ie, a bare value not reachable from a named variable. In
+        order to take its address, we must first store the temporary to the
+        stack and _make_ an (inaccessible) named variable. *)
+        let (hctxt, tmp_store) = get_tmp_name hctxt in
+        let decl_store = (t, tmp_store) in
+        let decls = decl_store :: hscope.declarations in
+        let instr_store = Instr(HValueStore(decl_store, exp_var)) in
+        let instrs = instr_store :: hscope.instructions in
+        let hscope = {declarations = decls; instructions = instrs} in
+
+        (hctxt, hscope, decl_store)
+
+      else
+        (* The value we got from the evaluation of the expression is ultimately
+        a pointer into some datastructure owned by a named variable, so simply
+        pass that pointer along. *)
+
+        (hctxt, hscope, exp_var)
+
+      end
 
   (* Dereferencing an address means loading the pointer. *)
   | RDerefAddr(t, exp) ->
       let (hctxt, hscope, exp_var) = rexpr_to_hir hctxt hscope exp in
-
-      Printf.printf "rexpr_to_hir:\n  RDerefAddr( %s , %s ): %s -- autoload: [%b]\n%!"
-        (fmt_rtype t)
-        (fmt_rexpr ~print_typ:true exp)
-        (fmt_hir_variable exp_var)
-        autoload
-      ;
 
       if autoload then
         let (hctxt, tmp) = get_tmp_name hctxt in
