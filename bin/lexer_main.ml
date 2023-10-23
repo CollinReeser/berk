@@ -19,6 +19,11 @@ let () =
   let source_text = {|
     extern fn printf(fmt: string, ...): i32
     extern fn rand(): i32
+    extern fn calloc(num: i64, size: i64): ref [2000000]i32
+
+    fn get_2000000_ints(): ref [2000000]i32 {
+      return calloc(2000000, 4);
+    }
 
     variant Empty {}
 
@@ -56,8 +61,8 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
-    fn get_random_number(): i32 {
-      return rand() % 1000;
+    fn get_random_number(modulus: i32): i32 {
+      return rand() % modulus;
     }
 
     fn swap(mut ref_x: ref i32, mut ref_y: ref i32) {
@@ -76,7 +81,7 @@ let () =
       }
 
       while {let mut j = 0;} j < 8 {
-        arr.*[j] = get_random_number();
+        arr.*[j] = get_random_number(1000);
 
         j = j + 1;
       }
@@ -90,7 +95,7 @@ let () =
       return;
     }
 
-    fn sort_array(mut arr: ref [8]i32) {
+    fn sort_array_badly(mut arr: ref [8]i32) {
       while {let mut i = 0;} i < 8 {
         let mut ref_i_val = ref arr.*[i];
 
@@ -106,6 +111,84 @@ let () =
 
         i = i + 1;
       }
+
+      return;
+    }
+
+    // Adapted from: https://rosettacode.org/wiki/Sorting_algorithms/Heapsort#C++
+    fn shift_down(mut heap: ref [2000000]i32, mut i: i32, max: i32) {
+      while {
+        let mut i_big: i32;
+        let mut c1: i32;
+        let mut c2: i32;
+      } i < max {
+        i_big = i;
+        c1 = (2*i) + 1;
+        c2 = c1 + 1;
+
+        if c1 < max && heap.*[c1] > heap.*[i_big] {
+          i_big = c1;
+        }
+
+        if c2 < max && heap.*[c2] > heap.*[i_big] {
+          i_big = c2;
+        }
+
+        if i_big == i {
+          return;
+        }
+
+        swap(ref heap.*[i], ref heap.*[i_big]);
+
+        i = i_big;
+      }
+    }
+
+    // Adapted from: https://rosettacode.org/wiki/Sorting_algorithms/Heapsort#C++
+    fn to_heap(mut arr: ref [2000000]i32) {
+        while {let mut i = (2000000 / 2) - 1;} i >= 0 {
+            shift_down(arr, i, 2000000);
+            i = i - 1;
+        }
+    }
+
+    // Adapted from: https://rosettacode.org/wiki/Sorting_algorithms/Heapsort#C++
+    fn heap_sort(mut arr: ref [2000000]i32) {
+        to_heap(arr);
+
+        while {let mut end = 2000000 - 1;} end > 0 {
+            swap(arr.*[0], arr.*[end]);
+
+            shift_down(arr, 0, end);
+
+            end = end - 1;
+        }
+    }
+
+    fn mess_with_memory() {
+      let mut memory = get_2000000_ints();
+
+      while {let mut i = 0;} i < 2000000 {
+        memory.*[i] = get_random_number(100000000);
+
+        i = i + 1;
+      }
+
+      ignore printf(
+        "First: [%d], Last: [%d]\n", memory.*[0], memory.*[2000000 - 1]
+      );
+
+      heap_sort(memory);
+
+      ignore printf(
+        "[%d] [%d] [%d] ... [%d] [%d] [%d]\n",
+        memory.*[0],
+        memory.*[1],
+        memory.*[2],
+        memory.*[2000000 - 3],
+        memory.*[2000000 - 2],
+        memory.*[2000000 - 1]
+      );
 
       return;
     }
@@ -1414,7 +1497,7 @@ let () =
         x_to_be_swapped, y_to_be_swapped
       );
 
-      ignore printf("Random number: [%d]\n", get_random_number());
+      ignore printf("Random number: [%d]\n", get_random_number(1000));
 
       let mut my_random_array: [8]i32;
       let mut ref_my_random_array = ref my_random_array;
@@ -1429,7 +1512,7 @@ let () =
         iter_rand_arr = iter_rand_arr + 1;
       }
 
-      sort_array(ref_my_random_array);
+      sort_array_badly(ref_my_random_array);
 
       while {let mut iter_rand_arr_sorted = 0;} iter_rand_arr_sorted < 8 {
         ignore printf(
@@ -1438,6 +1521,8 @@ let () =
 
         iter_rand_arr_sorted = iter_rand_arr_sorted + 1;
       }
+
+      mess_with_memory();
 
       return 0;
     }
