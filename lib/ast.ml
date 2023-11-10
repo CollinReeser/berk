@@ -1930,12 +1930,23 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
         )
 
     | AssignStmt(varname, named_t, lval_idxs, exp) ->
+        let uniq_varname = StrMap.find varname unique_varnames in
+
+        let (unique_varnames, lval_idxs_rewritten) =
+          List.fold_left_map (
+            fun unique_varnames lval_idx ->
+              let (unique_varnames, lval_idx_rewritten) =
+                _rewrite_assign_idx_lval unique_varnames lval_idx
+              in
+              (unique_varnames, lval_idx_rewritten)
+          ) unique_varnames lval_idxs
+        in
         let (unique_varnames, exp_rewritten) =
           _rewrite_exp unique_varnames exp
         in
         (
           unique_varnames,
-          AssignStmt(varname, named_t, lval_idxs, exp_rewritten)
+          AssignStmt(uniq_varname, named_t, lval_idxs_rewritten, exp_rewritten)
         )
 
     | ExprStmt(es_mod, exp) ->
@@ -1949,6 +1960,19 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           _rewrite_exp unique_varnames exp
         in
         (unique_varnames, ReturnStmt(exp_rewritten))
+    end
+
+  and _rewrite_assign_idx_lval unique_varnames idx_lval : (ident_t StrMap.t * assign_idx_lval) =
+    begin match idx_lval with
+    | ALStaticIndex(_, _)
+    | ALDeref(_) ->
+        (unique_varnames, idx_lval)
+
+    | ALIndex(t, exp) ->
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        (unique_varnames, ALIndex(t, exp_rewritten))
     end
 
   and _rewrite_exp unique_varnames exp : (ident_t StrMap.t * expr) =

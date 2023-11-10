@@ -80,16 +80,16 @@ let () =
         i = i + 1;
       }
 
-      while {let mut j = 0;} j < 8 {
-        arr.*[j] = get_random_number(1000);
+      while {let mut i = 0;} i < 8 {
+        arr.*[i] = get_random_number(1000);
 
-        j = j + 1;
+        i = i + 1;
       }
 
-      while {let mut k = 0;} k < 8 {
-        ignore printf("Post-rand arr val: [%d]\n", arr.*[k]);
+      while {let mut i = 0;} i < 8 {
+        ignore printf("Post-rand arr val: [%d]\n", arr.*[i]);
 
-        k = k + 1;
+        i = i + 1;
       }
 
       return;

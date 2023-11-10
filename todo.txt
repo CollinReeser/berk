@@ -66,7 +66,7 @@ TODO:
     [X] - Fix being able to access shallow out-of-scope variables from BlockExpr
     [X] - Fix being unable to re-use `as` variable names in disparate match arms
     [X] - Fix LLVM instruction dominance issue involving repeat variable names
+    [X] - Fix re-use of iter var in successive `while`s causing infinite loops.
     [ ] - Fix chained tuple index parse fail due to float confusion, `tup.1.2`
     [ ] - Fix permitting immutable reference values passed as mutable func args
-    [ ] - Fix re-use of iter var in successive `while`s causing infinite loops.
     [ ] - Address FIXMEs
