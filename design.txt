@@ -2235,3 +2235,10 @@ size at compile time. No way around that without runtime checks.
 
 ALSO: If we don't allow VLAs (stack `alloca`s), then it becomes more possible to
 analyze stack space consumption.
+
+===
+
+Syntax sugar for `let mut i ...`?
+
+`mut i` contains the same information as `let mut i` because both `let` and
+`mut` are only used during variable declaration?

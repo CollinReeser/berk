@@ -232,20 +232,48 @@ let rec fmt_hir_scope ?(ind = "") {declarations; instructions} : string =
     ) instructions in
   let instructions_fmt = fmt_join_strs "\n" instruction_fmt_xs in
 
-  Printf.sprintf (
-    "%sscope {\n" ^^
-    "%s  declarations:\n" ^^
-    "%s\n" ^^
-    "%s  instructions:\n" ^^
-    "%s\n" ^^
-    "%s}"
-  )
-    ind
-    ind
-    declarations_fmt
-    ind
-    instructions_fmt
-    ind
+  if (List.length declarations > 0) && (List.length instructions > 0) then
+    Printf.sprintf (
+      "%sscope {\n" ^^
+      "%s  declarations:\n" ^^
+      "%s\n" ^^
+      "%s  instructions:\n" ^^
+      "%s\n" ^^
+      "%s}"
+    )
+      ind
+      ind
+      declarations_fmt
+      ind
+      instructions_fmt
+      ind
+  else if (List.length declarations == 0) && (List.length instructions > 0) then
+    Printf.sprintf (
+      "%sscope {\n" ^^
+      "%s  instructions:\n" ^^
+      "%s\n" ^^
+      "%s}"
+    )
+      ind
+      ind
+      instructions_fmt
+      ind
+  else if (List.length declarations > 0) && (List.length instructions == 0) then
+    Printf.sprintf (
+      "%sscope {\n" ^^
+      "%s  declarations:\n" ^^
+      "%s\n" ^^
+      "%s}"
+    )
+      ind
+      ind
+      declarations_fmt
+      ind
+  else
+    Printf.sprintf (
+      "%sscope {}\n"
+    )
+      ind
 
 
 and fmt_hir_scope_instr ?(ind = "") hir_scope_instr : string =
