@@ -98,6 +98,11 @@ and rstmt =
   | RAssignStmt of string * rast_t * rexpr * rexpr
 
   | RExprStmt of rexpr
+
+  (* The expression is the value to yield. The int is _which_ yield stmt this
+  is in the function. Each yield is uniquely numbered, starting with 0. *)
+  | RYieldStmt of rexpr * int
+
   | RReturnStmt of rexpr
 
   (* A convenience container for when a stmt needs to be rewritten using
@@ -440,6 +445,12 @@ and fmt_rstmt ?(print_typ = false) ind rstmt =
       Printf.sprintf "%s%s;\n"
         ind
         (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
+
+  | RYieldStmt (ex, i) ->
+      Printf.sprintf "%syield %s; # %d\n"
+        ind
+        (fmt_rexpr ~ind:ind ~print_typ:print_typ ex)
+        i
 
   | RReturnStmt (ex) ->
       Printf.sprintf "%sreturn %s;\n"

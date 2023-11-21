@@ -1335,6 +1335,14 @@ and rstmt_to_hir hctxt hscope rstmt : (hir_ctxt * hir_scope) =
       let (hctxt, hscope) = initialize_decls hctxt hscope default_decls in
       (hctxt, hscope)
 
+  | RYieldStmt(rexpr, i) ->
+      failwith (
+        Printf.sprintf
+          "Unimplemented: RYieldStmt(%s, #%d)"
+          (fmt_rexpr rexpr)
+          i
+      )
+
   | RReturnStmt(rexpr) ->
       let (hctxt, hscope, ((t, _) as hvar)) = rexpr_to_hir hctxt hscope rexpr in
 

@@ -673,6 +673,14 @@ and parse_stmt ?(ind="") tokens : (token list * stmt) option =
           let (rest, exp) = parse_expr ~ind:ind_next rest in
           (rest, ReturnStmt(exp))
 
+      (* A yield with no expression is a void yield. *)
+      | KWYield(_) :: ((Semicolon(_) :: _) as rest) ->
+          (rest, YieldStmt(ValNil))
+
+      | KWYield(_) :: rest ->
+          let (rest, exp) = parse_expr ~ind:ind_next rest in
+          (rest, YieldStmt(exp))
+
       | _ ->
           try parse_assign_stmt ~ind:ind_next tokens
           with Backtrack ->

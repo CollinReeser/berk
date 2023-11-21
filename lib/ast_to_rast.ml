@@ -5,7 +5,15 @@ open Rast_typing
 open Typing
 open Utility
 
-let rec expr_to_rexpr expr : rexpr =
+type a_to_r_ctxt = {
+  yield_idx: int;
+}
+
+let empty_a_to_r_ctxt = {
+  yield_idx = 0;
+}
+
+let rec expr_to_rexpr ctxt expr : (a_to_r_ctxt * rexpr) =
   begin match expr with
   | ValName(_, name) ->
       failwith (
@@ -14,88 +22,95 @@ let rec expr_to_rexpr expr : rexpr =
           name
       )
 
-  | ValNil -> RValNil
-  | ValF128(s) -> RValF128(s)
-  | ValF64(f) -> RValF64(f)
-  | ValF32(f) -> RValF32(f)
-  | ValBool(b) -> RValBool(b)
-  | ValStr(s) -> RValStr(s)
+  | ValNil -> (ctxt, RValNil)
+  | ValF128(s) -> (ctxt, RValF128(s))
+  | ValF64(f) -> (ctxt, RValF64(f))
+  | ValF32(f) -> (ctxt, RValF32(f))
+  | ValBool(b) -> (ctxt, RValBool(b))
+  | ValStr(s) -> (ctxt, RValStr(s))
   | ValInt(t, i) ->
       let rt = berk_t_to_rast_t t in
-      RValInt(rt, i)
+      (ctxt, RValInt(rt, i))
 
   | ValVar(t, name) ->
       let rt = berk_t_to_rast_t t in
-      RValVar(rt, name)
+      (ctxt, RValVar(rt, name))
+
   | ValFunc(t, name) ->
       let rt = berk_t_to_rast_t t in
-      RValFunc(rt, name)
+      (ctxt, RValFunc(rt, name))
 
   | ValRawArray(t) ->
       let rt = berk_t_to_rast_t t in
-      RValRawArray(rt)
+      (ctxt, RValRawArray(rt))
 
   | ValCast(t, op, e) ->
       let rt = berk_t_to_rast_t t in
-      let re = expr_to_rexpr e in
-      RValCast(rt, op, re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RValCast(rt, op, re))
 
   | RefOf(t, e) ->
       let rt = berk_t_to_rast_t t in
-      let re = expr_to_rexpr e in
-      RAddressOf(rt, re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RAddressOf(rt, re))
 
   | DerefOf(t, e) ->
       let rt = berk_t_to_rast_t t in
-      let re = expr_to_rexpr e in
-      RDerefAddr(rt, re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RDerefAddr(rt, re))
 
   | UnOp(t, LNot, e) ->
       let rt = berk_t_to_rast_t t in
-      let re = expr_to_rexpr e in
-      RUnOp(rt, LNot, re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RUnOp(rt, LNot, re))
 
   | BinOp(t, LOr, e_lhs, e_rhs) ->
       let rt = berk_t_to_rast_t t in
-      let re_lhs = expr_to_rexpr e_lhs in
-      let re_rhs = expr_to_rexpr e_rhs in
-      RMatchExpr(
-        rt, re_lhs, [
-          (RPBool(true), RValBool(true));
-          (RWild(RBool), re_rhs);
-        ]
+      let (ctxt, re_lhs) = expr_to_rexpr ctxt e_lhs in
+      let (ctxt, re_rhs) = expr_to_rexpr ctxt e_rhs in
+      (
+        ctxt,
+        RMatchExpr(
+          rt, re_lhs, [
+            (RPBool(true), RValBool(true));
+            (RWild(RBool), re_rhs);
+          ]
+        )
       )
 
   | BinOp(t, LAnd, e_lhs, e_rhs) ->
       let rt = berk_t_to_rast_t t in
-      let re_lhs = expr_to_rexpr e_lhs in
-      let re_rhs = expr_to_rexpr e_rhs in
-      RMatchExpr(
-        rt, re_lhs, [
-          (RPBool(false), RValBool(false));
-          (RWild(RBool), re_rhs);
-        ]
+      let (ctxt, re_lhs) = expr_to_rexpr ctxt e_lhs in
+      let (ctxt, re_rhs) = expr_to_rexpr ctxt e_rhs in
+      (
+        ctxt,
+        RMatchExpr(
+          rt, re_lhs, [
+            (RPBool(false), RValBool(false));
+            (RWild(RBool), re_rhs);
+          ]
+        )
       )
 
   | BinOp(t, op, e_lhs, e_rhs) ->
       let rt = berk_t_to_rast_t t in
       let rop = op_to_rop op in
-      let re_lhs = expr_to_rexpr e_lhs in
-      let re_rhs = expr_to_rexpr e_rhs in
-      RBinOp(rt, rop, re_lhs, re_rhs)
+      let (ctxt, re_lhs) = expr_to_rexpr ctxt e_lhs in
+      let (ctxt, re_rhs) = expr_to_rexpr ctxt e_rhs in
+      (ctxt, RBinOp(rt, rop, re_lhs, re_rhs))
 
   | BlockExpr(t, stmts, e) ->
       let rt = berk_t_to_rast_t t in
-      let re = expr_to_rexpr e in
-      let rstmts = List.map stmt_to_rstmt stmts in
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      let (ctxt, rstmts) = List.fold_left_map stmt_to_rstmt ctxt stmts in
       let wrapped_rstmts = RStmts(rstmts) in
-      RBlockExpr(rt, wrapped_rstmts, re)
+      (ctxt, RBlockExpr(rt, wrapped_rstmts, re))
 
   | ExprInvoke(t, e_func, e_args) ->
       let rt = berk_t_to_rast_t t in
-      let re_func = expr_to_rexpr e_func in
-      let re_args = List.map expr_to_rexpr e_args in
-      RExprInvoke(rt, re_func, re_args)
+      let (ctxt, re_func) = expr_to_rexpr ctxt e_func in
+      let (ctxt, re_args) = List.fold_left_map expr_to_rexpr ctxt e_args in
+      (ctxt, RExprInvoke(rt, re_func, re_args))
 
   | FuncCall(t, name, e_args) ->
       let rt = berk_t_to_rast_t t in
@@ -109,9 +124,9 @@ let rec expr_to_rexpr expr : rexpr =
       let func_rt : rast_t = RFunction(rt, args_rts) in
       let re_func = RValFunc(func_rt, name) in
 
-      let re_args = List.map expr_to_rexpr e_args in
+      let (ctxt, re_args) = List.fold_left_map expr_to_rexpr ctxt e_args in
 
-      RExprInvoke(rt, re_func, re_args)
+      (ctxt, RExprInvoke(rt, re_func, re_args))
 
   | UfcsCall(t, e_arg_first, name, underscore_pos, e_args_rest) ->
       (* Inject the e_arg_first into the correct spot in e_args_all depending on
@@ -120,123 +135,138 @@ let rec expr_to_rexpr expr : rexpr =
 
       let rewritten_as_func_call = FuncCall(t, name, e_args_all) in
 
-      expr_to_rexpr rewritten_as_func_call
+      expr_to_rexpr ctxt rewritten_as_func_call
 
   | ArrayExpr(t, e_elems) ->
       let rt = berk_t_to_rast_t t in
-      let re_elems = List.map expr_to_rexpr e_elems in
-      RArrayExpr(rt, re_elems)
+      let (ctxt, re_elems) = List.fold_left_map expr_to_rexpr ctxt e_elems in
+      (ctxt, RArrayExpr(rt, re_elems))
 
   | IndexExpr(t, e_idx, e_arr) ->
       let rt = berk_t_to_rast_t t in
-      let re_idx = expr_to_rexpr e_idx in
-      let re_arr = expr_to_rexpr e_arr in
-      RIndexExpr(rt, re_idx, re_arr)
+      let (ctxt, re_idx) = expr_to_rexpr ctxt e_idx in
+      let (ctxt, re_arr) = expr_to_rexpr ctxt e_arr in
+      (ctxt, RIndexExpr(rt, re_idx, re_arr))
 
   | TupleIndexExpr(t, i, e_tuple) ->
       let rt = berk_t_to_rast_t t in
-      let re_tuple = expr_to_rexpr e_tuple in
-      RTupleIndexExpr(rt, i, re_tuple)
+      let (ctxt, re_tuple) = expr_to_rexpr ctxt e_tuple in
+      (ctxt, RTupleIndexExpr(rt, i, re_tuple))
 
   | TupleExpr(t, e_elems) ->
       let rt = berk_t_to_rast_t t in
-      let re_elems = List.map expr_to_rexpr e_elems in
-      RTupleExpr(rt, re_elems)
+      let (ctxt, re_elems) = List.fold_left_map expr_to_rexpr ctxt e_elems in
+      (ctxt, RTupleExpr(rt, re_elems))
 
   | VariantCtorExpr(t, ctor_name, e_fields) ->
       (* "Type-erase" the value of the variant constructor into (what's expected
       to be) a union type. *)
       let rt = berk_t_to_rast_t t in
 
-      let ctor_tuple = begin
+      let (ctxt, ctor_tuple) = begin
         let open Typing in
 
         let ctor_idx = get_tag_index_by_variant_ctor t ctor_name in
         let ctor_idx_rexpr = RValInt(variant_tag_rt, ctor_idx) in
 
-        let ctor_accessible_fields = List.map expr_to_rexpr e_fields in
+        let (ctxt, ctor_accessible_fields) =
+          List.fold_left_map expr_to_rexpr ctxt e_fields
+        in
         let ctor_all_fields = ctor_idx_rexpr :: ctor_accessible_fields in
 
         let tuple_ts = List.map rexpr_type ctor_all_fields in
         let tuple_t : rast_t = RTuple(tuple_ts) in
 
-        RTupleExpr(tuple_t, ctor_all_fields)
+        (ctxt, RTupleExpr(tuple_t, ctor_all_fields))
       end in
 
-      RValCast(rt, Bitwise, ctor_tuple)
+      (ctxt, RValCast(rt, Bitwise, ctor_tuple))
 
   | IfThenElseExpr(t, e_cond, e_then, e_else) ->
       let rt = berk_t_to_rast_t t in
-      let re_cond = expr_to_rexpr e_cond in
-      let re_then = expr_to_rexpr e_then in
-      let re_else = expr_to_rexpr e_else in
-      RMatchExpr(
-        rt,
-        re_cond, [
-          (RPBool(true), re_then);
-          (RWild(RBool), re_else)
-        ]
+      let (ctxt, re_cond) = expr_to_rexpr ctxt e_cond in
+      let (ctxt, re_then) = expr_to_rexpr ctxt e_then in
+      let (ctxt, re_else) = expr_to_rexpr ctxt e_else in
+      (
+        ctxt,
+        RMatchExpr(
+          rt,
+          re_cond, [
+            (RPBool(true), re_then);
+            (RWild(RBool), re_else)
+          ]
+        )
       )
 
   | IfIsThenElseExpr(t, e_conds, e_then, e_else) ->
       let rt = berk_t_to_rast_t t in
-      let re_then = expr_to_rexpr e_then in
-      let re_else = expr_to_rexpr e_else in
+      let (ctxt, re_then) = expr_to_rexpr ctxt e_then in
+      let (ctxt, re_else) = expr_to_rexpr ctxt e_else in
 
-      let rec _if_is_conds_to_rexpr conds =
+      let rec _if_is_conds_to_rexpr ctxt conds =
         begin match conds with
         | [] ->
-            re_then
+            (ctxt, re_then)
 
         | IfIsGeneral(e_cond_part) :: rest ->
-            let re_cond_part = expr_to_rexpr e_cond_part in
-            let re_cond_rest = _if_is_conds_to_rexpr rest in
+            let (ctxt, re_cond_part) = expr_to_rexpr ctxt e_cond_part in
+            let (ctxt, re_cond_rest) = _if_is_conds_to_rexpr ctxt rest in
 
-            RMatchExpr(
-              rt,
-              re_cond_part, [
-                (RPBool(true), re_cond_rest);
-                (RWild(RBool), re_else)
-              ]
+            (
+              ctxt,
+              RMatchExpr(
+                rt,
+                re_cond_part, [
+                  (RPBool(true), re_cond_rest);
+                  (RWild(RBool), re_else)
+                ]
+              )
             )
 
         | IfIsPattern(exp, patt) :: rest ->
-            let re_cond_part = expr_to_rexpr exp in
+            let (ctxt, re_cond_part) = expr_to_rexpr ctxt exp in
             let re_patt = pattern_to_rpattern patt in
             let re_rt = rexpr_type re_cond_part in
-            let re_cond_rest = _if_is_conds_to_rexpr rest in
+            let (ctxt, re_cond_rest) = _if_is_conds_to_rexpr ctxt rest in
 
-            RMatchExpr(
-              rt,
-              re_cond_part, [
-                (re_patt, re_cond_rest);
-                (RWild(re_rt), re_else)
-              ]
+            (
+              ctxt,
+              RMatchExpr(
+                rt,
+                re_cond_part, [
+                  (re_patt, re_cond_rest);
+                  (RWild(re_rt), re_else)
+                ]
+              )
             )
 
         end
       in
-      _if_is_conds_to_rexpr e_conds
+      _if_is_conds_to_rexpr ctxt e_conds
 
   | WhileExpr(t, stmts_init, e_cond, stmts_block) ->
       let rt = berk_t_to_rast_t t in
-      let rstmts_init = List.map stmt_to_rstmt stmts_init in
-      let rstmts_block = List.map stmt_to_rstmt stmts_block in
-      let re_cond = expr_to_rexpr e_cond in
-      RWhileExpr(rt, rstmts_init, re_cond, rstmts_block)
+      let (ctxt, rstmts_init) =
+        List.fold_left_map stmt_to_rstmt ctxt stmts_init
+      in
+      let (ctxt, rstmts_block) =
+        List.fold_left_map stmt_to_rstmt ctxt stmts_block
+      in
+      let (ctxt, re_cond) = expr_to_rexpr ctxt e_cond in
+      (ctxt, RWhileExpr(rt, rstmts_init, re_cond, rstmts_block))
 
   | MatchExpr(t, e_cond, patts_to_exprs) ->
       let rt = berk_t_to_rast_t t in
-      let re_cond = expr_to_rexpr e_cond in
-      let rpatts_to_rexprs =
-        List.map (
-          fun (patt, expr) ->
+      let (ctxt, re_cond) = expr_to_rexpr ctxt e_cond in
+      let (ctxt, rpatts_to_rexprs) =
+        List.fold_left_map (
+          fun ctxt (patt, expr) ->
             let rpatt = pattern_to_rpattern patt in
-            let rexpr = expr_to_rexpr expr in
-            (rpatt, rexpr)
-        ) patts_to_exprs
+            let (ctxt, rexpr) = expr_to_rexpr ctxt expr in
+            (ctxt, (rpatt, rexpr))
+        ) ctxt patts_to_exprs
       in
-      RMatchExpr(rt, re_cond, rpatts_to_rexprs)
+      (ctxt, RMatchExpr(rt, re_cond, rpatts_to_rexprs))
   end
 
 and pattern_to_rpattern patt : rpattern =
@@ -310,42 +340,53 @@ and pattern_to_rpattern patt : rpattern =
 
 (* Translate lval-assignment-specific indexing into the generic "evaluate
 to a ptr" logic that both RHS and LHS indexing can share. *)
-and assign_idx_lval_to_rexpr_index rexpr (idxs : assign_idx_lval list) : rexpr =
-  let index_expr =
+and assign_idx_lval_to_rexpr_index
+  ctxt rexpr (idxs : assign_idx_lval list) : (a_to_r_ctxt * rexpr)
+=
+  let (ctxt, index_expr) =
     List.fold_left (
-      fun cur_exp (idx : assign_idx_lval) ->
+      fun (ctxt, cur_exp) (idx : assign_idx_lval) ->
         begin match idx with
         | ALStaticIndex(indexed_t, i) ->
             let indexed_rt = berk_t_to_rast_t indexed_t in
-            RTupleIndexExpr(indexed_rt, i, cur_exp)
+            (ctxt, RTupleIndexExpr(indexed_rt, i, cur_exp))
 
         | ALIndex(indexed_t, e) ->
             let indexed_rt = berk_t_to_rast_t indexed_t in
-            let re = expr_to_rexpr e in
-            RIndexExpr(indexed_rt, re, cur_exp)
+            let (ctxt, re) = expr_to_rexpr ctxt e in
+            (ctxt, RIndexExpr(indexed_rt, re, cur_exp))
 
         | ALDeref(derefed_t) ->
             let derefed_rt = berk_t_to_rast_t derefed_t in
-            RDerefAddr(derefed_rt, cur_exp)
+            (ctxt, RDerefAddr(derefed_rt, cur_exp))
         end
-    ) rexpr idxs
+    ) (ctxt, rexpr) idxs
   in
-  index_expr
+  (ctxt, index_expr)
 
-and stmt_to_rstmt stmt : rstmt =
+and stmt_to_rstmt (ctxt : a_to_r_ctxt) (stmt : stmt) : (a_to_r_ctxt * rstmt) =
   begin match stmt with
   | ExprStmt(_, e) ->
-      let re = expr_to_rexpr e in
-      RExprStmt(re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RExprStmt(re))
+
+  | YieldStmt(e) ->
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      let (ctxt, yield_idx) = begin
+        let yield_idx = ctxt.yield_idx in
+        let ctxt = {yield_idx = ctxt.yield_idx + 1} in
+        (ctxt, yield_idx)
+      end in
+      (ctxt, RYieldStmt(re, yield_idx))
 
   | ReturnStmt(e) ->
-      let re = expr_to_rexpr e in
-      RReturnStmt(re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RReturnStmt(re))
 
   | DeclStmt(name, _, t, e) ->
       let rt = berk_t_to_rast_t t in
-      let re = expr_to_rexpr e in
-      RDeclStmt(name, rt, re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RDeclStmt(name, rt, re))
 
   | DeclDefaultStmt(names_quals_ts) ->
       let names_rts =
@@ -355,15 +396,15 @@ and stmt_to_rstmt stmt : rstmt =
             (name, rt)
         ) names_quals_ts
       in
-      RDeclDefaultStmt(names_rts)
+      (ctxt, RDeclDefaultStmt(names_rts))
 
   | AssignStmt(name, named_t, idxs, e) ->
       let named_rt = berk_t_to_rast_t named_t in
       let start_rexpr = RValVar(named_rt, name) in
-      let ridx = assign_idx_lval_to_rexpr_index start_rexpr idxs in
+      let (ctxt, ridx) = assign_idx_lval_to_rexpr_index ctxt start_rexpr idxs in
       let named_rt = berk_t_to_rast_t named_t in
-      let re = expr_to_rexpr e in
-      RAssignStmt(name, named_rt, ridx, re)
+      let (ctxt, re) = expr_to_rexpr ctxt e in
+      (ctxt, RAssignStmt(name, named_rt, ridx, re))
 
   (* Deconstructing `let` stmts can be described as first assigning the
   result of the expr-to-be-deconstructed to a placeholder named variable, and
@@ -372,7 +413,7 @@ and stmt_to_rstmt stmt : rstmt =
   | DeclDeconStmt(names_quals, t, e) ->
       let names = List.map (fun (name, _) -> name) names_quals in
       let rt = berk_t_to_rast_t t in
-      let re = expr_to_rexpr e in
+      let (ctxt, re) = expr_to_rexpr ctxt e in
 
       let placeholder_name = Printf.sprintf "__%s" (fmt_join_strs "_" names) in
 
@@ -393,7 +434,7 @@ and stmt_to_rstmt stmt : rstmt =
             failwith "Cannot rewrite deconstruction of non-tuple decl."
         end
       in
-      RStmts(init_rstmt :: decon_rstmts)
+      (ctxt, RStmts(init_rstmt :: decon_rstmts))
   end
 
 and param_to_r_param (name, _, t) =
@@ -427,6 +468,11 @@ and _ensure_stmts_trailing_return name stmts (ret_t : berk_t) : (stmt list) =
         )
   end
 
+and stmts_to_rstmts (stmts : stmt list) : (rstmt list) =
+  let ctxt = empty_a_to_r_ctxt in
+  let (_, rstmts) = List.fold_left_map stmt_to_rstmt ctxt stmts in
+  rstmts
+
 and func_def_t_to_rfunc_def_t
   {f_decl=({f_name; f_ret_t; _} as f_decl); f_stmts}
 =
@@ -437,7 +483,7 @@ and func_def_t_to_rfunc_def_t
   let rf_decl = func_decl_t_to_rfunc_decl_t f_decl in
 
   (* Generate RAST function definition from the source AST. *)
-  let rf_stmts = List.map stmt_to_rstmt f_stmts in
+  let rf_stmts = stmts_to_rstmts f_stmts in
 
   {rf_decl=rf_decl; rf_stmts=rf_stmts}
 
@@ -451,7 +497,7 @@ and generator_def_t_to_rgenerator_def_t
   let rg_decl = generator_decl_t_to_rgenerator_decl_t g_decl in
 
   (* Generate RAST function definition from the source AST. *)
-  let rg_stmts = List.map stmt_to_rstmt g_stmts in
+  let rg_stmts = stmts_to_rstmts g_stmts in
 
   {rg_decl=rg_decl; rg_stmts=rg_stmts}
 ;;

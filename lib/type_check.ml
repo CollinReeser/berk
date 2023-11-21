@@ -7,17 +7,21 @@ module StrMap = Map.Make(String)
 
 type module_context = {
   func_sigs: func_decl_t StrMap.t;
+  generator_sigs: generator_decl_t StrMap.t;
   variants: variant_decl_t StrMap.t;
 }
 
 let default_mod_ctxt = {
   func_sigs = StrMap.empty;
+  generator_sigs = StrMap.empty;
   variants = StrMap.empty;
 }
 
 type typecheck_context = {
   vars: (berk_t * var_qual) StrMap.t;
+  yield_t: berk_t;
   ret_t: berk_t;
+  yield_t_candidates: berk_t list;
   ret_t_candidates: berk_t list;
   mod_ctxt: module_context;
 }
@@ -34,7 +38,9 @@ let fmt_variants_map variants =
 
 let default_tc_ctxt typ = {
   vars = StrMap.empty;
+  yield_t = Nil;
   ret_t = typ;
+  yield_t_candidates = [];
   ret_t_candidates = [];
   mod_ctxt = default_mod_ctxt;
 }
@@ -128,6 +134,7 @@ let rec is_concrete_stmt ?(verbose=false) stmt =
 
   let res = begin match stmt with
   | ExprStmt(_, expr)
+  | YieldStmt(expr)
   | ReturnStmt(expr)
   | AssignStmt(_, _, _, expr) ->
       _is_concrete_expr expr
@@ -406,7 +413,31 @@ and type_check_mod_decl mod_ctxt mod_decl =
         (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
   | GeneratorDef(g_ast) ->
-      (mod_ctxt, GeneratorDef(g_ast))
+      let {g_decl = {g_name; g_params; g_yield_t; g_ret_t}; g_stmts} = g_ast in
+      let _ = match (StrMap.find_opt g_name mod_ctxt.generator_sigs) with
+        | None -> ()
+        | Some(_) -> failwith ("Multiple declarations of func " ^ g_name)
+      in
+
+      (* If the return type is a user-defined type, bind it now. *)
+      let g_ret_t = bind_type mod_ctxt g_ret_t in
+      let g_ast = {g_decl = {g_name; g_params; g_yield_t; g_ret_t}; g_stmts} in
+
+      if not (confirm_at_most_trailing_var_arg g_params)
+      then failwith "Only zero-or-one trailing var-args permitted"
+      else
+        let generator_sigs_up = begin
+          StrMap.add
+            g_name
+            {g_name; g_params; g_yield_t; g_ret_t}
+            mod_ctxt.generator_sigs
+        end in
+        let mod_ctxt_up = {mod_ctxt with generator_sigs = generator_sigs_up} in
+        let generator_ast_typechecked =
+          type_check_generator mod_ctxt_up g_ast
+        in
+
+        (mod_ctxt_up, GeneratorDef(generator_ast_typechecked))
 
   | VariantDecl({v_name; v_ctors; v_typ_vars}) ->
       let _ = match (StrMap.find_opt v_name mod_ctxt.variants) with
@@ -437,6 +468,20 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
       (mod_ctxt_up, VariantDecl(bound_v_decl_ast))
 
+and type_check_callable_body tc_ctxt stmts ret_t =
+  let (tc_ctxt_final, stmts_typechecked) =
+    type_check_stmts tc_ctxt stmts
+  in
+
+  (* If the function declaration did not specify a return type, then we try to
+  resolve that return type here. *)
+  let resolved_ret_t = begin match ret_t with
+    | Undecided -> common_type_of_lst tc_ctxt_final.ret_t_candidates
+    | _ -> ret_t
+  end in
+
+  (tc_ctxt_final, stmts_typechecked, resolved_ret_t)
+
 (* Given a module-typechecking context and a function-definition AST, typecheck
 the function definition and return its typechecked form. *)
 and type_check_func mod_ctxt func_def =
@@ -450,20 +495,45 @@ and type_check_func mod_ctxt func_def =
       mod_ctxt = mod_ctxt
   } in
 
-  let (tc_ctxt_final, f_stmts_typechecked) =
-    type_check_stmts tc_ctxt_init f_stmts
+  let (_, f_stmts_typechecked, resolved_ret_t) =
+    type_check_callable_body tc_ctxt_init f_stmts f_ret_t
   in
-
-  (* If the function declaration did not specify a return type, then we try to
-  resolve that return type here. *)
-  let resolved_ret_t = begin match f_ret_t with
-    | Undecided -> common_type_of_lst tc_ctxt_final.ret_t_candidates
-    | _ -> f_ret_t
-  end in
 
   {
     f_stmts = f_stmts_typechecked;
     f_decl = {func_def.f_decl with f_ret_t = resolved_ret_t};
+  }
+
+and type_check_generator mod_ctxt generator_def =
+  let {g_decl = {g_params; g_yield_t; g_ret_t; _;}; g_stmts;} = generator_def in
+  let tc_ctxt_base = default_tc_ctxt g_ret_t in
+  let vars_base = tc_ctxt_base.vars in
+  let vars_init = populate_ctxt_with_params g_params vars_base in
+  let tc_ctxt_init = {
+    tc_ctxt_base with
+      yield_t = g_yield_t;
+      vars = vars_init;
+      mod_ctxt = mod_ctxt
+  } in
+
+  let (tc_ctxt_final, g_stmts_typechecked, resolved_ret_t) =
+    type_check_callable_body tc_ctxt_init g_stmts g_ret_t
+  in
+
+  (* If the function declaration did not specify a yield type, then we try to
+  resolve that yield type here. *)
+  let resolved_yield_t = begin match g_yield_t with
+    | Undecided -> common_type_of_lst tc_ctxt_final.yield_t_candidates
+    | _ -> g_yield_t
+  end in
+
+  {
+    g_stmts = g_stmts_typechecked;
+    g_decl = {
+      generator_def.g_decl with
+        g_ret_t = resolved_ret_t;
+        g_yield_t = resolved_yield_t;
+    };
   }
 
 and update_vars_with_idents_quals vars_init idents_quals types =
@@ -685,6 +755,26 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         end
       in
       (tc_ctxt, ExprStmt(es_mod, exp_typechecked))
+
+  | YieldStmt(exp) ->
+      let exp_typechecked = type_check_expr tc_ctxt tc_ctxt.yield_t exp in
+      let exp_t = expr_type exp_typechecked in
+      let yield_tuple = begin
+        match tc_ctxt.yield_t with
+        | Undecided ->
+            let yield_t_candidates_up = exp_t :: tc_ctxt.yield_t_candidates in
+            let tc_ctxt_up = {
+              tc_ctxt with yield_t_candidates = yield_t_candidates_up
+            } in
+            (tc_ctxt_up, YieldStmt(exp_typechecked))
+        | _ ->
+            if type_convertible_to exp_t tc_ctxt.yield_t
+              then (tc_ctxt, YieldStmt(exp_typechecked))
+              else failwith "Expr for return does not typecheck with func yield_t"
+        end
+      in
+
+      yield_tuple
 
   | ReturnStmt(exp) ->
       let exp_typechecked = type_check_expr tc_ctxt tc_ctxt.ret_t exp in

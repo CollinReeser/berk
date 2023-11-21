@@ -191,6 +191,7 @@ and stmt =
   would instead be expected to agree with the type of the RHS expr). *)
   | AssignStmt of ident_t * berk_t * assign_idx_lval list * expr
   | ExprStmt of expr_stmt_mod * expr
+  | YieldStmt of expr
   | ReturnStmt of expr
 ;;
 
@@ -539,6 +540,12 @@ and dump_stmt_ast ?(ind="") stmt =
       let ind_next = ind ^ " " in
       sprintf "ExprStmt(expr_stmt_mod{ignore=%b},\n%s%s\n%s)"
         ignore
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  | YieldStmt(e) ->
+      let ind_next = ind ^ " " in
+      sprintf "YieldStmt(\n%s%s\n%s)"
         ind_next
         (dump_expr_ast ~ind:ind_next e)
         ind
@@ -1153,6 +1160,11 @@ and fmt_stmt ?(print_typ = false) ind stmt =
       in
       Printf.sprintf "%s%s%s;\n"
         fmt_ignore
+        ind
+        (fmt_expr ~ind:ind ~print_typ:print_typ ex)
+
+  | YieldStmt (ex) ->
+      Printf.sprintf "%syield %s;\n"
         ind
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
@@ -2021,6 +2033,12 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
           _rewrite_exp unique_varnames exp
         in
         (unique_varnames, ExprStmt(es_mod, exp_rewritten))
+
+    | YieldStmt(exp) ->
+        let (unique_varnames, exp_rewritten) =
+          _rewrite_exp unique_varnames exp
+        in
+        (unique_varnames, YieldStmt(exp_rewritten))
 
     | ReturnStmt(exp) ->
         let (unique_varnames, exp_rewritten) =
