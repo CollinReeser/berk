@@ -653,6 +653,22 @@ let () =
       };
     }
 
+    fn largest_num_alt_alt(vals: ref [4]i32): ref i32 {
+      let mut largest = 0;
+      let mut ref_largest = ref vals.*[0];
+
+      while {let mut i = 0;} i < 4 {
+        if vals.*[i] > largest {
+          largest = vals.*[i];
+          ref_largest = ref vals.*[i];
+        }
+
+        i = i + 1;
+      }
+
+      return ref_largest;
+    }
+
     fn if_is_expr_test() {
       if Some(5) is Some(i) {
         ignore printf("if_is_expr_test [%d] (5)\n", i);
@@ -1612,6 +1628,35 @@ let () =
 
         while {let mut i = 0;} i < 4 {
           ignore printf("Num: %d\n", other_vals[i]);
+          i = i + 1;
+        }
+      }
+
+      ignore printf("========================\n");
+
+      {
+        let mut third_vals: [4]i32;
+
+        third_vals[0] = get_random_number(200);
+        third_vals[1] = get_random_number(200);
+        third_vals[2] = get_random_number(200);
+        third_vals[3] = get_random_number(200);
+
+        while {let mut i = 0;} i < 4 {
+          ignore printf("Num: %d\n", third_vals[i]);
+          i = i + 1;
+        }
+
+        let mut ref_to_largest_num_alt_alt = largest_num_alt(ref third_vals);
+
+        ignore printf("Largest num (alt): %d\n", ref_to_largest_num_alt_alt.*);
+
+        ignore printf("Editing largest num at reference to 310...\n");
+
+        ref_to_largest_num_alt_alt.* = 310;
+
+        while {let mut i = 0;} i < 4 {
+          ignore printf("Num: %d\n", third_vals[i]);
           i = i + 1;
         }
       }
