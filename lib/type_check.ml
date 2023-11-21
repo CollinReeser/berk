@@ -284,6 +284,7 @@ and is_concrete_patt ?(verbose=false) patt =
   | PBool(_) -> true
   | PInt(_) -> true
   | Wild(t) -> (_is_concrete_type t)
+  | RequireWild(t) -> (_is_concrete_type t)
   | VarBind(t, _) -> (_is_concrete_type t)
   | PTuple(t, _) -> (_is_concrete_type t)
   | Ctor(t, _, patts) ->
@@ -1634,6 +1635,11 @@ and type_check_pattern
   | Wild(_) ->
       (tc_ctxt, Wild(matched_t))
 
+  | RequireWild(_) ->
+      failwith (
+        Printf.sprintf "Error: Cannot have RequireWild as match pattern."
+      )
+
   | VarBind(_, varname) ->
       let tc_ctxt = {
         tc_ctxt with
@@ -2049,10 +2055,18 @@ and pattern_dominates lhs_patt rhs_patt : (bool * pattern list) =
   | (PBool(_), _)
   | (
       PInt(_),
-      (PNil | PBool(_) | PTuple(_, _) | Ctor(_, _, _) | PatternAs(_, _, _))
+      (
+        PNil | PBool(_) | PTuple(_, _) | Ctor(_, _, _) | PatternAs(_, _, _) |
+        RequireWild(_)
+      )
     )
   | (PTuple(_, _), _)
   | (Ctor(_, _, _), _) -> failwith "Non-matching pattern types."
+
+  | (RequireWild(_), _) ->
+      failwith (
+        Printf.sprintf "Cannot use RequireWild(_) as match pattern."
+      )
 
   end
 
@@ -2152,7 +2166,7 @@ and generate_value_patts t : pattern list =
       let ts_patts_cart_prod = cartesian_product ts_patts in
       List.map (fun ts_patt -> PTuple(t, ts_patt)) ts_patts_cart_prod
 
-  | Ref(_) -> failwith "generate_value_patts: Ref: Unimplemented"
+  | Ref(_) -> [RequireWild(t)]
   | Function(_, _) -> failwith "generate_value_patts: Function: Unimplemented"
 
   | Bool -> [PBool(true); PBool(false)]

@@ -191,6 +191,101 @@ let rec has_default_value t =
 ;;
 
 
+(* Do two types exactly match. *)
+let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
+  begin match (lhs, rhs) with
+  | (Undecided, Undecided) -> true
+
+  | (Unbound(lhs_name), Unbound(rhs_name)) ->
+      if lhs_name = rhs_name then true else false
+
+  | (UnboundType(lhs_name, lhs_ts), UnboundType(rhs_name, rhs_ts)) ->
+      if lhs_name = rhs_name then
+        List.for_all2 is_same_type lhs_ts rhs_ts
+      else
+        false
+
+  | (U64, U64)
+  | (U32, U32)
+  | (U16, U16)
+  | (U8,  U8)
+  | (I64, I64)
+  | (I32, I32)
+  | (I16, I16)
+  | (I8,  I8)
+  | (F128, F128)
+  | (F64,  F64)
+  | (F32,  F32)
+  | (Bool, Bool)
+  | (String, String)
+  | (Nil, Nil)
+  | (VarArgSentinel, VarArgSentinel) ->
+      true
+
+  | (Ref(lhs), Ref(rhs)) ->
+      is_same_type lhs rhs
+
+  | (Array(lhs_t, lhs_i), Array(rhs_t, rhs_i)) ->
+      (lhs_i = rhs_i) && (is_same_type lhs_t rhs_t)
+
+  | (Tuple(lhs_ts), Tuple(rhs_ts)) ->
+      begin if (List.compare_lengths lhs_ts rhs_ts) = 0 then
+        List.for_all2 is_same_type lhs_ts rhs_ts
+      else
+        false
+      end
+
+  | (Function(lhs_ret_t, lhs_arg_ts), Function(rhs_ret_t, rhs_arg_ts)) ->
+      (is_same_type lhs_ret_t rhs_ret_t) &&
+      ((List.compare_lengths lhs_arg_ts rhs_arg_ts) = 0) &&
+      (List.for_all2 is_same_type lhs_arg_ts rhs_arg_ts)
+
+  | (Variant(lhs_name, lhs_ctors), Variant(rhs_name, rhs_ctors)) ->
+      if lhs_name = rhs_name then
+        let _is_same_ctor
+          {name=lhs_name; fields=lhs_fields}
+          {name=rhs_name; fields=rhs_fields}
+        =
+          if lhs_name = rhs_name then
+            List.for_all2 (
+              fun {t=lhs_t} {t=rhs_t} -> is_same_type lhs_t rhs_t
+            ) lhs_fields rhs_fields
+          else
+            false
+        in
+        List.for_all2 _is_same_ctor lhs_ctors rhs_ctors
+
+      else
+        false
+
+  | (Undecided, _)
+  | (Unbound(_), _)
+  | (UnboundType(_, _), _)
+  | (U64, _)
+  | (U32, _)
+  | (U16, _)
+  | (U8, _)
+  | (I64, _)
+  | (I32, _)
+  | (I16, _)
+  | (I8, _)
+  | (F128, _)
+  | (F64, _)
+  | (F32, _)
+  | (Bool, _)
+  | (String, _)
+  | (Nil, _)
+  | (VarArgSentinel, _)
+  | (Ref(_), _)
+  | (Array(_, _), _)
+  | (Tuple(_), _)
+  | (Function(_), _)
+  | (Variant(_, _), _) ->
+      false
+  end
+;;
+
+
 (* Determine the common type between two. ie, if they're not the same type, but
 one is convertible to the other, yield the common type. *)
 let rec common_type_of_lr lhs rhs =
@@ -206,19 +301,30 @@ let rec common_type_of_lr lhs rhs =
     | (Undecided,         _) -> Some(rhs)
 
     | (Nil,              Nil) -> Some(Nil)
+    | (Nil,                _) -> None
+
     | ((I64|I32|I16|I8), I64) -> Some(I64)
     | ((I32|I16|I8),     I32) -> Some(I32)
     | ((I16|I8),         I16) -> Some(I16)
     | (I8,               I8 ) -> Some(I8)
+    | ((I64|I32|I16|I8),   _) -> None
+
     | ((U64|U32|U16|U8), U64) -> Some(U64)
     | ((U32|U16|U8),     U32) -> Some(U32)
     | ((U16|U8),         U16) -> Some(U16)
     | (U8,               U8 ) -> Some(U8)
+    | ((U64|U32|U16|U8),   _) -> None
+
     | ((F128|F64|F32),  F128) -> Some(F128)
     | ((F64|F32),       F64 ) -> Some(F64)
     | (F32,             F32 ) -> Some(F32)
+    | ((F128|F64|F32),     _) -> None
+
     | (Bool,            Bool) -> Some(Bool)
+    | (Bool,               _) -> None
+
     | (String,        String) -> Some(String)
+    | (String,             _) -> None
 
     | (Unbound(lhs_typevar), Unbound(rhs_typevar)) ->
         if lhs_typevar = rhs_typevar then
@@ -233,12 +339,16 @@ let rec common_type_of_lr lhs rhs =
         let common_tup_typs = List.map2 common_type_of_lr lhs_typs rhs_typs in
         Some(Tuple(common_tup_typs))
 
+    | (Tuple(_), _) -> None
+
     | (Array(lhs_elem_typ, lhs_sz), Array(rhs_elem_typ, rhs_sz)) ->
         if lhs_sz = rhs_sz then
           let common_elem_typ = common_type_of_lr lhs_elem_typ rhs_elem_typ in
           Some(Array(common_elem_typ, lhs_sz))
         else
           None
+
+    | (Array(_, _), _) -> None
 
     | (Variant(lhs_name, lhs_ctor_lst), Variant(rhs_name, rhs_ctor_lst)) ->
         if lhs_name = rhs_name then
@@ -252,7 +362,26 @@ let rec common_type_of_lr lhs rhs =
         else
           None
 
-    | _ -> None
+    | (Variant(_, _), _) -> None
+
+    | (Ref(lhs_t), Ref(rhs_t)) ->
+        begin if is_same_type lhs_t rhs_t then
+          Some(Ref(lhs_t))
+        else
+          None
+        end
+
+    | (Ref(_), _) -> None
+
+    | (UnboundType(_, _), _)
+    | (VarArgSentinel, _)
+    | (Function(_, _), _) ->
+        failwith (
+          Printf.sprintf
+            "Unimplemented: common_type_of_lr(%s, %s)"
+            (fmt_type lhs)
+            (fmt_type rhs)
+        )
   in
   match _common_type_of_lr lhs rhs with
   | Some(t) -> t
@@ -1146,98 +1275,4 @@ let get_tag_index_by_variant_ctor v_t ctor_name =
 (* Get the index of the given ctor name in the given list of variant ctors *)
 let get_variant_ctor_by_tag_index v_ctors idx =
   List.nth v_ctors idx
-;;
-
-(* Do two types exactly match. *)
-let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
-  begin match (lhs, rhs) with
-  | (Undecided, Undecided) -> true
-
-  | (Unbound(lhs_name), Unbound(rhs_name)) ->
-      if lhs_name = rhs_name then true else false
-
-  | (UnboundType(lhs_name, lhs_ts), UnboundType(rhs_name, rhs_ts)) ->
-      if lhs_name = rhs_name then
-        List.for_all2 is_same_type lhs_ts rhs_ts
-      else
-        false
-
-  | (U64, U64)
-  | (U32, U32)
-  | (U16, U16)
-  | (U8,  U8)
-  | (I64, I64)
-  | (I32, I32)
-  | (I16, I16)
-  | (I8,  I8)
-  | (F128, F128)
-  | (F64,  F64)
-  | (F32,  F32)
-  | (Bool, Bool)
-  | (String, String)
-  | (Nil, Nil)
-  | (VarArgSentinel, VarArgSentinel) ->
-      true
-
-  | (Ref(lhs), Ref(rhs)) ->
-      is_same_type lhs rhs
-
-  | (Array(lhs_t, lhs_i), Array(rhs_t, rhs_i)) ->
-      (lhs_i = rhs_i) && (is_same_type lhs_t rhs_t)
-
-  | (Tuple(lhs_ts), Tuple(rhs_ts)) ->
-      begin if (List.compare_lengths lhs_ts rhs_ts) = 0 then
-        List.for_all2 is_same_type lhs_ts rhs_ts
-      else
-        false
-      end
-
-  | (Function(lhs_ret_t, lhs_arg_ts), Function(rhs_ret_t, rhs_arg_ts)) ->
-      (is_same_type lhs_ret_t rhs_ret_t) &&
-      ((List.compare_lengths lhs_arg_ts rhs_arg_ts) = 0) &&
-      (List.for_all2 is_same_type lhs_arg_ts rhs_arg_ts)
-
-  | (Variant(lhs_name, lhs_ctors), Variant(rhs_name, rhs_ctors)) ->
-      if lhs_name = rhs_name then
-        let _is_same_ctor
-          {name=lhs_name; fields=lhs_fields}
-          {name=rhs_name; fields=rhs_fields}
-        =
-          if lhs_name = rhs_name then
-            List.for_all2 (
-              fun {t=lhs_t} {t=rhs_t} -> is_same_type lhs_t rhs_t
-            ) lhs_fields rhs_fields
-          else
-            false
-        in
-        List.for_all2 _is_same_ctor lhs_ctors rhs_ctors
-
-      else
-        false
-
-  | (Undecided, _)
-  | (Unbound(_), _)
-  | (UnboundType(_, _), _)
-  | (U64, _)
-  | (U32, _)
-  | (U16, _)
-  | (U8, _)
-  | (I64, _)
-  | (I32, _)
-  | (I16, _)
-  | (I8, _)
-  | (F128, _)
-  | (F64, _)
-  | (F32, _)
-  | (Bool, _)
-  | (String, _)
-  | (Nil, _)
-  | (VarArgSentinel, _)
-  | (Ref(_), _)
-  | (Array(_, _), _)
-  | (Tuple(_), _)
-  | (Function(_), _)
-  | (Variant(_, _), _) ->
-      false
-  end
 ;;

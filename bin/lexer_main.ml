@@ -618,6 +618,41 @@ let () =
       return;
     }
 
+    fn largest_num(vals: ref [4]i32): ref i32 {
+      let mut largest = 0;
+      let mut idx_largest = 0;
+
+      while {let mut i = 0;} i < 4 {
+        if vals.*[i] > largest {
+          largest = vals.*[i];
+          idx_largest = i;
+        }
+
+        i = i + 1;
+      }
+
+      return ref vals.*[idx_largest];
+    }
+
+    fn largest_num_alt(vals: ref [4]i32): ref i32 {
+      let mut largest = 0;
+      let mut maybe_ref_largest: Opt<ref i32> = None;
+
+      while {let mut i = 0;} i < 4 {
+        if vals.*[i] > largest {
+          largest = vals.*[i];
+          maybe_ref_largest = Some(ref vals.*[i]);
+        }
+
+        i = i + 1;
+      }
+
+      return match maybe_ref_largest {
+      | Some(r) -> r
+      | None -> ref vals.*[0]
+      };
+    }
+
     fn if_is_expr_test() {
       if Some(5) is Some(i) {
         ignore printf("if_is_expr_test [%d] (5)\n", i);
@@ -1523,6 +1558,65 @@ let () =
       }
 
       mess_with_memory();
+
+      ignore printf("Finding reference to largest values...\n");
+
+      {
+        let mut vals: [4]i32;
+
+        vals[0] = get_random_number(200);
+        vals[1] = get_random_number(200);
+        vals[2] = get_random_number(200);
+        vals[3] = get_random_number(200);
+
+        while {let mut i = 0;} i < 4 {
+          ignore printf("Vals num: %d\n", vals[i]);
+          i = i + 1;
+        }
+
+        let mut ref_to_largest_num = largest_num(ref vals);
+
+        ignore printf("Largest num: %d\n", ref_to_largest_num.*);
+        ignore printf("Editing largest num at reference to 210...\n");
+
+        ref_to_largest_num.* = 210;
+
+        while {let mut i = 0;} i < 4 {
+          ignore printf("Num: %d\n", vals[i]);
+          i = i + 1;
+        }
+      }
+
+      ignore printf("========================\n");
+
+      {
+        let mut other_vals: [4]i32;
+
+        other_vals[0] = get_random_number(200);
+        other_vals[1] = get_random_number(200);
+        other_vals[2] = get_random_number(200);
+        other_vals[3] = get_random_number(200);
+
+        while {let mut i = 0;} i < 4 {
+          ignore printf("Num: %d\n", other_vals[i]);
+          i = i + 1;
+        }
+
+        let mut ref_to_largest_num_alt = largest_num_alt(ref other_vals);
+
+        ignore printf("Largest num (alt): %d\n", ref_to_largest_num_alt.*);
+
+        ignore printf("Editing largest num at reference to 310...\n");
+
+        ref_to_largest_num_alt.* = 310;
+
+        while {let mut i = 0;} i < 4 {
+          ignore printf("Num: %d\n", other_vals[i]);
+          i = i + 1;
+        }
+      }
+
+      ignore printf("Done finding reference to largest values.\n");
 
       return 0;
     }

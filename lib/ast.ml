@@ -130,6 +130,10 @@ and pattern =
   be generated via input source, but is used internally. *)
   | PNil
 
+  (* Placeholder pattern for only supporting/matching this type if it's bound
+  to Wild (or a Wild equivalent, like a VarBind) *)
+  | RequireWild of berk_t
+
   (* ie: true -> ... *)
   | PBool of bool
 
@@ -1025,6 +1029,8 @@ and fmt_pattern ?(print_typ=false) ?(init_ind="") pattern =
         sprintf "_%s" (_maybe_fmt_type t)
     | VarBind(t, var_name) ->
         sprintf "%s%s" var_name (_maybe_fmt_type t)
+    | RequireWild(t) ->
+        sprintf "(?_?)%s" (_maybe_fmt_type t)
     | PBool(b) ->
         sprintf "%b%s" b (_maybe_fmt_type Bool)
     | PInt(_, IRangeLiteral(i)) ->
@@ -2283,6 +2289,7 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     begin match patt with
     | PNil
     | Wild(_)
+    | RequireWild(_)
     | PBool(_)
     | PInt(_) ->
         (unique_varnames, patt)

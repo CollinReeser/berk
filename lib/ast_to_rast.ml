@@ -281,6 +281,11 @@ and pattern_to_rpattern patt : rpattern =
       let rt = berk_t_to_rast_t t in
       RVarBind(rt, name)
 
+  | RequireWild(_) ->
+      failwith (
+        Printf.sprintf "Error: Cannot use RequireWild(_) as match pattern."
+      )
+
   | PBool(b) -> RPBool(b)
 
   | PInt(t, IRangeLiteral(i)) ->
