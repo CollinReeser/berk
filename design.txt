@@ -1656,6 +1656,7 @@ where SmartPtr<T> is nodestruct {
     }
 }
 where DestructableSmartPtr {}
+```
 
 How does this work when such objects are placed in containers? Is a "destructor"
 still a function that gets called automatically in some contexts? Is it always
@@ -2242,3 +2243,122 @@ Syntax sugar for `let mut i ...`?
 
 `mut i` contains the same information as `let mut i` because both `let` and
 `mut` are only used during variable declaration?
+
+===
+
+A `liburing` wrapper library that properly handles ownership of buffers shared
+with the kernel.
+
+This culd be accomplished by a typestate model where some buffer is allocated
+(stack? heap?), and then passed to an io_uring init function that takes
+ownership of the buffer for the duration. We could potentially also provide
+a generator-based interface for this.
+
+Motivating, toy, unworkable initial approach:
+
+```
+gn wrapped_uring_read(
+  fd: ref File, mut buf: ref [64]i8 lifetime~borrow
+):
+  yield (), return ref [64]i8 lifetime~borrow
+{
+  let mut io_uring_sentinel = io_uring_read(fd.*.fd, buf);
+
+  while !io_uring_sentinel.is_done {
+    yield;
+  }
+
+  return;
+}
+
+fn main(): i8 {
+  let fd: File = open("test_file", File::RO);
+  let mut buf: [64]i8;
+
+  let do_async_read = wrapped_uring_read(ref fd, ref buf);
+
+  // At this point, `buf` is borrowed in a way that will only be released if
+  // `do_async_read` returns, which frees the borrow. So, we can only read from
+  // `buf` in a codepath where we're processing that return.
+  //
+  // It might not be possible to statically typecheck a static version of this
+  // kind of borrow. Instead, this may require dynamic state to track the
+  // borrow, as if the generator is stored in a way that loses its name (like in
+  // a vector), then we need a way to check if a specific buffer is still
+  // borrowed. In this case, this just collapses to some sort of `BorrowWrapper`
+  // struct that owns the buffer and a flag for whether it's readable again, ie,
+  // a mutex. Given that things like async IO typically happen in collections of
+  // operations, it may be unavoidable.
+
+  while true {
+    let result = do_async_read();
+
+    if result is Yield {
+
+    }
+    else if result is Return(ret_buf) {
+      // use ret_buf now that the borrow has ended.
+    }
+  }
+
+  return 0;
+}
+```
+
+The above is terrible. Difficult to borrow-check in toy cases, does not work in
+more interesting cases.
+
+What about an API where the buffer is controlled by the io_uring wrapper, and
+the API is typestate based so that the buffer is inaccessible by the caller
+until it's valid to read:
+
+```
+class IoUringRead <T, i: i64> {
+  let buf: ref [i]T;
+}
+where IoUringPreRead {
+  // private visibility for buf.
+  pri buf;
+
+  gn wrapped_uring_read(mov mut self, fd: ref File):
+    yield (), return IoUringPostRead
+  {
+    let mut io_uring_sentinel = io_uring_read(fd.*.fd, buf);
+
+    while !io_uring_sentinel.is_done {
+      yield;
+    }
+
+    return IoUringPostRead {
+      .self = mov self
+    };
+  }
+}
+where IoUringPostRead {
+  // implied `pub buf;`, ie public visibility.
+  //
+  // Or maybe this needs to be explicit, and each successive typestate applies
+  // modifications to visibilities in a way that stacks, ie, visibility remains
+  // the same for each successive typestate except for explicit changes?
+}
+
+fn main(): i8 {
+  let fd: File = open("test_file", File::RO);
+  let mut buf: [64]i8;
+
+  let pre_read = IoUringPreRead {
+    .buf = mov ref buf
+  };
+
+  let do_async_read = pre_read.wrapped_uring_read(ref fd);
+
+  while do_async_read() as res is Yield {
+    // Nothing to do, spin.
+  }
+  else if res is Return(post_read) {
+    printf("Read: [%s]\n", post_read.buf.*);
+  }
+
+  return 0;
+}
+```
