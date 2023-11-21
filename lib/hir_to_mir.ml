@@ -366,6 +366,7 @@ let hfunc_decl_to_mir {hf_name; hf_params; hf_ret_t} =
   let mir_ctxt = {
     f_name = hf_name;
     f_params = hf_params;
+    f_yield_rt = RNil;
     f_ret_rt = hf_ret_t;
     name_gen = 0;
     lvars = StrMap.empty;
@@ -375,12 +376,23 @@ let hfunc_decl_to_mir {hf_name; hf_params; hf_ret_t} =
   mir_ctxt
 ;;
 
-let hfunc_def_to_mir {hf_decl; hf_scope} =
-  (* Setup declaration for the function. *)
-  let mir_ctxt = hfunc_decl_to_mir hf_decl in
+let hgenerator_decl_to_mir {hg_name; hg_params; hg_yield_t; hg_ret_t} =
+  let mir_ctxt = {
+    f_name = hg_name;
+    f_params = hg_params;
+    f_yield_rt = hg_yield_t;
+    f_ret_rt = hg_ret_t;
+    name_gen = 0;
+    lvars = StrMap.empty;
+    bbs = StrMap.empty
+  } in
 
+  mir_ctxt
+;;
+
+let hcallable_to_mir mir_ctxt hscope =
   (* Collect all internal declarations and move them to the top-level scope. *)
-  let toplevel_decl_hfscope = rewrite_hscope_to_only_toplevel_decls hf_scope in
+  let toplevel_decl_hfscope = rewrite_hscope_to_only_toplevel_decls hscope in
 
   let bb_entry = {name="entry"; instrs=[]} in
 
@@ -414,4 +426,16 @@ let hfunc_def_to_mir {hf_decl; hf_scope} =
   let mir_ctxt = clean_up_mir mir_ctxt in
 
   mir_ctxt
+;;
+
+let hfunc_def_to_mir {hf_decl; hf_scope} =
+  let mir_ctxt = hfunc_decl_to_mir hf_decl in
+
+  hcallable_to_mir mir_ctxt hf_scope
+;;
+
+let hgenerator_def_to_mir {hg_decl; hg_scope} =
+  let mir_ctxt = hgenerator_decl_to_mir hg_decl in
+
+  hcallable_to_mir mir_ctxt hg_scope
 ;;

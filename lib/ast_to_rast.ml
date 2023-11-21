@@ -2,6 +2,7 @@ open Ast
 open Ir
 open Rast
 open Rast_typing
+open Typing
 open Utility
 
 let rec expr_to_rexpr expr : rexpr =
@@ -395,33 +396,42 @@ and stmt_to_rstmt stmt : rstmt =
       RStmts(init_rstmt :: decon_rstmts)
   end
 
-and f_param_to_rf_param (name, _, t) =
+and param_to_r_param (name, _, t) =
   let rt = berk_t_to_rast_t t in
   (name, rt)
 
 and func_decl_t_to_rfunc_decl_t {f_name; f_params; f_ret_t} =
-  let rf_params = List.map f_param_to_rf_param f_params in
-  let rf_ret_rt = berk_t_to_rast_t f_ret_t in
-  {rf_name=f_name; rf_params=rf_params; rf_ret_t=rf_ret_rt}
+  let rf_params = List.map param_to_r_param f_params in
+  let rf_ret_t = berk_t_to_rast_t f_ret_t in
+  {rf_name=f_name; rf_params; rf_ret_t}
+
+and generator_decl_t_to_rgenerator_decl_t
+  {g_name; g_params; g_yield_t; g_ret_t}
+=
+  let rg_params = List.map param_to_r_param g_params in
+  let rg_yield_t = berk_t_to_rast_t g_yield_t in
+  let rg_ret_t = berk_t_to_rast_t g_ret_t in
+  {rg_name=g_name; rg_params; rg_yield_t; rg_ret_t}
+
+and _ensure_stmts_trailing_return name stmts (ret_t : berk_t) : (stmt list) =
+  begin match (List.rev stmts) with
+  | ReturnStmt(_) :: _ -> stmts
+  | []
+  | _ :: _ ->
+      if (is_same_type ret_t Nil) then
+        stmts @ [ReturnStmt(ValNil)]
+      else
+        failwith (
+          Printf.sprintf "No trailing return-stmt but non-nil function [%s]"
+            name
+        )
+  end
 
 and func_def_t_to_rfunc_def_t
   {f_decl=({f_name; f_ret_t; _} as f_decl); f_stmts}
 =
   (* Ensure there is a trailing return stmt if there isn't one already. *)
-  let f_stmts =
-    begin match (List.rev f_stmts) with
-    | ReturnStmt(_) :: _ -> f_stmts
-    | []
-    | _ :: _ ->
-        if f_ret_t = Nil then
-          f_stmts @ [ReturnStmt(ValNil)]
-        else
-          failwith (
-            Printf.sprintf "No trailing return-stmt but non-nil function [%s]"
-              f_name
-          )
-    end
-  in
+  let f_stmts = _ensure_stmts_trailing_return f_name f_stmts f_ret_t in
 
   (* Generate RAST function declaration from source AST. *)
   let rf_decl = func_decl_t_to_rfunc_decl_t f_decl in
@@ -430,4 +440,18 @@ and func_def_t_to_rfunc_def_t
   let rf_stmts = List.map stmt_to_rstmt f_stmts in
 
   {rf_decl=rf_decl; rf_stmts=rf_stmts}
+
+and generator_def_t_to_rgenerator_def_t
+  {g_decl=({g_name; g_ret_t; _} as g_decl); g_stmts}
+=
+  (* Ensure there is a trailing return stmt if there isn't one already. *)
+  let g_stmts = _ensure_stmts_trailing_return g_name g_stmts g_ret_t in
+
+  (* Generate RAST function declaration from source AST. *)
+  let rg_decl = generator_decl_t_to_rgenerator_decl_t g_decl in
+
+  (* Generate RAST function definition from the source AST. *)
+  let rg_stmts = List.map stmt_to_rstmt g_stmts in
+
+  {rg_decl=rg_decl; rg_stmts=rg_stmts}
 ;;

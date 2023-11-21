@@ -104,17 +104,29 @@ and rstmt =
   multiple rstmt. *)
   | RStmts of rstmt list
 
-and rf_param = (string * rast_t)
+and r_param = (string * rast_t)
 
 and rfunc_decl_t = {
   rf_name: string;
-  rf_params: rf_param list;
+  rf_params: r_param list;
   rf_ret_t: rast_t;
 }
 
 and rfunc_def_t = {
   rf_decl: rfunc_decl_t;
   rf_stmts: rstmt list;
+}
+
+and rgenerator_decl_t = {
+  rg_name: string;
+  rg_params: r_param list;
+  rg_yield_t: rast_t;
+  rg_ret_t: rast_t;
+}
+
+and rgenerator_deg_t = {
+  rg_decl: rgenerator_decl_t;
+  rg_stmts: rstmt list;
 }
 ;;
 
@@ -452,23 +464,41 @@ let rec fmt_rfunc_decl_t
     maybe_extern
     (fmt_rfunc_decl_t_signature ~print_typ:print_typ f_decl)
 
+and fmt_rret_t ?(print_typ = false) r_ret_t : string =
+  begin match r_ret_t with
+  | RNil ->
+      if print_typ
+      then Printf.sprintf ": %s" (fmt_rtype r_ret_t)
+      else ""
+  | _ -> Printf.sprintf ": %s" (fmt_rtype r_ret_t)
+  end
+
 and fmt_rfunc_decl_t_signature
   ?(print_typ = false) {rf_name; rf_params; rf_ret_t} : string
 =
-  let ret_t_s = begin match rf_ret_t with
-    | RNil ->
-        if print_typ
-        then Printf.sprintf ": %s" (fmt_rtype rf_ret_t)
-        else ""
-    | _ -> Printf.sprintf ": %s" (fmt_rtype rf_ret_t)
-  end in
-
   Printf.sprintf "fn %s(%s)%s"
     rf_name
     (fmt_join_func_params "," rf_params)
-    ret_t_s
+    (fmt_rret_t ~print_typ:print_typ rf_ret_t)
 
-and fmt_rf_param (p_name, p_type) : string =
+and fmt_rgenerator_decl_t_signature
+  ?(print_typ = false) {rg_name; rg_params; rg_yield_t; rg_ret_t} : string
+=
+  let yield_t_s = begin match rg_yield_t with
+    | RNil ->
+        if print_typ
+        then Printf.sprintf " yield %s " (fmt_rtype rg_yield_t)
+        else ""
+    | _ -> Printf.sprintf " yield %s " (fmt_rtype rg_yield_t)
+  end in
+
+  Printf.sprintf "fn %s(%s)%s%s"
+    rg_name
+    (fmt_join_func_params "," rg_params)
+    yield_t_s
+    (fmt_rret_t ~print_typ:print_typ rg_ret_t)
+
+and fmt_r_param (p_name, p_type) : string =
   Printf.sprintf "%s: %s"
     p_name
     (fmt_rtype p_type)
@@ -476,23 +506,27 @@ and fmt_rf_param (p_name, p_type) : string =
 and fmt_join_func_params delim params : string =
   match params with
   | [] -> ""
-  | [x] -> fmt_rf_param x
+  | [x] -> fmt_r_param x
   | x::xs ->
       Printf.sprintf "%s%s %s"
-        (fmt_rf_param x)
+        (fmt_r_param x)
         delim
         (fmt_join_func_params delim xs)
 
-and fmt_rfunc_def_t ?(print_typ = false) {rf_decl; rf_stmts;} : string =
-  let formatted_stmts =
-    List.fold_left (^) "" (
-      List.map (fmt_rstmt ~print_typ:print_typ "  ") rf_stmts
-    )
-  in
+and fmt_rstmts ?(print_typ = false) r_stmts : string =
+  List.fold_left (^) "" (
+    List.map (fmt_rstmt ~print_typ:print_typ "  ") r_stmts
+  )
 
+and fmt_rfunc_def_t ?(print_typ = false) {rf_decl; rf_stmts;} : string =
   Printf.sprintf "%s {\n%s}\n"
     (fmt_rfunc_decl_t_signature ~print_typ:print_typ rf_decl)
-    formatted_stmts
+    (fmt_rstmts ~print_typ:print_typ rf_stmts)
+
+and fmt_rgenerator_def_t ?(print_typ = false) {rg_decl; rg_stmts;} : string =
+  Printf.sprintf "%s {\n%s}\n"
+    (fmt_rgenerator_decl_t_signature ~print_typ:print_typ rg_decl)
+    (fmt_rstmts ~print_typ:print_typ rg_stmts)
 ;;
 
 

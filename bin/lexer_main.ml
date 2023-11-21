@@ -1576,6 +1576,10 @@ let () =
             let func_def_rewritten = rewrite_to_unique_varnames func_def in
             FuncDef(func_def_rewritten)
 
+        | GeneratorDef(gen_def) ->
+            let gen_def_rewritten = rewrite_gen_to_unique_varnames gen_def in
+            GeneratorDef(gen_def_rewritten)
+
         | FuncExternDecl(_)
         | VariantDecl(_) -> mod_decl
     ) mod_decls_tc
@@ -1633,6 +1637,35 @@ let () =
 
               let mir_ctxt_from_hir = begin
                 let mir_ctxt = hfunc_def_to_mir hfunc_def in
+                Printf.printf
+                  "HIR-generated MIR:\n%s\n%!"
+                  (fmt_mir_ctxt mir_ctxt) ;
+                mir_ctxt
+              end in
+
+              mir_ctxt_from_hir |> ignore;
+
+              Some(mir_ctxt_from_hir)
+
+          | GeneratorDef(generator_def) ->
+              let rgenerator_def =
+                generator_def_t_to_rgenerator_def_t generator_def
+              in
+
+              Printf.printf "RAST:\n%s\n%!"
+                (fmt_rgenerator_def_t rgenerator_def)
+              ;
+
+              let hgenerator_def =
+                rgenerator_def_t_to_hgenerator_def_t rgenerator_def
+              in
+
+              Printf.printf "HIR:\n%s\n%!"
+                (fmt_hgenerator_def_t hgenerator_def)
+              ;
+
+              let mir_ctxt_from_hir = begin
+                let mir_ctxt = hgenerator_def_to_mir hgenerator_def in
                 Printf.printf
                   "HIR-generated MIR:\n%s\n%!"
                   (fmt_mir_ctxt mir_ctxt) ;

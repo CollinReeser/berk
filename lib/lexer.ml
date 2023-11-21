@@ -7,11 +7,13 @@ type token =
 | KWExtern of position
 | KWVariant of position
 | KWFn of position
+| KWGn of position
 | KWMut of position
 | KWRef of position
 | KWLet of position
 | KWIgnore of position
 | KWReturn of position
+| KWYield of position
 | KWIf of position
 | KWElse of position
 | KWWhile of position
@@ -121,11 +123,13 @@ let fmt_token tok =
   | KWExtern(p)    -> Printf.sprintf "extern (kw)    : %s"   (fmt_pos p)
   | KWVariant(p)   -> Printf.sprintf "variant(kw)    : %s"   (fmt_pos p)
   | KWFn(p)        -> Printf.sprintf "fn     (kw)    : %s"   (fmt_pos p)
+  | KWGn(p)        -> Printf.sprintf "gn     (kw)    : %s"   (fmt_pos p)
   | KWMut(p)       -> Printf.sprintf "mut    (kw)    : %s"   (fmt_pos p)
   | KWRef(p)       -> Printf.sprintf "ref    (kw)    : %s"   (fmt_pos p)
   | KWLet(p)       -> Printf.sprintf "let    (kw)    : %s"   (fmt_pos p)
   | KWIgnore(p)    -> Printf.sprintf "ignore (kw)    : %s"   (fmt_pos p)
   | KWReturn(p)    -> Printf.sprintf "return (kw)    : %s"   (fmt_pos p)
+  | KWYield(p)     -> Printf.sprintf "yield  (kw)    : %s"   (fmt_pos p)
   | KWIf(p)        -> Printf.sprintf "if     (kw)    : %s"   (fmt_pos p)
   | KWElse(p)      -> Printf.sprintf "else   (kw)    : %s"   (fmt_pos p)
   | KWWhile(p)     -> Printf.sprintf "while  (kw)    : %s"   (fmt_pos p)
@@ -265,6 +269,9 @@ let tokenize buf =
     | "fn" ->
         let tok = KWFn(get_pos buf) in
         _tokenize buf (tok :: tokens)
+    | "gn" ->
+        let tok = KWGn(get_pos buf) in
+        _tokenize buf (tok :: tokens)
     | "mut" ->
         let tok = KWMut(get_pos buf) in
         _tokenize buf (tok :: tokens)
@@ -279,6 +286,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "return" ->
         let tok = KWReturn(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "yield" ->
+        let tok = KWYield(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "if" ->
         let tok = KWIf(get_pos buf) in

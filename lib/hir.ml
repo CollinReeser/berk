@@ -81,19 +81,30 @@ and hir_scope_instr =
   | CondLoopScope of hir_scope * hir_variable * hir_scope
 
 
-type hf_param = (string * rast_t)
+type h_param = (string * rast_t)
 
 
 type hfunc_decl_t = {
   hf_name: string;
-  hf_params: hf_param list;
+  hf_params: h_param list;
   hf_ret_t: rast_t;
 }
 
+type hgenerator_decl_t = {
+  hg_name: string;
+  hg_params: h_param list;
+  hg_yield_t: rast_t;
+  hg_ret_t: rast_t;
+}
 
 type hfunc_def_t = {
   hf_decl: hfunc_decl_t;
   hf_scope: hir_scope;
+}
+
+type hgenerator_def_t = {
+  hg_decl: hgenerator_decl_t;
+  hg_scope: hir_scope;
 }
 
 
@@ -326,13 +337,17 @@ let fmt_hf_param (name, t) : string =
 ;;
 
 
-let fmt_hfunc_decl_t {hf_name; hf_params; hf_ret_t} : string =
+let fmt_hf_params hf_params : string =
   let hf_param_fmt_xs = List.map fmt_hf_param hf_params in
   let hf_params_fmt = fmt_join_strs ", " hf_param_fmt_xs in
+  hf_params_fmt
+;;
 
+
+let fmt_hfunc_decl_t {hf_name; hf_params; hf_ret_t} : string =
   Printf.sprintf "fn %s(%s): %s"
     hf_name
-    hf_params_fmt
+    (fmt_hf_params hf_params)
     (fmt_rtype hf_ret_t)
 ;;
 
@@ -345,6 +360,26 @@ let fmt_hfunc_def_t {hf_decl; hf_scope} =
   )
     (fmt_hfunc_decl_t hf_decl)
     (fmt_hir_scope ~ind:"    " hf_scope)
+;;
+
+
+let fmt_hgenerator_decl_t {hg_name; hg_params; hg_yield_t; hg_ret_t} : string =
+  Printf.sprintf "fn %s(%s) yield %s : %s"
+    hg_name
+    (fmt_hf_params hg_params)
+    (fmt_rtype hg_yield_t)
+    (fmt_rtype hg_ret_t)
+;;
+
+
+let fmt_hgenerator_def_t {hg_decl; hg_scope} =
+  Printf.sprintf (
+    "%s {\n" ^^
+    "%s\n" ^^
+    "}\n"
+  )
+    (fmt_hgenerator_decl_t hg_decl)
+    (fmt_hir_scope ~ind:"    " hg_scope)
 ;;
 
 

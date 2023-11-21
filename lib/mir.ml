@@ -81,6 +81,7 @@ and bb = {
 type mir_ctxt = {
   f_name: string;
   f_params: (string * rast_t) list;
+  f_yield_rt: rast_t;
   f_ret_rt: rast_t;
   name_gen: int;
   lvars: lval StrMap.t;

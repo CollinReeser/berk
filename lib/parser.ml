@@ -40,6 +40,11 @@ let rec parse_tokens ?(trace=false) tokens : module_decl list =
         let mod_decl = FuncDef(func_def) in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
+    | KWGn(_) :: rest ->
+        let (rest, func_def) = parse_generator ~ind:ind_next rest in
+        let mod_decl = GeneratorDef(func_def) in
+        _parse_tokens rest (mod_decl :: mod_decls_so_far)
+
     | tok :: _ ->
         let fmted = fmt_token tok in
         failwith (
@@ -281,6 +286,72 @@ and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
   end
 
 
+and parse_generator_decl ?(ind="") tokens : (token list * generator_decl_t) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  begin match tokens with
+  | LowIdent(_, g_name) :: LParen(_) :: rest ->
+      let (rest, g_params) = parse_func_params ~ind:ind_next rest in
+
+      begin match rest with
+      | Colon(_) :: rest ->
+          let (rest, g_ret_t) = parse_type ~ind:ind_next rest in
+          (
+            rest, {
+              g_name=g_name;
+              g_params=g_params;
+              g_yield_t=Nil;
+              g_ret_t=g_ret_t;
+            }
+          )
+
+      | KWYield(_) :: rest ->
+          let (rest, g_yield_t) = parse_type ~ind:ind_next rest in
+
+          begin match rest with
+          | Colon(_) :: rest ->
+              let (rest, g_ret_t) = parse_type ~ind:ind_next rest in
+              (
+                rest, {
+                  g_name=g_name;
+                  g_params=g_params;
+                  g_yield_t=g_yield_t;
+                  g_ret_t=g_ret_t;
+                }
+              )
+
+          | _ ->
+              (
+                rest, {
+                  g_name=g_name;
+                  g_params=g_params;
+                  g_yield_t=g_yield_t;
+                  g_ret_t=Nil;
+                }
+              )
+          end
+
+      | _ ->
+          (
+            rest, {
+              g_name=g_name;
+              g_params=g_params;
+              g_yield_t=Nil;
+              g_ret_t=Nil;
+            }
+          )
+      end
+
+  | tok :: _ ->
+      let fmted = fmt_token tok in
+      failwith (
+        Printf.sprintf
+          "Unexpected token [%s], expected lc-identifer" fmted
+      )
+  | [] -> failwith "Unexpected EOF while parsing `fn` declaration."
+  end
+
+
 and parse_func_params ?(ind="") tokens : (token list * f_param list) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
@@ -485,6 +556,20 @@ and parse_func ?(ind="") tokens : (token list * func_def_t) =
     rest, {
       f_decl=f_decl;
       f_stmts=f_stmts;
+    }
+  )
+
+
+and parse_generator ?(ind="") tokens : (token list * generator_def_t) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  let (rest, g_decl) = parse_generator_decl ~ind:ind_next tokens in
+  let (rest, g_stmts) = parse_stmt_block ~ind:ind_next rest in
+
+  (
+    rest, {
+      g_decl=g_decl;
+      g_stmts=g_stmts;
     }
   )
 

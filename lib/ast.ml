@@ -208,14 +208,27 @@ and func_decl_t = {
   f_ret_t: berk_t;
 }
 
+and generator_decl_t = {
+  g_name: string;
+  g_params: f_param list;
+  g_yield_t: berk_t;
+  g_ret_t: berk_t;
+}
+
 and func_def_t = {
   f_decl: func_decl_t;
   f_stmts: stmt list;
 }
 
+and generator_def_t = {
+  g_decl: generator_decl_t;
+  g_stmts: stmt list;
+}
+
 type module_decl =
   | FuncExternDecl of func_decl_t
   | FuncDef of func_def_t
+  | GeneratorDef of generator_def_t
   | VariantDecl of variant_decl_t
 
 let rec dump_expr_ast ?(ind="") expr =
@@ -537,64 +550,84 @@ and dump_stmt_ast ?(ind="") stmt =
         ind
   end
 
-and dump_f_param_ast (name, qual, t) =
-  Printf.sprintf "f_param(%s, %s, %s)"
+and dump_param_ast (name, qual, t) =
+  Printf.sprintf "param(%s, %s, %s)"
     name
     (dump_var_qual_ast qual)
     (fmt_type t)
 
-and dump_func_decl_t_ast ?(ind="") {f_name; f_params; f_ret_t} =
+and _dump_params_ast ind params =
   let open Printf in
   let ind_next = ind ^ " " in
   let ind_next' = ind_next ^ " " in
-  let dumped_f_params =
-    begin if List.length f_params > 0 then
-      let dumped_f_param_ls =
-        List.map (
-          fun f_param ->
-            let dumped_f_param = dump_f_param_ast f_param in
-            sprintf "%s%s"
-              ind_next'
-              dumped_f_param
-        ) f_params in
-      let dumped_f_params = fmt_join_strs ";\n" dumped_f_param_ls in
-      sprintf "[\n%s\n%s]"
-        dumped_f_params
-        ind_next
-    else
-      "[]"
-    end
-  in
+  begin if List.length params > 0 then
+    let dumped_param_ls =
+      List.map (
+        fun param ->
+          let dumped_param = dump_param_ast param in
+          sprintf "%s%s"
+            ind_next'
+            dumped_param
+      ) params in
+    let dumped_params = fmt_join_strs ";\n" dumped_param_ls in
+    sprintf "[\n%s\n%s]"
+      dumped_params
+      ind_next
+  else
+    "[]"
+  end
+
+and dump_func_decl_t_ast ?(ind="") {f_name; f_params; f_ret_t} =
+  let open Printf in
+  let dumped_f_params = _dump_params_ast ind f_params in
   sprintf "func_decl_t{f_name=%s; f_params=%s; f_ret_t=%s}"
     f_name
     dumped_f_params
     (fmt_type f_ret_t)
 
-and dump_func_def_t_ast ?(ind="") {f_decl; f_stmts} =
+and dump_generator_decl_t_ast ?(ind="") {g_name; g_params; g_yield_t; g_ret_t} =
+  let open Printf in
+  let dumped_g_params = _dump_params_ast ind g_params in
+  sprintf "generator_decl_t{g_name=%s; g_params=%s; g_yield_t=%s; g_ret_t=%s}"
+    g_name
+    dumped_g_params
+    (fmt_type g_yield_t)
+    (fmt_type g_ret_t)
+
+and _dump_stmts_ast ind stmts =
   let open Printf in
   let ind_next = ind ^ " " in
   let ind_next' = ind_next ^ " " in
-  let dumped_f_stmts =
-    begin if List.length f_stmts > 0 then
-      let dumped_f_stmts_ls =
-        List.map (
-          fun f_stmt ->
-            let dumped_f_stmt = dump_stmt_ast ~ind:ind_next' f_stmt in
-            sprintf "%s%s"
-              ind_next'
-              dumped_f_stmt
-        ) f_stmts in
-      let dumped_f_stmts = fmt_join_strs ";\n" dumped_f_stmts_ls in
-      sprintf "[\n%s\n%s]"
-        dumped_f_stmts
-        ind_next
-    else
-      "[]"
-    end
-  in
+  begin if List.length stmts > 0 then
+    let dumped_stmts_ls =
+      List.map (
+        fun stmt ->
+          let dumped_stmt = dump_stmt_ast ~ind:ind_next' stmt in
+          sprintf "%s%s"
+            ind_next'
+            dumped_stmt
+      ) stmts in
+    let dumped_f_stmts = fmt_join_strs ";\n" dumped_stmts_ls in
+    sprintf "[\n%s\n%s]"
+      dumped_f_stmts
+      ind_next
+  else
+    "[]"
+  end
+
+and dump_func_def_t_ast ?(ind="") {f_decl; f_stmts} =
+  let open Printf in
+  let dumped_f_stmts = _dump_stmts_ast ind f_stmts in
   sprintf "func_def_t{f_decl=%s; f_stmts=%s}"
     (dump_func_decl_t_ast f_decl)
     dumped_f_stmts
+
+and dump_generator_def_t_ast ?(ind="") {g_decl; g_stmts} =
+  let open Printf in
+  let dumped_g_stmts = _dump_stmts_ast ind g_stmts in
+  sprintf "generator_def_t{g_decl=%s; g_stmts=%s}"
+    (dump_generator_decl_t_ast g_decl)
+    dumped_g_stmts
 
 and dump_v_ctor_field {t} =
   Printf.sprintf "v_ctor_field{t=%s}"
@@ -650,6 +683,12 @@ and dump_module_decl_ast ?(ind="") module_decl =
       sprintf "FuncDef(\n%s%s%s\n)"
         ind_next
         (dump_func_def_t_ast f_def)
+        ind
+  | GeneratorDef(g_def) ->
+      let ind_next = ind ^ " " in
+      sprintf "GeneratorDef(\n%s%s%s\n)"
+        ind_next
+        (dump_generator_def_t_ast g_def)
         ind
   | VariantDecl(v_decl) ->
       let ind_next = ind ^ " " in
@@ -1137,22 +1176,41 @@ let rec fmt_func_decl ?(print_typ = false) ?(extern = false) f_decl : string =
     maybe_extern
     (fmt_func_signature ~print_typ:print_typ f_decl)
 
+and fmt_ret_t ?(print_typ = false) ret_t : string =
+  begin match ret_t with
+  | Nil
+  | Undecided ->
+      if print_typ
+      then Printf.sprintf ": %s" (fmt_type ret_t)
+      else ""
+  | _ -> Printf.sprintf ": %s" (fmt_type ret_t)
+  end
+
 and fmt_func_signature
   ?(print_typ = false) {f_name; f_params; f_ret_t;} : string
 =
-  let ret_t_s = begin match f_ret_t with
-    | Nil
-    | Undecided ->
-        if print_typ
-        then Printf.sprintf ": %s" (fmt_type f_ret_t)
-        else ""
-    | _ -> Printf.sprintf ": %s" (fmt_type f_ret_t)
-  end in
-
   Printf.sprintf "fn %s(%s)%s"
     f_name
     (fmt_join_func_params "," f_params)
-    ret_t_s
+    (fmt_ret_t ~print_typ:print_typ f_ret_t)
+
+and fmt_generator_signature
+  ?(print_typ = false) {g_name; g_params; g_yield_t; g_ret_t} : string
+=
+  let yield_t_s = begin match g_yield_t with
+  | Nil
+  | Undecided ->
+      if print_typ
+      then Printf.sprintf " yield %s " (fmt_type g_yield_t)
+      else ""
+  | _ -> Printf.sprintf " yield %s " (fmt_type g_yield_t)
+  end in
+
+  Printf.sprintf "fn %s(%s)%s%s"
+    g_name
+    (fmt_join_func_params "," g_params)
+    yield_t_s
+    (fmt_ret_t ~print_typ:print_typ g_ret_t)
 
 and fmt_func_param (p_name, p_qual, p_type) : string =
   Printf.sprintf "%s%s: %s"
@@ -1170,16 +1228,22 @@ and fmt_join_func_params delim params : string =
         delim
         (fmt_join_func_params delim xs)
 
-let fmt_func_ast ?(print_typ = false) {f_decl; f_stmts;} : string =
-  let formatted_stmts =
-    List.fold_left (^) "" (
-      List.map (fmt_stmt ~print_typ:print_typ "  ") f_stmts
-    )
-  in
+let fmt_stmts ?(print_typ = false) stmts : string =
+  List.fold_left (^) "" (
+    List.map (fmt_stmt ~print_typ:print_typ "  ") stmts
+  )
+;;
 
+let fmt_func_ast ?(print_typ = false) {f_decl; f_stmts;} : string =
   Printf.sprintf "%s {\n%s}\n"
     (fmt_func_signature ~print_typ:print_typ f_decl)
-    formatted_stmts
+    (fmt_stmts ~print_typ:print_typ f_stmts)
+;;
+
+let fmt_generator_ast ?(print_typ = false) {g_decl; g_stmts;} : string =
+  Printf.sprintf "%s {\n%s}\n"
+    (fmt_generator_signature ~print_typ:print_typ g_decl)
+    (fmt_stmts ~print_typ:print_typ g_stmts)
 ;;
 
 let fmt_variant_fields ?(pretty_unbound=false) fields : string =
@@ -1234,6 +1298,9 @@ let fmt_mod_decl
 
   | FuncDef(f_ast) ->
       Printf.sprintf "%s"(fmt_func_ast ~print_typ:print_typ f_ast)
+
+  | GeneratorDef(g_ast) ->
+      Printf.sprintf "%s"(fmt_generator_ast ~print_typ:print_typ g_ast)
 
   | VariantDecl(v_ast) ->
       Printf.sprintf "%s"(fmt_variant_decl ~pretty_unbound:pretty_unbound v_ast)
@@ -2236,3 +2303,16 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
   in
 
   {f_decl={f_name; f_params; f_ret_t}; f_stmts=rewritten_stmts}
+;;
+
+let rewrite_gen_to_unique_varnames
+  {g_decl={g_name; g_params; g_yield_t; g_ret_t}; g_stmts}
+=
+  let {f_decl=_; f_stmts=stmts_rewritten} =
+    rewrite_to_unique_varnames {
+      f_decl={f_name=g_name; f_params=g_params; f_ret_t=g_ret_t};
+      f_stmts=g_stmts;
+    }
+  in
+
+  {g_decl={g_name; g_params; g_yield_t; g_ret_t}; g_stmts=stmts_rewritten}

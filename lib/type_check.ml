@@ -405,6 +405,9 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
         (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
+  | GeneratorDef(g_ast) ->
+      (mod_ctxt, GeneratorDef(g_ast))
+
   | VariantDecl({v_name; v_ctors; v_typ_vars}) ->
       let _ = match (StrMap.find_opt v_name mod_ctxt.variants) with
         | None -> ()

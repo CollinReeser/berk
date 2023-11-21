@@ -1393,8 +1393,20 @@ let rfunc_decl_t_to_hfunc_decl_t {rf_name; rf_params; rf_ret_t} : hfunc_decl_t =
 ;;
 
 
+let rgenerator_decl_t_to_hgenerator_decl_t
+  {rg_name; rg_params; rg_yield_t; rg_ret_t} : hgenerator_decl_t
+=
+  {
+    hg_name = rg_name;
+    hg_params = rg_params;
+    hg_yield_t = rg_yield_t;
+    hg_ret_t = rg_ret_t;
+  }
+;;
+
+
 let populate_hscope_with_func_arg_vars
-  hctxt hscope {hf_params; _} : (hir_ctxt * hir_scope)
+  hctxt hscope h_params : (hir_ctxt * hir_scope)
 =
   let (hctxt, hscope, _) =
     List.fold_left (
@@ -1410,7 +1422,7 @@ let populate_hscope_with_func_arg_vars
 
         (hctxt, hscope, i + 1)
 
-    ) (hctxt, hscope, 0) hf_params
+    ) (hctxt, hscope, 0) h_params
   in
 
   (hctxt, hscope)
@@ -1418,14 +1430,14 @@ let populate_hscope_with_func_arg_vars
 
 
 let rfunc_def_t_to_hfunc_def_t {rf_decl; rf_stmts} : hfunc_def_t =
-  let hf_decl = rfunc_decl_t_to_hfunc_decl_t rf_decl in
+  let {hf_params; _} as hf_decl = rfunc_decl_t_to_hfunc_decl_t rf_decl in
 
   let hf_scope = empty_scope in
   let hctxt = default_hir_ctxt in
 
   (* Initialize the scope with the function argument variables. *)
   let (hctxt, hf_scope) =
-    populate_hscope_with_func_arg_vars hctxt hf_scope hf_decl
+    populate_hscope_with_func_arg_vars hctxt hf_scope hf_params
   in
 
   let (_, hf_scope) =
@@ -1444,4 +1456,34 @@ let rfunc_def_t_to_hfunc_def_t {rf_decl; rf_stmts} : hfunc_def_t =
     hf_decl = hf_decl;
     hf_scope = hf_scope;
   }
+;;
+
+let rgenerator_def_t_to_hgenerator_def_t
+  {rg_decl; rg_stmts} : hgenerator_def_t
+=
+  let {hg_params; _} as hg_decl =
+    rgenerator_decl_t_to_hgenerator_decl_t rg_decl
+  in
+
+  let hg_scope = empty_scope in
+  let hctxt = default_hir_ctxt in
+
+  (* Initialize the scope with the function argument variables. *)
+  let (hctxt, hg_scope) =
+    populate_hscope_with_func_arg_vars hctxt hg_scope hg_params
+  in
+
+  let (_, hg_scope) =
+    List.fold_left (
+      fun (hctxt, hg_scope) rstmt ->
+        let (hctxt, hg_scope) = rstmt_to_hir hctxt hg_scope rstmt in
+        (hctxt, hg_scope)
+    ) (hctxt, hg_scope) rg_stmts
+  in
+
+  (* The declarations and instructions in an HIR scope are populated in reverse.
+  We now need to reverse them again, so that they're in the right order. *)
+  let hg_scope = unreverse_hscope_decls_instrs hg_scope in
+
+  {hg_decl; hg_scope}
 ;;
