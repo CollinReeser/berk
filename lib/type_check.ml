@@ -1157,58 +1157,73 @@ and type_check_expr
         )
 
     | FuncCall(_, f_name, exprs) ->
-        let {f_name; f_params; f_ret_t} =
-          StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs
-        in
-        let (params_non_variadic_t_lst, is_var_arg) =
-          get_static_f_params f_params
-        in
-
-        let params_t_lst_padded = begin
-            let len_diff =
-              (List.length exprs) - (List.length params_non_variadic_t_lst)
+        begin match (StrMap.find_opt f_name tc_ctxt.mod_ctxt.func_sigs) with
+        | Some({f_params; f_ret_t; _}) ->
+          begin
+            let (params_non_variadic_t_lst, is_var_arg) =
+              get_static_f_params f_params
             in
-            if len_diff = 0 then
-              params_non_variadic_t_lst
-            else if len_diff > 0 then
-              let padding = List.init len_diff (fun _ -> Undecided) in
-              params_non_variadic_t_lst @ padding
-            else
-              failwith "Unexpected shorter expr list than non-variadic params"
+
+            let params_t_lst_padded = begin
+                let len_diff =
+                  (List.length exprs) - (List.length params_non_variadic_t_lst)
+                in
+                if len_diff = 0 then
+                  params_non_variadic_t_lst
+                else if len_diff > 0 then
+                  let padding = List.init len_diff (fun _ -> Undecided) in
+                  params_non_variadic_t_lst @ padding
+                else
+                  failwith "Unexpected shorter expr list than non-variadic params"
+              end
+            in
+
+            let exprs_typechecked =
+              List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
+            in
+            let exprs_t = List.map expr_type exprs_typechecked in
+
+            let cmp_non_variadic_params_to_exprs =
+              List.compare_lengths params_non_variadic_t_lst exprs_t
+            in
+            let _ =
+              if (
+                is_var_arg && (cmp_non_variadic_params_to_exprs <= 0)
+              ) || (
+                cmp_non_variadic_params_to_exprs = 0
+              )
+              then ()
+              else failwith
+                "Func call args must not be less than num non-variadic func params"
+            in
+
+            let exprs_t_non_variadic =
+              take exprs_t (List.length params_non_variadic_t_lst)
+            in
+
+            let _ = List.iter2 (
+              fun expr_t param_t ->
+                if type_convertible_to expr_t param_t
+                then ()
+                else failwith "Could not convert expr type to arg type"
+            ) exprs_t_non_variadic params_non_variadic_t_lst in
+
+            FuncCall(f_ret_t, f_name, exprs_typechecked)
           end
-        in
 
-        let exprs_typechecked =
-          List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
-        in
-        let exprs_t = List.map expr_type exprs_typechecked in
-
-        let cmp_non_variadic_params_to_exprs =
-          List.compare_lengths params_non_variadic_t_lst exprs_t
-        in
-        let _ =
-          if (
-            is_var_arg && (cmp_non_variadic_params_to_exprs <= 0)
-          ) || (
-            cmp_non_variadic_params_to_exprs = 0
-          )
-          then ()
-          else failwith
-            "Func call args must not be less than num non-variadic func params"
-        in
-
-        let exprs_t_non_variadic =
-          take exprs_t (List.length params_non_variadic_t_lst)
-        in
-
-        let _ = List.iter2 (
-          fun expr_t param_t ->
-            if type_convertible_to expr_t param_t
-            then ()
-            else failwith "Could not convert expr type to arg type"
-        ) exprs_t_non_variadic params_non_variadic_t_lst in
-
-        FuncCall(f_ret_t, f_name, exprs_typechecked)
+        | None ->
+            begin match (
+              StrMap.find_opt f_name tc_ctxt.mod_ctxt.generator_sigs
+            ) with
+            | Some({g_params; g_yield_t; g_ret_t; _}) ->
+                g_params |> ignore;
+                g_yield_t |> ignore;
+                g_ret_t |> ignore;
+                failwith (Printf.sprintf "Unimplemented: generator %s" f_name)
+            | None ->
+                failwith (Printf.sprintf "Error: no known function %s" f_name)
+            end
+        end
 
     | UfcsCall(_, exp, f_name, underscore_pos, exprs) ->
         let {f_name; f_params; f_ret_t} =
