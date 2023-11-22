@@ -61,6 +61,40 @@ let () =
     | MultiThree(BinaryNoFields, bool, Unary)
     }
 
+    variant QuadArgs<`a, `b, `c, `d> {
+    | QuadOne(`a, `b)
+    | QuadTwo(`b, `c)
+    | QuadThr(`c, `d)
+    | QuadFou(`d, `a)
+    }
+
+    fn test_quad_args() {
+      let mut quad_one: QuadArgs<bool, i32, f64, string> = QuadOne(true, 5);
+      let mut quad_two: QuadArgs<bool, i32, f64, string> = QuadTwo(10, 20.6);
+      let mut quad_thr: QuadArgs<bool, i32, f64, string> = QuadThr(40.8, "uh");
+      let mut quad_fou: QuadArgs<bool, i32, f64, string> = QuadFou("oh", false);
+
+      let mut quad_swap = quad_one;
+      quad_one = quad_two;
+      quad_two = quad_swap;
+
+      match quad_one {
+      | QuadOne(b, i) -> {
+          ignore printf("UNEXPECTED quad_one: QuadOne(%d, %d)\n", b, i);
+        }
+      | QuadTwo(i, f) -> {
+          ignore printf(
+            "Expected quad_two: QuadTwo(%d [10], %f [~20.6])\n", i, f
+          );
+        }
+      | _ -> {
+          ignore printf("UNEXPECTED other ctor\n");
+        }
+      }
+
+      return;
+    }
+
     fn get_random_number(modulus: i32): i32 {
       return rand() % modulus;
     }
@@ -1662,6 +1696,8 @@ let () =
       }
 
       ignore printf("Done finding reference to largest values.\n");
+
+      test_quad_args();
 
       return 0;
     }

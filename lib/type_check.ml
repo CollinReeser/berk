@@ -2244,9 +2244,9 @@ and generate_value_patts t : pattern list =
   | U64 | U32 | U16 | U8
   | I64 | I32 | I16 | I8 -> [PInt(Undecided, IRangeAll)]
 
-  | F128 | F64 | F32 -> failwith "generate_value_patts: F*: Unimplemented"
+  | F128 | F64 | F32 -> [RequireWild(t)]
 
-  | String -> failwith "generate_value_patts: String: Unimplemented"
+  | String -> [RequireWild(t)]
 
   | Array(_, _) -> failwith "generate_value_patts: Array: Unimplemented"
 
