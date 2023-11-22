@@ -112,7 +112,7 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
       __parse_variant_type_vars ~ind:ind_next tokens []
     in
     let t_vars = List.rev t_vars_rev in
-    (rest, List.rev t_vars)
+    (rest, t_vars)
   in
 
   (* Parse eg:

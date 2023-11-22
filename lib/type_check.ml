@@ -453,6 +453,8 @@ and type_check_mod_decl mod_ctxt mod_decl =
       let bound_v_ctors = List.map (bind_v_ctor mod_ctxt) v_ctors in
       let bound_v_decl_ast = {v_name; v_ctors=bound_v_ctors; v_typ_vars} in
 
+      (* Make sure the type variables used within each constructor are among the
+      set of declared type variables. *)
       let var_t = Variant(v_name, bound_v_ctors) in
       let real_tvars = get_tvars var_t in
       let declared_tvars = List.sort compare v_typ_vars in
@@ -1489,6 +1491,78 @@ and type_check_expr
                 "variant expression: " ^ (fmt_type expected_t)
               )
         end in
+
+        let _ =
+          if (List.length field_exprs) <> (List.length ctor_expected_ts) then
+            let matched_args_formatter str_so_far field_expr ctor_expected_t =
+              Printf.sprintf "%s  %s : %s\n"
+                str_so_far
+                (fmt_expr field_expr)
+                (fmt_type ctor_expected_t)
+            in
+
+            (* Get formatted strings for printing an error message like:
+                <expr> : <type>
+                <expr> : <type>
+                <missing-expr> : <type>
+                or
+                <expr> : <missing-type-arg>
+             *)
+            let (matched_args_fmt, mismatched_args_fmt) = begin
+              if (List.length field_exprs) > (List.length ctor_expected_ts) then
+                let (matched_field_exprs, unmatched_field_exprs) =
+                  take_with_tail (List.length ctor_expected_ts) field_exprs
+                in
+
+                let matched_field_exprs_fmt =
+                  List.fold_left2
+                    matched_args_formatter
+                    "" matched_field_exprs ctor_expected_ts
+                in
+                let mismatched_field_exprs_fmt =
+                  List.fold_left (
+                    fun str_so_far unmatched_field_expr ->
+                      Printf.sprintf "%s  %s : <missing-type-arg>\n"
+                        str_so_far
+                        (fmt_expr unmatched_field_expr)
+                  ) "" unmatched_field_exprs
+                in
+                (matched_field_exprs_fmt, mismatched_field_exprs_fmt)
+
+              else
+                let (matched_ctor_expected_ts, unmatched_ctor_expected_ts) =
+                  take_with_tail (List.length field_exprs) ctor_expected_ts
+                in
+
+                let matched_ctor_expected_ts_fmt =
+                  List.fold_left2
+                    matched_args_formatter
+                    "" field_exprs matched_ctor_expected_ts
+                in
+                let mismatched_ctor_expected_ts_fmt =
+                  List.fold_left (
+                    fun str_so_far unmatched_ctor_expected_t ->
+                      Printf.sprintf "%s  <missing-expr> : %s\n"
+                        str_so_far
+                        (fmt_type unmatched_ctor_expected_t)
+                  ) "" unmatched_ctor_expected_ts
+                in
+                (matched_ctor_expected_ts_fmt, mismatched_ctor_expected_ts_fmt)
+            end in
+
+            failwith (
+              Printf.sprintf
+                (
+                  "Error: Mismatch in variant ctor [%s] args, " ^^
+                  "expect vs got:\n%s%s"
+                )
+                ctor_name
+                matched_args_fmt
+                mismatched_args_fmt
+            )
+          else
+            ()
+        in
 
         let field_exprs_typechecked =
           List.map2 (type_check_expr tc_ctxt) ctor_expected_ts field_exprs

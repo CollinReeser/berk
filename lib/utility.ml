@@ -96,7 +96,7 @@ let map2i (f : int -> 'a -> 'b -> 'c) (lhs : 'a list) (rhs : 'b list) =
 
 (* Split a list into a 2-tuple: (elems-before-i, elems-after-i)
 where the i'th element is skipped. *)
-let partition_i i ls : ('a list * 'b list) =
+let partition_i i ls : ('a list * 'a list) =
   let rec _partition_i idx ls_rest ls_lhs_rev ls_rhs_rev =
     begin match ls_rest with
     | [] -> (ls_lhs_rev, ls_rhs_rev)
@@ -115,6 +115,36 @@ let partition_i i ls : ('a list * 'b list) =
   let ls_lhs = List.rev ls_lhs_rev in
   let ls_rhs = List.rev ls_rhs_rev in
   (ls_lhs, ls_rhs)
+;;
+
+(* Split a list into two lists, where the first list is of length N, and the
+second list is the remaining tail. *)
+let take_with_tail n ls : ('a list * 'a list) =
+  let rec _take_with_tail n' lhs_so_far_rev tail =
+    begin match tail with
+    | [] ->
+        begin if n' == 0 then
+          (lhs_so_far_rev, [])
+        else
+          failwith (
+            Printf.sprintf
+              "Error: take_with_tail: list length [%d] < [%d] n"
+              (List.length ls)
+              n
+          )
+        end
+    | x :: rest ->
+        begin if n' == 0 then
+          (lhs_so_far_rev, tail)
+        else
+          _take_with_tail (n' - 1) (x :: lhs_so_far_rev) rest
+        end
+    end
+  in
+
+  let (lhs_rev, tail) = _take_with_tail n [] ls in
+  let lhs = List.rev lhs_rev in
+  (lhs, tail)
 ;;
 
 let list_to_2_tuples lst =

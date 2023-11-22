@@ -42,6 +42,12 @@ let test_partition_i expected i ls () =
     ~expected:expected
     ~actual:(partition_i i ls)
 
+let test_take_with_tail expected n ls () =
+  Alcotest.(check' (pair (list int) (list int)))
+    ~msg:"take_with_tail"
+    ~expected:expected
+    ~actual:(take_with_tail n ls)
+
 let test_insert expected lst idx elem () =
   Alcotest.(check' (list string))
     ~msg:"insert"
@@ -169,6 +175,33 @@ let () =
         test_partition_i
           ([1; 2; 3], [])
           3 [1; 2; 3]
+      );
+    ];
+    "take_with_tail", [
+      test_case "take_with_tail" `Quick (
+        test_take_with_tail
+          ([], [])
+          0 []
+      );
+      test_case "take_with_tail" `Quick (
+        test_take_with_tail
+          ([1; 2; 3], [])
+          3 [1; 2; 3]
+      );
+      test_case "take_with_tail" `Quick (
+        test_take_with_tail
+          ([1; 2], [3])
+          2 [1; 2; 3]
+      );
+      test_case "take_with_tail" `Quick (
+        test_take_with_tail
+          ([1], [2; 3])
+          1 [1; 2; 3]
+      );
+      test_case "take_with_tail" `Quick (
+        test_take_with_tail
+          ([], [1; 2; 3])
+          0 [1; 2; 3]
       );
     ];
     "insert", [
