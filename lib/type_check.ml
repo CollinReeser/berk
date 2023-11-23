@@ -1314,8 +1314,11 @@ and type_check_expr
             else failwith "Could not convert expr type to arg type"
         ) exprs_t_non_variadic params_non_variadic_t_lst in
 
-        (* Rewrite the UFCS call into a normal function call. *)
-        FuncCall(f_ret_t, f_name, exprs_typechecked)
+        (* Rewrite the UFCS call into a normal function call, and then recurse
+        in case any additional processing needs to happen (like generator
+        handling). *)
+        type_check_expr
+          tc_ctxt expected_t (FuncCall(f_ret_t, f_name, exprs_typechecked))
 
     | ExprInvoke(_, func_exp, exprs) ->
         let func_exp_typechecked = _type_check_expr func_exp in
