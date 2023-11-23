@@ -343,7 +343,8 @@ let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor =
           consider_decl v_decl_t
 
         (* Else, only entertain matching variants of a particular name. *)
-        else variant_name = disambiguator && consider_decl v_decl_t
+        else
+          variant_name = disambiguator && consider_decl v_decl_t
     ) mod_ctxt.variants
   in
 
