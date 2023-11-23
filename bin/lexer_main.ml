@@ -95,6 +95,46 @@ let () =
       return;
     }
 
+    variant GenResult<`a, `b> {
+    | Yield(`a)
+    | Return(`b)
+    }
+
+    fn test_variants_with_nil_instantiation() {
+      let yield_val: GenResult<bool, i32> = Yield(true);
+      let result_val: GenResult<bool, i32> = Return(5);
+
+      let yield_empty: GenResult<(), i32> = Yield;
+      let result_empty: GenResult<bool, ()> = Return;
+
+      let match_one = match yield_val {
+      | Yield(b) -> "Matched!"
+      | Return(i) -> "Not matched!"
+      };
+
+      let match_two = match result_val {
+      | Yield(b) -> "Not matched!"
+      | Return(i) -> "Matched!"
+      };
+
+      let match_thr = match yield_empty {
+      | Yield -> "Matched!"
+      | Return(i) -> "Not matched!"
+      };
+
+      let match_fou = match result_empty {
+      | Yield(b) -> "Not matched!"
+      | Return -> "Matched!"
+      };
+
+      ignore printf(
+        "test_variants_with_nil_instantiation:\n  [%s] [%s] [%s] [%s]\n",
+        match_one, match_two, match_thr, match_fou
+      );
+
+      return;
+    }
+
     fn get_random_number(modulus: i32): i32 {
       return rand() % modulus;
     }
@@ -1698,6 +1738,8 @@ let () =
       ignore printf("Done finding reference to largest values.\n");
 
       test_quad_args();
+
+      test_variants_with_nil_instantiation();
 
       return 0;
     }

@@ -102,6 +102,7 @@ let rec bind_type mod_ctxt t =
         end
       in
 
+      (* Replace type variables with concrete types in the variant. *)
       let concretified_variant_t =
         concretify_unbound_types tvars_to_ts variant_t
       in
@@ -314,9 +315,35 @@ let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor =
   let matching_variants =
     StrMap.filter (
       fun variant_name v_decl_t ->
-        if disambiguator = ""
-        then v_decl_has_ctor v_decl_t ctor
-        else variant_name = disambiguator && v_decl_has_ctor v_decl_t ctor
+        let consider_decl v_decl_t =
+          (* If the variant declaration has the given constructor including
+          any particular fields, then include that variant decl in the filter
+          result. *)
+          begin if v_decl_has_ctor v_decl_t ctor then
+            true
+
+          (* Special case: if the given ctor instantiation has zero fields, it
+          may be that we're trying to instantiate a constructor that technically
+          has one unbound type variable as the only field, but for which our
+          instantiation is trying to use Nil as the type of the type variable.
+          So, handle that case by pretending for a moment that our instantiated
+          ctor has a single Nil field, and see if _that_ matches any variant
+          declarations. *)
+          else
+            begin match ctor with
+            | {name; fields=[]} ->
+                v_decl_has_ctor v_decl_t {name; fields=[{t=Nil}]}
+            | _ -> false
+            end
+          end
+        in
+
+        (* Consider variants of any name for a match. *)
+        if disambiguator = "" then
+          consider_decl v_decl_t
+
+        (* Else, only entertain matching variants of a particular name. *)
+        else variant_name = disambiguator && consider_decl v_decl_t
     ) mod_ctxt.variants
   in
 
@@ -1786,13 +1813,18 @@ and type_check_pattern
       let ctor_fields =
         begin match matched_t with
         | Variant(_, ctors) ->
-            (* TODO: This will just fail if the ctor_name does not match. We
-              should have a nicer error message here (ie, "wrong variant") *)
-            let {fields=ctor_fields; _} = List.find (
-                fun {name; _} -> ctor_name = name
-              ) ctors
+            let found_ctor =
+              List.find_opt (fun {name; _} -> ctor_name = name) ctors
             in
-            ctor_fields
+            begin match found_ctor with
+            | Some({fields=ctor_fields; _}) -> ctor_fields
+            | None ->
+                failwith (
+                  Printf.sprintf "Could not find ctor %s in variant patt %s\n"
+                    ctor_name
+                    (fmt_pattern patt)
+                )
+            end
         | _ ->
             failwith (
               "Unexpectedly expecting non-variant type in " ^

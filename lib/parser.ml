@@ -440,6 +440,7 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   | KWf128(_) :: rest -> (rest, F128)
   | KWBool(_) :: rest -> (rest, Bool)
   | KWString(_) :: rest -> (rest, String)
+  | LParen(_) :: RParen(_) :: rest -> (rest, Nil)
 
   (* Type variable *)
   | Backtick(_) :: LowIdent(_, name) :: rest -> (rest, Unbound(name))

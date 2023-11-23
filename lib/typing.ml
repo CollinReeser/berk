@@ -286,6 +286,41 @@ let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
 ;;
 
 
+(* Get the index of the given ctor name in the given list of variant ctors *)
+let get_tag_index_by_variant_ctor v_t ctor_name =
+  let v_ctors =
+    begin match v_t with
+    | Variant(_, v_ctors) -> v_ctors
+    | _ ->
+        failwith (
+          Printf.sprintf "Unexpected non-variant type [%s] in [%s]"
+            (fmt_type v_t)
+            (__FUNCTION__)
+        )
+    end
+  in
+
+  let rec _get_variant_ctor_tag_index accum v_ctors_tail =
+    begin match v_ctors_tail with
+    | [] -> failwith ("Failed to find " ^ ctor_name ^ " within variant")
+    | {name; _}::xs ->
+        begin if name = ctor_name then
+          accum
+        else
+          _get_variant_ctor_tag_index (accum + 1) xs
+        end
+    end
+  in
+
+  _get_variant_ctor_tag_index 0 v_ctors
+;;
+
+(* Get the index of the given ctor name in the given list of variant ctors *)
+let get_variant_ctor_by_tag_index v_ctors idx =
+  List.nth v_ctors idx
+;;
+
+
 (* Determine the common type between two. ie, if they're not the same type, but
 one is convertible to the other, yield the common type. *)
 let rec common_type_of_lr lhs rhs =
@@ -424,6 +459,26 @@ and common_v_ctor lhs_ctor rhs_ctor : v_ctor =
           "Failed to unify fields of variant ctors: [%s] vs [%s]"
           (fmt_v_ctor lhs_ctor)
           (fmt_v_ctor rhs_ctor)
+      )
+  end
+
+(* Given a variant type and a constructor whose name exists within that variant,
+return a new variant type whose constructor by that name has been replaced with
+the given one. *)
+and inject_ctor_into_variant
+  v_t ({name=ctor_name; _} as new_v_ctor : v_ctor) : berk_t
+=
+  begin match v_t with
+  | Variant(v_name, orig_v_ctors) ->
+      let tag_index = get_tag_index_by_variant_ctor v_t ctor_name in
+      let new_v_ctors = replace orig_v_ctors tag_index new_v_ctor in
+      Variant(v_name, new_v_ctors)
+
+  | _ ->
+      failwith (
+        Printf.sprintf
+          "Called inject_ctor_into_variant with non-variant type [[ %s ]]\n"
+          (fmt_type v_t)
       )
   end
 
@@ -830,13 +885,17 @@ let wrap_ref t =
 (* Make concrete the given type, to the extent possible, via the mappings in the
 given string-type-variable-to-type mapping. *)
 let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
-  (* Helper function for concretifying an individual variant ctor. *)
+  (* Helper function for concretifying an individual variant ctor. Types that
+  concretify to Nil are excised. *)
   let _concretify_v_ctor (tvar_to_t : berk_t StrMap.t) {name; fields} : v_ctor =
     let concrete_fields =
-      List.map (
+      List.filter_map (
         fun {t} ->
           let concrete_t = concretify_unbound_types tvar_to_t t in
-          {t=concrete_t}
+          if is_same_type concrete_t Nil then
+            None
+          else
+            Some {t=concrete_t}
       ) fields
     in
     {name; fields=concrete_fields}
@@ -1241,38 +1300,4 @@ let get_tvars typ =
   let tvars = _get_tvars [] typ in
 
   List.sort_uniq compare tvars
-;;
-
-(* Get the index of the given ctor name in the given list of variant ctors *)
-let get_tag_index_by_variant_ctor v_t ctor_name =
-  let v_ctors =
-    begin match v_t with
-    | Variant(_, v_ctors) -> v_ctors
-    | _ ->
-        failwith (
-          Printf.sprintf "Unexpected non-variant type [%s] in [%s]"
-            (fmt_type v_t)
-            (__FUNCTION__)
-        )
-    end
-  in
-
-  let rec _get_variant_ctor_tag_index accum v_ctors_tail =
-    begin match v_ctors_tail with
-    | [] -> failwith ("Failed to find " ^ ctor_name ^ " within variant")
-    | {name; _}::xs ->
-        begin if name = ctor_name then
-          accum
-        else
-          _get_variant_ctor_tag_index (accum + 1) xs
-        end
-    end
-  in
-
-  _get_variant_ctor_tag_index 0 v_ctors
-;;
-
-(* Get the index of the given ctor name in the given list of variant ctors *)
-let get_variant_ctor_by_tag_index v_ctors idx =
-  List.nth v_ctors idx
 ;;

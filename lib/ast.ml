@@ -1899,23 +1899,55 @@ types, a variant constructor name that exists in the given variant declaration,
 and the corresponding field types of the constructor, yield an
 as-concrete-as-possible Variant type. *)
 let variant_decl_to_variant_type
-  {v_name; v_ctors; _} {name=target_ctor_name; fields=target_ctor_fields}
+  {v_name; v_ctors; _}
+  ({name=target_ctor_name; fields=target_ctor_fields} as target_ctor)
 =
-  let {fields=found_ctor_fields; _} =
+  let {fields=found_ctor_fields; _} as found_ctor =
     List.find (fun {name; _} -> name = target_ctor_name) v_ctors
   in
 
-  let tvars_to_types =
-    List.fold_left2 (
-      fun tvars_to_types {t=lhs_t} {t=rhs_t} ->
-        map_tvars_to_types ~init_map:tvars_to_types lhs_t rhs_t
-    ) StrMap.empty found_ctor_fields target_ctor_fields
+  let (tvars_to_types, adjusted_ctor) =
+    (* Trivial case. *)
+    if
+      (List.length target_ctor_fields) == 0 &&
+      (List.length found_ctor_fields) == 0
+    then
+      (StrMap.empty, found_ctor)
+
+    (* Special case: If the target ctor has no fields, and the found ctor has
+    a single unbound field, then we assume the unbound field is effectively
+    Nil and excise the field from the ctor. *)
+    else if (List.length target_ctor_fields) == 0 then
+      begin match found_ctor_fields with
+      | [{t=Unbound(_)}] ->
+          (StrMap.empty, target_ctor)
+
+      | _ ->
+          failwith (
+            Printf.sprintf
+              "Error: Mismatch with target ctor [[ %s ]] vs found ctor [[ %s ]]"
+              (fmt_v_ctor target_ctor)
+              (fmt_v_ctor found_ctor)
+          )
+      end
+
+    else
+      let tvars_to_types =
+        List.fold_left2 (
+          fun tvars_to_types {t=lhs_t} {t=rhs_t} ->
+            map_tvars_to_types ~init_map:tvars_to_types lhs_t rhs_t
+        ) StrMap.empty found_ctor_fields target_ctor_fields
+      in
+      (tvars_to_types, found_ctor)
   in
 
   let init_variant_t = Variant(v_name, v_ctors) in
+  let injected_variant_t =
+    inject_ctor_into_variant init_variant_t adjusted_ctor
+  in
 
   let variant_t_concretified =
-    concretify_unbound_types tvars_to_types init_variant_t
+    concretify_unbound_types tvars_to_types injected_variant_t
   in
 
   variant_t_concretified
