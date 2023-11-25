@@ -7,7 +7,7 @@ module StrMap = Map.Make(String)
 
 type module_context = {
   func_sigs: func_decl_t StrMap.t;
-  func_template_sigs: func_decl_t StrMap.t;
+  func_template_sigs: func_template_decl_t StrMap.t;
   generator_sigs: generator_decl_t StrMap.t;
   variants: variant_decl_t StrMap.t;
 }
@@ -385,7 +385,17 @@ let rec type_check_mod_decls mod_decls =
   in
   let (_, mod_decls_typechecked) = _type_check_mod_decls mod_ctxt mod_decls in
 
-  mod_decls_typechecked
+  (* If we got here, then we don't need the template decls anymore. *)
+  let mod_decls_typechecked_filtered =
+    List.filter (
+      fun mod_decl ->
+        match mod_decl with
+        | FuncExternTemplateDecl(_) | FuncTemplateDef(_) -> false
+        | _ -> true
+    ) mod_decls_typechecked
+  in
+
+  mod_decls_typechecked_filtered
 
 (* Handle module-level declarations, ie, function decls/defs, type decls, etc *)
 and type_check_mod_decl mod_ctxt mod_decl =
@@ -401,18 +411,27 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
   match mod_decl with
   | FuncExternTemplateDecl(
-      {f_template_params; f_template_decl={f_name; f_params; f_ret_t}}
+      {f_template_decl={f_name; f_params; _}; _} as f_extern_template_decl
     ) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_template_sigs) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
       in
 
-      f_template_params |> ignore;
-      f_name |> ignore;
-      f_params |> ignore;
-      f_ret_t |> ignore;
-      failwith "Unimplemented: FuncExternTemplateDecl"
+      if not (confirm_at_most_trailing_var_arg f_params)
+      then failwith "Only zero-or-one trailing var-args permitted"
+      else
+        let func_template_sigs_up = begin
+          StrMap.add
+            f_name
+            f_extern_template_decl
+            mod_ctxt.func_template_sigs
+        end in
+        let mod_ctxt_up = {
+          mod_ctxt with func_template_sigs = func_template_sigs_up
+        } in
+
+        (mod_ctxt_up, FuncExternTemplateDecl(f_extern_template_decl))
 
   | FuncTemplateDef(
       {
