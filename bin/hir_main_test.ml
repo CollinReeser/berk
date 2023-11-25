@@ -761,6 +761,14 @@ let () =
     List.map (
       fun mod_decl ->
         match mod_decl with
+        | FuncExternTemplateDecl(_, _)
+        | FuncTemplateDef(_, _) ->
+            failwith (
+              Printf.sprintf
+                "Mod decl should not have survived typechecking: [[ %s ]]\n"
+                (fmt_mod_decl mod_decl)
+            )
+
         | FuncDef(func_def) ->
             let func_def_rewritten = rewrite_to_unique_varnames func_def in
             FuncDef(func_def_rewritten)
@@ -802,6 +810,14 @@ let () =
     List.filter_map (
       fun mod_decl ->
         begin match mod_decl with
+          | FuncExternTemplateDecl(_, _)
+          | FuncTemplateDef(_, _) ->
+              failwith (
+                Printf.sprintf
+                  "Mod decl should not have survived typechecking: [[ %s ]]\n"
+                  (fmt_mod_decl mod_decl)
+              )
+
           | VariantDecl(_) -> None
 
           | FuncExternDecl(func_decl) ->

@@ -398,7 +398,24 @@ and type_check_mod_decl mod_ctxt mod_decl =
   in
 
   match mod_decl with
-  | FuncExternDecl({f_name; f_params; f_template_params; f_ret_t}) ->
+  | FuncExternTemplateDecl(f_template_params, {f_name; f_params; f_ret_t}) ->
+      f_template_params |> ignore;
+      f_name |> ignore;
+      f_params |> ignore;
+      f_ret_t |> ignore;
+      failwith "Unimplemented: FuncExternTemplateDecl"
+
+  | FuncTemplateDef(
+      f_template_params, {f_decl={f_name; f_params; f_ret_t}; f_stmts}
+    ) ->
+      f_template_params |> ignore;
+      f_name |> ignore;
+      f_params |> ignore;
+      f_ret_t |> ignore;
+      f_stmts |> ignore;
+      failwith "Unimplemented: FuncTemplateDef"
+
+  | FuncExternDecl({f_name; f_params; f_ret_t}) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
@@ -406,7 +423,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
       (* If the return type is a user-defined type, bind it now. *)
       let f_ret_t = bind_type mod_ctxt f_ret_t in
-      let f_decl_ast = {f_name; f_params; f_template_params; f_ret_t} in
+      let f_decl_ast = {f_name; f_params; f_ret_t} in
 
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
@@ -414,7 +431,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
         let func_sigs_up = begin
           StrMap.add
             f_name
-            {f_name; f_params; f_template_params; f_ret_t}
+            {f_name; f_params; f_ret_t}
             mod_ctxt.func_sigs
         end in
         let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
@@ -422,7 +439,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
         (mod_ctxt_up, FuncExternDecl(f_decl_ast))
 
   | FuncDef(
-      {f_decl = {f_name; f_params; f_template_params; f_ret_t}; f_stmts}
+      {f_decl = {f_name; f_params; f_ret_t}; f_stmts}
     ) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
         | None -> ()
@@ -432,7 +449,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
       (* If the return type is a user-defined type, bind it now. *)
       let f_ret_t = bind_type mod_ctxt f_ret_t in
       let f_ast = {
-        f_decl = {f_name; f_params; f_template_params; f_ret_t};
+        f_decl = {f_name; f_params; f_ret_t};
         f_stmts
       } in
 
@@ -442,7 +459,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
         let func_sigs_up = begin
           StrMap.add
             f_name
-            {f_name; f_params; f_template_params; f_ret_t}
+            {f_name; f_params; f_ret_t}
             mod_ctxt.func_sigs
         end in
         let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
@@ -1265,11 +1282,9 @@ and type_check_expr
         end
 
     | UfcsCall(_, exp, f_name, underscore_pos, exprs) ->
-        let {f_name; f_params; f_template_params; f_ret_t} =
+        let {f_name; f_params; f_ret_t} =
           StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs
         in
-
-        f_template_params |> ignore;
 
         (* For now, a UFCS call is simply a different syntax for a normal
         function call. Later, a UFCS call might also be a method call, where

@@ -1799,6 +1799,14 @@ let () =
 
         | FuncExternDecl(_)
         | VariantDecl(_) -> mod_decl
+
+        | FuncExternTemplateDecl(_, _)
+        | FuncTemplateDef(_, _) ->
+            failwith (
+              Printf.sprintf
+                "Mod decl should not have survived typechecking: [[ %s ]]\n"
+                (fmt_mod_decl mod_decl)
+            )
     ) mod_decls_tc
   in
 
@@ -1828,6 +1836,14 @@ let () =
     List.filter_map (
       fun mod_decl ->
         begin match mod_decl with
+          | FuncExternTemplateDecl(_, _)
+          | FuncTemplateDef(_, _) ->
+              failwith (
+                Printf.sprintf
+                  "Mod decl should not have survived typechecking: [[ %s ]]\n"
+                  (fmt_mod_decl mod_decl)
+              )
+
           | VariantDecl(_) -> None
 
           | FuncExternDecl(func_decl) ->

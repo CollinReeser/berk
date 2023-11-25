@@ -212,7 +212,6 @@ type f_template_param = ident_t
 and func_decl_t = {
   f_name: string;
   f_params: f_param list;
-  f_template_params: f_template_param list;
   f_ret_t: berk_t;
 }
 
@@ -235,7 +234,9 @@ and generator_def_t = {
 
 type module_decl =
   | FuncExternDecl of func_decl_t
+  | FuncExternTemplateDecl of f_template_param list * func_decl_t
   | FuncDef of func_def_t
+  | FuncTemplateDef of f_template_param list * func_def_t
   | GeneratorDef of generator_def_t
   | VariantDecl of variant_decl_t
 
@@ -592,7 +593,7 @@ and _dump_params_ast ind params =
   end
 
 and dump_func_decl_t_ast
-  ?(ind="") {f_name; f_params; f_template_params; f_ret_t}
+  ?(ind="") ?(f_template_params=[]) {f_name; f_params; f_ret_t}
 =
   let open Printf in
   let dumped_f_params = _dump_params_ast ind f_params in
@@ -699,9 +700,25 @@ and dump_module_decl_ast ?(ind="") module_decl =
         ind_next
         (dump_func_decl_t_ast f_decl)
         ind
+  | FuncExternTemplateDecl(f_template_params, f_decl) ->
+      let ind_next = ind ^ " " in
+      sprintf "FuncExternTemplateDecl(\n%s%s\n%s%s%s\n)"
+        ind_next
+        (fmt_join_strs ", " f_template_params)
+        ind_next
+        (dump_func_decl_t_ast f_decl)
+        ind
   | FuncDef(f_def) ->
       let ind_next = ind ^ " " in
       sprintf "FuncDef(\n%s%s%s\n)"
+        ind_next
+        (dump_func_def_t_ast f_def)
+        ind
+  | FuncTemplateDef(f_template_params, f_def) ->
+      let ind_next = ind ^ " " in
+      sprintf "FuncTemplateDef(\n%s%s\n%s%s%s\n)"
+        ind_next
+        (fmt_join_strs ", " f_template_params)
         ind_next
         (dump_func_def_t_ast f_def)
         ind
@@ -1194,7 +1211,10 @@ let pprint_expr ppf exp =
   Format.fprintf ppf "%s" (fmt_expr ~print_typ:true exp)
 ;;
 
-let rec fmt_func_decl ?(print_typ = false) ?(extern = false) f_decl : string =
+let rec fmt_func_decl
+  ?(print_typ = false) ?(extern = false) ?(f_template_params = []) f_decl
+  : string
+=
   let maybe_extern =
     if extern
       then "extern "
@@ -1202,7 +1222,10 @@ let rec fmt_func_decl ?(print_typ = false) ?(extern = false) f_decl : string =
   in
   Printf.sprintf "%s%s;\n"
     maybe_extern
-    (fmt_func_signature ~print_typ:print_typ f_decl)
+    (
+      fmt_func_signature
+        ~print_typ:print_typ ~f_template_params:f_template_params f_decl
+    )
 
 and fmt_ret_t ?(print_typ = false) ret_t : string =
   begin match ret_t with
@@ -1215,7 +1238,8 @@ and fmt_ret_t ?(print_typ = false) ret_t : string =
   end
 
 and fmt_func_signature
-  ?(print_typ = false) {f_name; f_params; f_template_params; f_ret_t;} : string
+  ?(print_typ = false) ?(f_template_params=[]) {f_name; f_params; f_ret_t;}
+  : string
 =
   Printf.sprintf "fn %s%s(%s)%s"
     f_name
@@ -1267,9 +1291,14 @@ let fmt_stmts ?(print_typ = false) stmts : string =
   )
 ;;
 
-let fmt_func_ast ?(print_typ = false) {f_decl; f_stmts;} : string =
+let fmt_func_ast
+  ?(print_typ = false) ?(f_template_params=[]) {f_decl; f_stmts;} : string
+=
   Printf.sprintf "%s {\n%s}\n"
-    (fmt_func_signature ~print_typ:print_typ f_decl)
+    (
+      fmt_func_signature
+        ~print_typ:print_typ ~f_template_params:f_template_params f_decl
+    )
     (fmt_stmts ~print_typ:print_typ f_stmts)
 ;;
 
@@ -1329,8 +1358,16 @@ let fmt_mod_decl
   | FuncExternDecl(f_decl) ->
       Printf.sprintf "%s"(fmt_func_decl ~print_typ:true ~extern:true f_decl)
 
+  | FuncExternTemplateDecl(f_template_params, f_decl) ->
+      fmt_func_decl
+        ~print_typ:true ~extern:true ~f_template_params:f_template_params f_decl
+
   | FuncDef(f_ast) ->
       Printf.sprintf "%s"(fmt_func_ast ~print_typ:print_typ f_ast)
+
+  | FuncTemplateDef(f_template_params, f_ast) ->
+      fmt_func_ast
+        ~print_typ:print_typ ~f_template_params:f_template_params f_ast
 
   | GeneratorDef(g_ast) ->
       Printf.sprintf "%s"(fmt_generator_ast ~print_typ:print_typ g_ast)
@@ -2003,7 +2040,7 @@ let rec get_static_f_params f_params =
 (* Rewrites variable names in the function so that all are unique, ie, none
 appear to shadow each other. *)
 let rewrite_to_unique_varnames
-  {f_decl={f_name; f_params; f_template_params; f_ret_t}; f_stmts}
+  {f_decl={f_name; f_params; f_ret_t}; f_stmts}
 =
   (* Yields a uniquified variable name, and the updated mapping containing a
   binding from the original varname to its new uniquified name. *)
@@ -2395,7 +2432,7 @@ let rewrite_to_unique_varnames
   in
 
   {
-    f_decl={f_name; f_params; f_template_params; f_ret_t};
+    f_decl={f_name; f_params; f_ret_t};
     f_stmts=rewritten_stmts
   }
 ;;
@@ -2405,9 +2442,7 @@ let rewrite_gen_to_unique_varnames
 =
   let {f_decl=_; f_stmts=stmts_rewritten} =
     rewrite_to_unique_varnames {
-      f_decl={
-        f_name=g_name; f_params=g_params; f_template_params=[]; f_ret_t=g_ret_t
-      };
+      f_decl={f_name=g_name; f_params=g_params; f_ret_t=g_ret_t};
       f_stmts=g_stmts;
     }
   in

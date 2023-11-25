@@ -36,8 +36,7 @@ let rec parse_tokens ?(trace=false) tokens : module_decl list =
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
     | KWFn(_) :: rest ->
-        let (rest, func_def) = parse_func ~ind:ind_next rest in
-        let mod_decl = FuncDef(func_def) in
+        let (rest, mod_decl) = parse_func ~ind:ind_next rest in
         _parse_tokens rest (mod_decl :: mod_decls_so_far)
 
     | KWGn(_) :: rest ->
@@ -63,8 +62,16 @@ and parse_extern ?(ind="") tokens : (token list * module_decl) =
 
   begin match tokens with
   | KWFn(_) :: rest ->
-      let (rest, f_decl) = parse_func_decl ~ind:ind_next rest in
-      (rest, FuncExternDecl(f_decl))
+      let (rest, f_decl, f_template_params) =
+        parse_func_decl ~ind:ind_next rest
+      in
+      begin match f_template_params with
+      | [] ->
+          (rest, FuncExternDecl(f_decl))
+
+      | _ ->
+          (rest, FuncExternTemplateDecl(f_template_params, f_decl))
+      end
 
   | tok :: _ ->
       let fmted = fmt_token tok in
@@ -250,7 +257,9 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
   end
 
 
-and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
+and parse_func_decl
+  ?(ind="") tokens : (token list * func_decl_t * f_template_param list)
+=
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let _parse_func_tail f_name f_params f_template_params tokens =
@@ -261,9 +270,9 @@ and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
           rest, {
             f_name=f_name;
             f_params=f_params;
-            f_template_params=f_template_params;
             f_ret_t=f_ret_t;
-          }
+          },
+          f_template_params
         )
 
     | _ ->
@@ -271,9 +280,9 @@ and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
           tokens, {
             f_name=f_name;
             f_params=f_params;
-            f_template_params=f_template_params;
             f_ret_t=Nil
-          }
+          },
+          f_template_params
         )
     end
   in
@@ -627,18 +636,24 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   end
 
 
-and parse_func ?(ind="") tokens : (token list * func_def_t) =
+and parse_func ?(ind="") tokens : (token list * module_decl) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
-  let (rest, f_decl) = parse_func_decl ~ind:ind_next tokens in
+  let (rest, f_decl, f_template_params) =
+    parse_func_decl ~ind:ind_next tokens
+  in
   let (rest, f_stmts) = parse_stmt_block ~ind:ind_next rest in
 
-  (
-    rest, {
-      f_decl=f_decl;
-      f_stmts=f_stmts;
-    }
-  )
+  begin match f_template_params with
+  | [] ->
+      (rest, FuncDef({f_decl=f_decl; f_stmts=f_stmts}))
+
+  | _ ->
+      (
+        rest,
+        FuncTemplateDef(f_template_params, {f_decl=f_decl; f_stmts=f_stmts})
+      )
+  end
 
 
 and parse_generator ?(ind="") tokens : (token list * generator_def_t) =

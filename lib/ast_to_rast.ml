@@ -447,18 +447,8 @@ and param_to_r_param (name, _, t) =
   (name, rt)
 
 and func_decl_t_to_rfunc_decl_t
-  {f_name; f_params; f_template_params; f_ret_t}
+  {f_name; f_params; f_ret_t}
 =
-  let _ =
-    if List.length f_template_params > 0 then
-      failwith (
-        Printf.sprintf
-          "Error: func_decl_t_to_rfunc_decl_t: Non-empty template params: <%s>"
-          (fmt_join_func_template_params "," f_template_params)
-      )
-    else
-      ()
-  in
   let rf_params = List.map param_to_r_param f_params in
   let rf_ret_t = berk_t_to_rast_t f_ret_t in
   {rf_name=f_name; rf_params; rf_ret_t}
