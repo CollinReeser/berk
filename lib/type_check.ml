@@ -7,12 +7,14 @@ module StrMap = Map.Make(String)
 
 type module_context = {
   func_sigs: func_decl_t StrMap.t;
+  func_template_sigs: func_decl_t StrMap.t;
   generator_sigs: generator_decl_t StrMap.t;
   variants: variant_decl_t StrMap.t;
 }
 
 let default_mod_ctxt = {
   func_sigs = StrMap.empty;
+  func_template_sigs = StrMap.empty;
   generator_sigs = StrMap.empty;
   variants = StrMap.empty;
 }
@@ -398,7 +400,14 @@ and type_check_mod_decl mod_ctxt mod_decl =
   in
 
   match mod_decl with
-  | FuncExternTemplateDecl(f_template_params, {f_name; f_params; f_ret_t}) ->
+  | FuncExternTemplateDecl(
+      {f_template_params; f_template_decl={f_name; f_params; f_ret_t}}
+    ) ->
+      let _ = match (StrMap.find_opt f_name mod_ctxt.func_template_sigs) with
+        | None -> ()
+        | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
+      in
+
       f_template_params |> ignore;
       f_name |> ignore;
       f_params |> ignore;
@@ -406,13 +415,19 @@ and type_check_mod_decl mod_ctxt mod_decl =
       failwith "Unimplemented: FuncExternTemplateDecl"
 
   | FuncTemplateDef(
-      f_template_params, {f_decl={f_name; f_params; f_ret_t}; f_stmts}
+      {
+        f_template_def_decl={
+          f_template_params;
+          f_template_decl={f_name; f_params; f_ret_t}
+        };
+        f_template_stmts
+      }
     ) ->
       f_template_params |> ignore;
       f_name |> ignore;
       f_params |> ignore;
       f_ret_t |> ignore;
-      f_stmts |> ignore;
+      f_template_stmts |> ignore;
       failwith "Unimplemented: FuncTemplateDef"
 
   | FuncExternDecl({f_name; f_params; f_ret_t}) ->

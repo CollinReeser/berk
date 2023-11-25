@@ -215,6 +215,11 @@ and func_decl_t = {
   f_ret_t: berk_t;
 }
 
+and func_template_decl_t = {
+  f_template_params: f_template_param list;
+  f_template_decl: func_decl_t;
+}
+
 and generator_decl_t = {
   g_name: string;
   g_params: f_param list;
@@ -227,6 +232,11 @@ and func_def_t = {
   f_stmts: stmt list;
 }
 
+and func_template_def_t = {
+  f_template_def_decl: func_template_decl_t;
+  f_template_stmts: stmt list;
+}
+
 and generator_def_t = {
   g_decl: generator_decl_t;
   g_stmts: stmt list;
@@ -234,9 +244,9 @@ and generator_def_t = {
 
 type module_decl =
   | FuncExternDecl of func_decl_t
-  | FuncExternTemplateDecl of f_template_param list * func_decl_t
+  | FuncExternTemplateDecl of func_template_decl_t
   | FuncDef of func_def_t
-  | FuncTemplateDef of f_template_param list * func_def_t
+  | FuncTemplateDef of func_template_def_t
   | GeneratorDef of generator_def_t
   | VariantDecl of variant_decl_t
 
@@ -593,18 +603,32 @@ and _dump_params_ast ind params =
   end
 
 and dump_func_decl_t_ast
-  ?(ind="") ?(f_template_params=[]) {f_name; f_params; f_ret_t}
+  ?(ind="") {f_name; f_params; f_ret_t}
 =
   let open Printf in
   let dumped_f_params = _dump_params_ast ind f_params in
-  let dumped_f_template_params =
-    sprintf "[%s]" (fmt_join_strs ";" f_template_params)
-  in
   sprintf
-    "func_decl_t{f_name=%s; f_params=%s; f_template_params=%s; f_ret_t=%s}"
+    "func_decl_t{f_name=%s; f_params=%s; f_ret_t=%s}"
     f_name
     dumped_f_params
+    (fmt_type f_ret_t)
+
+and dump_func_template_decl_t_ast
+  ?(ind="") {f_template_params; f_template_decl={f_name; f_params; f_ret_t}}
+=
+  let open Printf in
+  let dumped_f_params = _dump_params_ast ind f_params in
+  let dumped_f_template_params = fmt_join_strs "; " f_template_params in
+  sprintf
+    (
+      "func_template_decl_t{" ^^
+        "f_template_params=[%s]; " ^^
+        "f_template_decl={f_name=%s; f_params=%s; f_ret_t=%s}" ^^
+      "}"
+    )
     dumped_f_template_params
+    f_name
+    dumped_f_params
     (fmt_type f_ret_t)
 
 and dump_generator_decl_t_ast ?(ind="") {g_name; g_params; g_yield_t; g_ret_t} =
@@ -616,7 +640,7 @@ and dump_generator_decl_t_ast ?(ind="") {g_name; g_params; g_yield_t; g_ret_t} =
     (fmt_type g_yield_t)
     (fmt_type g_ret_t)
 
-and _dump_stmts_ast ind stmts =
+and dump_stmts_ast ind stmts =
   let open Printf in
   let ind_next = ind ^ " " in
   let ind_next' = ind_next ^ " " in
@@ -639,14 +663,14 @@ and _dump_stmts_ast ind stmts =
 
 and dump_func_def_t_ast ?(ind="") {f_decl; f_stmts} =
   let open Printf in
-  let dumped_f_stmts = _dump_stmts_ast ind f_stmts in
+  let dumped_f_stmts = dump_stmts_ast ind f_stmts in
   sprintf "func_def_t{f_decl=%s; f_stmts=%s}"
     (dump_func_decl_t_ast f_decl)
     dumped_f_stmts
 
 and dump_generator_def_t_ast ?(ind="") {g_decl; g_stmts} =
   let open Printf in
-  let dumped_g_stmts = _dump_stmts_ast ind g_stmts in
+  let dumped_g_stmts = dump_stmts_ast ind g_stmts in
   sprintf "generator_def_t{g_decl=%s; g_stmts=%s}"
     (dump_generator_decl_t_ast g_decl)
     dumped_g_stmts
@@ -700,13 +724,11 @@ and dump_module_decl_ast ?(ind="") module_decl =
         ind_next
         (dump_func_decl_t_ast f_decl)
         ind
-  | FuncExternTemplateDecl(f_template_params, f_decl) ->
+  | FuncExternTemplateDecl(f_template_decl) ->
       let ind_next = ind ^ " " in
-      sprintf "FuncExternTemplateDecl(\n%s%s\n%s%s%s\n)"
+      sprintf "FuncExternTemplateDecl(\n%s%s%s\n)"
         ind_next
-        (fmt_join_strs ", " f_template_params)
-        ind_next
-        (dump_func_decl_t_ast f_decl)
+        (dump_func_template_decl_t_ast f_template_decl)
         ind
   | FuncDef(f_def) ->
       let ind_next = ind ^ " " in
@@ -714,13 +736,13 @@ and dump_module_decl_ast ?(ind="") module_decl =
         ind_next
         (dump_func_def_t_ast f_def)
         ind
-  | FuncTemplateDef(f_template_params, f_def) ->
+  | FuncTemplateDef({f_template_def_decl; f_template_stmts}) ->
       let ind_next = ind ^ " " in
       sprintf "FuncTemplateDef(\n%s%s\n%s%s%s\n)"
         ind_next
-        (fmt_join_strs ", " f_template_params)
+        (dump_func_template_decl_t_ast f_template_def_decl)
         ind_next
-        (dump_func_def_t_ast f_def)
+        (dump_stmts_ast ind_next f_template_stmts)
         ind
   | GeneratorDef(g_def) ->
       let ind_next = ind ^ " " in
@@ -1292,7 +1314,7 @@ let fmt_stmts ?(print_typ = false) stmts : string =
 ;;
 
 let fmt_func_ast
-  ?(print_typ = false) ?(f_template_params=[]) {f_decl; f_stmts;} : string
+  ?(print_typ = false) ?(f_template_params=[]) f_decl f_stmts : string
 =
   Printf.sprintf "%s {\n%s}\n"
     (
@@ -1358,16 +1380,23 @@ let fmt_mod_decl
   | FuncExternDecl(f_decl) ->
       Printf.sprintf "%s"(fmt_func_decl ~print_typ:true ~extern:true f_decl)
 
-  | FuncExternTemplateDecl(f_template_params, f_decl) ->
+  | FuncExternTemplateDecl({f_template_params; f_template_decl}) ->
       fmt_func_decl
-        ~print_typ:true ~extern:true ~f_template_params:f_template_params f_decl
+        ~print_typ:true ~extern:true ~f_template_params:f_template_params
+        f_template_decl
 
-  | FuncDef(f_ast) ->
-      Printf.sprintf "%s"(fmt_func_ast ~print_typ:print_typ f_ast)
+  | FuncDef({f_decl; f_stmts}) ->
+      fmt_func_ast ~print_typ:print_typ f_decl f_stmts
 
-  | FuncTemplateDef(f_template_params, f_ast) ->
+  | FuncTemplateDef(
+      {
+        f_template_def_decl={f_template_params; f_template_decl};
+        f_template_stmts
+      }
+    ) ->
       fmt_func_ast
-        ~print_typ:print_typ ~f_template_params:f_template_params f_ast
+        ~print_typ:print_typ ~f_template_params:f_template_params
+        f_template_decl f_template_stmts
 
   | GeneratorDef(g_ast) ->
       Printf.sprintf "%s"(fmt_generator_ast ~print_typ:print_typ g_ast)

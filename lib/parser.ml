@@ -70,7 +70,10 @@ and parse_extern ?(ind="") tokens : (token list * module_decl) =
           (rest, FuncExternDecl(f_decl))
 
       | _ ->
-          (rest, FuncExternTemplateDecl(f_template_params, f_decl))
+          (
+            rest,
+            FuncExternTemplateDecl({f_template_params; f_template_decl=f_decl})
+          )
       end
 
   | tok :: _ ->
@@ -651,7 +654,12 @@ and parse_func ?(ind="") tokens : (token list * module_decl) =
   | _ ->
       (
         rest,
-        FuncTemplateDef(f_template_params, {f_decl=f_decl; f_stmts=f_stmts})
+        FuncTemplateDef(
+          {
+            f_template_def_decl={f_template_params; f_template_decl=f_decl};
+            f_template_stmts=f_stmts
+          }
+        )
       )
   end
 
