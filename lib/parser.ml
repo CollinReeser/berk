@@ -96,11 +96,11 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
       let _ = print_trace ind __FUNCTION__ tokens in
 
       begin match tokens with
-      | Backtick(_) :: LowIdent(_, typ_var_name) :: Comma(_) :: rest ->
+      | TickIdent(_, typ_var_name) :: Comma(_) :: rest ->
           let t_vars_so_far_rev' = (typ_var_name :: t_vars_so_far_rev) in
           __parse_variant_type_vars ~ind:ind rest t_vars_so_far_rev'
 
-      | Backtick(_) :: LowIdent(_, typ_var_name) :: rest ->
+      | TickIdent(_, typ_var_name) :: rest ->
           (rest, (typ_var_name :: t_vars_so_far_rev))
 
       | _ ->
@@ -253,35 +253,65 @@ and parse_variant ?(ind="") tokens : (token list * module_decl) =
 and parse_func_decl ?(ind="") tokens : (token list * func_decl_t) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
+  let _parse_func_tail f_name f_params f_template_params tokens =
+    begin match tokens with
+    | Colon(_) :: rest ->
+        let (rest, f_ret_t) = parse_type ~ind:ind_next rest in
+        (
+          rest, {
+            f_name=f_name;
+            f_params=f_params;
+            f_template_params=f_template_params;
+            f_ret_t=f_ret_t;
+          }
+        )
+
+    | _ ->
+        (
+          tokens, {
+            f_name=f_name;
+            f_params=f_params;
+            f_template_params=f_template_params;
+            f_ret_t=Nil
+          }
+        )
+    end
+  in
+
+  let _parse_func_err tok =
+    let fmted = fmt_token tok in
+    failwith (
+      Printf.sprintf
+        "Unexpected token [%s], expected lc-identifer" fmted
+    )
+  in
+
   begin match tokens with
+  (* Concrete function declaration. *)
   | LowIdent(_, f_name) :: LParen(_) :: rest ->
       let (rest, f_params) = parse_func_params ~ind:ind_next rest in
+      _parse_func_tail f_name f_params [] rest
+
+  (* Templated function declaration. *)
+  | LowIdent(_, f_name) :: Lesser(_) :: rest ->
+      let (rest, f_template_params) =
+        parse_func_template_params ~ind:ind_next rest
+      in
 
       begin match rest with
-      | Colon(_) :: rest ->
-          let (rest, f_ret_t) = parse_type ~ind:ind_next rest in
-          (
-            rest, {
-              f_name=f_name;
-              f_params=f_params;
-              f_ret_t=f_ret_t;
-            }
-          )
+      | LParen(_) :: rest ->
+          let (rest, f_params) = parse_func_params ~ind:ind_next rest in
+          _parse_func_tail f_name f_params f_template_params rest
 
-      | _ ->
-          (
-            rest, {
-              f_name=f_name; f_params=f_params; f_ret_t=Nil
-            }
-          )
+      | tok :: _ ->
+          _parse_func_err tok
+
+      | [] -> failwith "Unexpected EOF while parsing `fn` declaration."
       end
 
   | tok :: _ ->
-      let fmted = fmt_token tok in
-      failwith (
-        Printf.sprintf
-          "Unexpected token [%s], expected lc-identifer" fmted
-      )
+      _parse_func_err tok
+
   | [] -> failwith "Unexpected EOF while parsing `fn` declaration."
   end
 
@@ -423,6 +453,51 @@ and parse_func_params ?(ind="") tokens : (token list * f_param list) =
   _parse_func_params ~ind:ind_next tokens []
 
 
+and parse_func_template_params ?(ind="") tokens : (token list * ident_t list) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  let parse_func_template_param ?(ind="") tokens template_params_so_far =
+    let _ = print_trace ind __FUNCTION__ tokens in
+
+    begin match tokens with
+    | TickIdent(_, name) :: rest ->
+        (rest, (template_params_so_far @ [name]))
+
+    | _ :: _ ->
+        (tokens, template_params_so_far)
+
+    | [] ->
+        failwith "Unexpected EOF while parsing `fn` template param declaration."
+    end
+  in
+
+  let rec _parse_func_template_params ?(ind="") tokens template_params_so_far =
+    let ind_next = print_trace ind __FUNCTION__ tokens in
+
+    let (rest, template_params_so_far) =
+      parse_func_template_param ~ind:ind_next tokens template_params_so_far
+    in
+
+    begin match rest with
+    | Greater(_) :: rest ->
+        (rest, template_params_so_far)
+
+    | Comma(_) :: rest ->
+        _parse_func_template_params ~ind:ind_next rest template_params_so_far
+
+    | tok :: _ ->
+        let fmted = fmt_token tok in
+        failwith (
+          Printf.sprintf
+            "Unexpected token [%s], expected lc-identifer" fmted
+        )
+    | [] -> failwith "Unexpected EOF while parsing `fn` declaration."
+    end
+  in
+
+  _parse_func_template_params ~ind:ind_next tokens []
+
+
 and parse_type ?(ind="") tokens : (token list * berk_t) =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
@@ -443,7 +518,7 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   | LParen(_) :: RParen(_) :: rest -> (rest, Nil)
 
   (* Type variable *)
-  | Backtick(_) :: LowIdent(_, name) :: rest -> (rest, Unbound(name))
+  | TickIdent(_, name) :: rest -> (rest, Unbound(name))
 
   (* Reference *)
   | KWRef(_) :: rest ->
@@ -454,6 +529,11 @@ and parse_type ?(ind="") tokens : (token list * berk_t) =
   | LBracket(_) :: Integer(_, i) :: RBracket(_) :: rest ->
       let (rest, arr_t) = parse_type ~ind:ind_next rest in
       (rest, Array(arr_t, i))
+
+  (* Size-templated static array. *)
+  | LBracket(_) :: TickIdent(_, name)  :: RBracket(_) :: rest ->
+      let (rest, arr_t) = parse_type ~ind:ind_next rest in
+      (rest, SizeTemplatedArray(arr_t, Unbound(name)))
 
   (* Parse tuple. *)
   | LParen(_) :: rest ->

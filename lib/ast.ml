@@ -207,9 +207,12 @@ type variant_decl_t = {
 
 type f_param = (ident_t * var_qual * berk_t)
 
+type f_template_param = ident_t
+
 and func_decl_t = {
   f_name: string;
   f_params: f_param list;
+  f_template_params: f_template_param list;
   f_ret_t: berk_t;
 }
 
@@ -588,12 +591,19 @@ and _dump_params_ast ind params =
     "[]"
   end
 
-and dump_func_decl_t_ast ?(ind="") {f_name; f_params; f_ret_t} =
+and dump_func_decl_t_ast
+  ?(ind="") {f_name; f_params; f_template_params; f_ret_t}
+=
   let open Printf in
   let dumped_f_params = _dump_params_ast ind f_params in
-  sprintf "func_decl_t{f_name=%s; f_params=%s; f_ret_t=%s}"
+  let dumped_f_template_params =
+    sprintf "[%s]" (fmt_join_strs ";" f_template_params)
+  in
+  sprintf
+    "func_decl_t{f_name=%s; f_params=%s; f_template_params=%s; f_ret_t=%s}"
     f_name
     dumped_f_params
+    dumped_f_template_params
     (fmt_type f_ret_t)
 
 and dump_generator_decl_t_ast ?(ind="") {g_name; g_params; g_yield_t; g_ret_t} =
@@ -1205,10 +1215,11 @@ and fmt_ret_t ?(print_typ = false) ret_t : string =
   end
 
 and fmt_func_signature
-  ?(print_typ = false) {f_name; f_params; f_ret_t;} : string
+  ?(print_typ = false) {f_name; f_params; f_template_params; f_ret_t;} : string
 =
-  Printf.sprintf "fn %s(%s)%s"
+  Printf.sprintf "fn %s%s(%s)%s"
     f_name
+    (fmt_join_func_template_params "," f_template_params)
     (fmt_join_func_params "," f_params)
     (fmt_ret_t ~print_typ:print_typ f_ret_t)
 
@@ -1245,6 +1256,10 @@ and fmt_join_func_params delim params : string =
         (fmt_func_param x)
         delim
         (fmt_join_func_params delim xs)
+
+and fmt_join_func_template_params delim params : string =
+  fmt_join_strs delim params
+;;
 
 let fmt_stmts ?(print_typ = false) stmts : string =
   List.fold_left (^) "" (
@@ -1332,6 +1347,8 @@ let rec default_expr_for_t t =
   | Undecided
   | Unbound(_)
   | UnboundType(_, _)
+  | UnboundSize(_)
+  | SizeTemplatedArray(_, _)
   | VarArgSentinel
   | Ref(_)
   | Variant(_, _)
@@ -1395,6 +1412,11 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
     | (UnboundType(_, _), _) ->
         failwith "Unimplemented: Type injection with unbound types."
 
+    | (UnboundSize(i), _) ->
+        failwith (
+          Printf.sprintf "Error: Type injection with unbound size (%d)" i
+        )
+
     | (Unbound(a), _) ->
         begin match exp_t with
         | Unbound(b) ->
@@ -1405,6 +1427,17 @@ let rec inject_type_into_expr ?(ind="") injected_t exp =
         | _ ->
             exp
         end
+
+    | (SizeTemplatedArray(_, _), _) ->
+        failwith (
+          Printf.sprintf
+            (
+              "Error: Nonsense injection of templated array [[ %s ]] " ^^
+              "into expr [[ %s ]]"
+            )
+            (fmt_type injected_t)
+            (fmt_expr exp)
+        )
 
     | (
         Function(inj_ret_t, inj_args_t_lst), (
@@ -1969,7 +2002,9 @@ let rec get_static_f_params f_params =
 
 (* Rewrites variable names in the function so that all are unique, ie, none
 appear to shadow each other. *)
-let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
+let rewrite_to_unique_varnames
+  {f_decl={f_name; f_params; f_template_params; f_ret_t}; f_stmts}
+=
   (* Yields a uniquified variable name, and the updated mapping containing a
   binding from the original varname to its new uniquified name. *)
   let get_unique_varname
@@ -2359,7 +2394,10 @@ let rewrite_to_unique_varnames {f_decl={f_name; f_params; f_ret_t}; f_stmts} =
     List.fold_left_map _rewrite_stmt unique_varnames f_stmts
   in
 
-  {f_decl={f_name; f_params; f_ret_t}; f_stmts=rewritten_stmts}
+  {
+    f_decl={f_name; f_params; f_template_params; f_ret_t};
+    f_stmts=rewritten_stmts
+  }
 ;;
 
 let rewrite_gen_to_unique_varnames
@@ -2367,7 +2405,9 @@ let rewrite_gen_to_unique_varnames
 =
   let {f_decl=_; f_stmts=stmts_rewritten} =
     rewrite_to_unique_varnames {
-      f_decl={f_name=g_name; f_params=g_params; f_ret_t=g_ret_t};
+      f_decl={
+        f_name=g_name; f_params=g_params; f_template_params=[]; f_ret_t=g_ret_t
+      };
       f_stmts=g_stmts;
     }
   in

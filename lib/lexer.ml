@@ -42,7 +42,6 @@ type token =
 | LBracket of position
 | RBracket of position
 | Arrow of position
-| Backtick of position
 | DotDot of position
 | Dot of position
 | Comma of position
@@ -70,6 +69,7 @@ type token =
 | Underscore of position
 | LowIdent of position * string
 | CapIdent of position * string
+| TickIdent of position * string
 | Float32 of position * float
 | Float64 of position * float
 | Float128 of position * string
@@ -120,78 +120,78 @@ let fmt_pos (pos : position) =
 
 let fmt_token tok =
   match tok with
-  | KWExtern(p)    -> Printf.sprintf "extern (kw)    : %s"   (fmt_pos p)
-  | KWVariant(p)   -> Printf.sprintf "variant(kw)    : %s"   (fmt_pos p)
-  | KWFn(p)        -> Printf.sprintf "fn     (kw)    : %s"   (fmt_pos p)
-  | KWGn(p)        -> Printf.sprintf "gn     (kw)    : %s"   (fmt_pos p)
-  | KWMut(p)       -> Printf.sprintf "mut    (kw)    : %s"   (fmt_pos p)
-  | KWRef(p)       -> Printf.sprintf "ref    (kw)    : %s"   (fmt_pos p)
-  | KWLet(p)       -> Printf.sprintf "let    (kw)    : %s"   (fmt_pos p)
-  | KWIgnore(p)    -> Printf.sprintf "ignore (kw)    : %s"   (fmt_pos p)
-  | KWReturn(p)    -> Printf.sprintf "return (kw)    : %s"   (fmt_pos p)
-  | KWYield(p)     -> Printf.sprintf "yield  (kw)    : %s"   (fmt_pos p)
-  | KWIf(p)        -> Printf.sprintf "if     (kw)    : %s"   (fmt_pos p)
-  | KWElse(p)      -> Printf.sprintf "else   (kw)    : %s"   (fmt_pos p)
-  | KWWhile(p)     -> Printf.sprintf "while  (kw)    : %s"   (fmt_pos p)
-  | KWMatch(p)     -> Printf.sprintf "match  (kw)    : %s"   (fmt_pos p)
-  | KWAs(p)        -> Printf.sprintf "as     (kw)    : %s"   (fmt_pos p)
-  | KWIs(p)        -> Printf.sprintf "is     (kw)    : %s"   (fmt_pos p)
-  | KWi8(p)        -> Printf.sprintf "i8     (kw)    : %s"   (fmt_pos p)
-  | KWi16(p)       -> Printf.sprintf "i16    (kw)    : %s"   (fmt_pos p)
-  | KWi32(p)       -> Printf.sprintf "i32    (kw)    : %s"   (fmt_pos p)
-  | KWi64(p)       -> Printf.sprintf "i64    (kw)    : %s"   (fmt_pos p)
-  | KWu8(p)        -> Printf.sprintf "u8     (kw)    : %s"   (fmt_pos p)
-  | KWu16(p)       -> Printf.sprintf "u16    (kw)    : %s"   (fmt_pos p)
-  | KWu32(p)       -> Printf.sprintf "u32    (kw)    : %s"   (fmt_pos p)
-  | KWu64(p)       -> Printf.sprintf "u64    (kw)    : %s"   (fmt_pos p)
-  | KWf32(p)       -> Printf.sprintf "f32    (kw)    : %s"   (fmt_pos p)
-  | KWf64(p)       -> Printf.sprintf "f64    (kw)    : %s"   (fmt_pos p)
-  | KWf128(p)      -> Printf.sprintf "f128   (kw)    : %s"   (fmt_pos p)
-  | KWBool(p)      -> Printf.sprintf "bool   (kw)    : %s"   (fmt_pos p)
-  | KWTrue(p)      -> Printf.sprintf "true   (kw)    : %s"   (fmt_pos p)
-  | KWFalse(p)     -> Printf.sprintf "false  (kw)    : %s"   (fmt_pos p)
-  | KWString(p)    -> Printf.sprintf "string (kw)    : %s"   (fmt_pos p)
-  | LParen(p)      -> Printf.sprintf "(   (syn)      : %s"   (fmt_pos p)
-  | RParen(p)      -> Printf.sprintf ")   (syn)      : %s"   (fmt_pos p)
-  | LBrace(p)      -> Printf.sprintf "{   (syn)      : %s"   (fmt_pos p)
-  | RBrace(p)      -> Printf.sprintf "}   (syn)      : %s"   (fmt_pos p)
-  | LBracket(p)    -> Printf.sprintf "[   (syn)      : %s"   (fmt_pos p)
-  | RBracket(p)    -> Printf.sprintf "]   (syn)      : %s"   (fmt_pos p)
-  | Arrow(p)       -> Printf.sprintf "->  (syn)      : %s"   (fmt_pos p)
-  | Backtick(p)    -> Printf.sprintf "`   (syn)      : %s"   (fmt_pos p)
-  | DotDot(p)      -> Printf.sprintf "..  (syn)      : %s"   (fmt_pos p)
-  | Dot(p)         -> Printf.sprintf ".   (syn)      : %s"   (fmt_pos p)
-  | Comma(p)       -> Printf.sprintf ",   (syn)      : %s"   (fmt_pos p)
-  | ColonEqual(p)  -> Printf.sprintf ":=  (syn)      : %s"   (fmt_pos p)
-  | Colon(p)       -> Printf.sprintf ":   (syn)      : %s"   (fmt_pos p)
-  | EqualEqual(p)  -> Printf.sprintf "==  (syn)      : %s"   (fmt_pos p)
-  | BangEqual(p)   -> Printf.sprintf "!=  (syn)      : %s"   (fmt_pos p)
-  | Equal(p)       -> Printf.sprintf "=   (syn)      : %s"   (fmt_pos p)
-  | LessEqual(p)   -> Printf.sprintf "<=  (syn)      : %s"   (fmt_pos p)
-  | Lesser(p)      -> Printf.sprintf "<   (syn)      : %s"   (fmt_pos p)
-  | GreatEqual(p)  -> Printf.sprintf "<=  (syn)      : %s"   (fmt_pos p)
-  | Greater(p)     -> Printf.sprintf ">   (syn)      : %s"   (fmt_pos p)
-  | Bang(p)        -> Printf.sprintf "!   (syn)      : %s"   (fmt_pos p)
-  | Semicolon(p)   -> Printf.sprintf ";   (syn)      : %s"   (fmt_pos p)
-  | TriEllipses(p) -> Printf.sprintf "... (syn)      : %s"   (fmt_pos p)
-  | BiEllipses(p)  -> Printf.sprintf "..  (syn)      : %s"   (fmt_pos p)
-  | BarBar(p)      -> Printf.sprintf "||  (syn)      : %s"   (fmt_pos p)
-  | Bar(p)         -> Printf.sprintf "|   (syn)      : %s"   (fmt_pos p)
-  | AmpAmp(p)      -> Printf.sprintf "&&  (syn)      : %s"   (fmt_pos p)
-  | Plus(p)        -> Printf.sprintf "+   (syn)      : %s"   (fmt_pos p)
-  | Minus(p)       -> Printf.sprintf "-   (syn)      : %s"   (fmt_pos p)
-  | Star(p)        -> Printf.sprintf "*   (syn)      : %s"   (fmt_pos p)
-  | Slash(p)       -> Printf.sprintf "/   (syn)      : %s"   (fmt_pos p)
-  | Percent(p)     -> Printf.sprintf "%%  (syn)      : %s"   (fmt_pos p)
-  | Underscore(p)  -> Printf.sprintf "_  (syn)       : %s"   (fmt_pos p)
-  | LowIdent(p, s) -> Printf.sprintf "%s (low-ident) : %s" s (fmt_pos p)
-  | CapIdent(p, s) -> Printf.sprintf "%s (cap-ident) : %s" s (fmt_pos p)
-  | Float32(p, f)  -> Printf.sprintf "%f (float)     : %s" f (fmt_pos p)
-  | Float64(p, f)  -> Printf.sprintf "%f (float)     : %s" f (fmt_pos p)
-  | Float128(p, s) -> Printf.sprintf "%s (float)     : %s" s (fmt_pos p)
-  | Float(p, f)    -> Printf.sprintf "%f (float)     : %s" f (fmt_pos p)
-  | Integer(p, i)  -> Printf.sprintf "%d (integer)   : %s" i (fmt_pos p)
-  | String(p, s)   -> Printf.sprintf "%s (string)    : %s" s (fmt_pos p)
+  | KWExtern(p)     -> Printf.sprintf "extern (kw)     : %s"   (fmt_pos p)
+  | KWVariant(p)    -> Printf.sprintf "variant(kw)     : %s"   (fmt_pos p)
+  | KWFn(p)         -> Printf.sprintf "fn     (kw)     : %s"   (fmt_pos p)
+  | KWGn(p)         -> Printf.sprintf "gn     (kw)     : %s"   (fmt_pos p)
+  | KWMut(p)        -> Printf.sprintf "mut    (kw)     : %s"   (fmt_pos p)
+  | KWRef(p)        -> Printf.sprintf "ref    (kw)     : %s"   (fmt_pos p)
+  | KWLet(p)        -> Printf.sprintf "let    (kw)     : %s"   (fmt_pos p)
+  | KWIgnore(p)     -> Printf.sprintf "ignore (kw)     : %s"   (fmt_pos p)
+  | KWReturn(p)     -> Printf.sprintf "return (kw)     : %s"   (fmt_pos p)
+  | KWYield(p)      -> Printf.sprintf "yield  (kw)     : %s"   (fmt_pos p)
+  | KWIf(p)         -> Printf.sprintf "if     (kw)     : %s"   (fmt_pos p)
+  | KWElse(p)       -> Printf.sprintf "else   (kw)     : %s"   (fmt_pos p)
+  | KWWhile(p)      -> Printf.sprintf "while  (kw)     : %s"   (fmt_pos p)
+  | KWMatch(p)      -> Printf.sprintf "match  (kw)     : %s"   (fmt_pos p)
+  | KWAs(p)         -> Printf.sprintf "as     (kw)     : %s"   (fmt_pos p)
+  | KWIs(p)         -> Printf.sprintf "is     (kw)     : %s"   (fmt_pos p)
+  | KWi8(p)         -> Printf.sprintf "i8     (kw)     : %s"   (fmt_pos p)
+  | KWi16(p)        -> Printf.sprintf "i16    (kw)     : %s"   (fmt_pos p)
+  | KWi32(p)        -> Printf.sprintf "i32    (kw)     : %s"   (fmt_pos p)
+  | KWi64(p)        -> Printf.sprintf "i64    (kw)     : %s"   (fmt_pos p)
+  | KWu8(p)         -> Printf.sprintf "u8     (kw)     : %s"   (fmt_pos p)
+  | KWu16(p)        -> Printf.sprintf "u16    (kw)     : %s"   (fmt_pos p)
+  | KWu32(p)        -> Printf.sprintf "u32    (kw)     : %s"   (fmt_pos p)
+  | KWu64(p)        -> Printf.sprintf "u64    (kw)     : %s"   (fmt_pos p)
+  | KWf32(p)        -> Printf.sprintf "f32    (kw)     : %s"   (fmt_pos p)
+  | KWf64(p)        -> Printf.sprintf "f64    (kw)     : %s"   (fmt_pos p)
+  | KWf128(p)       -> Printf.sprintf "f128   (kw)     : %s"   (fmt_pos p)
+  | KWBool(p)       -> Printf.sprintf "bool   (kw)     : %s"   (fmt_pos p)
+  | KWTrue(p)       -> Printf.sprintf "true   (kw)     : %s"   (fmt_pos p)
+  | KWFalse(p)      -> Printf.sprintf "false  (kw)     : %s"   (fmt_pos p)
+  | KWString(p)     -> Printf.sprintf "string (kw)     : %s"   (fmt_pos p)
+  | LParen(p)       -> Printf.sprintf "(   (syn)       : %s"   (fmt_pos p)
+  | RParen(p)       -> Printf.sprintf ")   (syn)       : %s"   (fmt_pos p)
+  | LBrace(p)       -> Printf.sprintf "{   (syn)       : %s"   (fmt_pos p)
+  | RBrace(p)       -> Printf.sprintf "}   (syn)       : %s"   (fmt_pos p)
+  | LBracket(p)     -> Printf.sprintf "[   (syn)       : %s"   (fmt_pos p)
+  | RBracket(p)     -> Printf.sprintf "]   (syn)       : %s"   (fmt_pos p)
+  | Arrow(p)        -> Printf.sprintf "->  (syn)       : %s"   (fmt_pos p)
+  | DotDot(p)       -> Printf.sprintf "..  (syn)       : %s"   (fmt_pos p)
+  | Dot(p)          -> Printf.sprintf ".   (syn)       : %s"   (fmt_pos p)
+  | Comma(p)        -> Printf.sprintf ",   (syn)       : %s"   (fmt_pos p)
+  | ColonEqual(p)   -> Printf.sprintf ":=  (syn)       : %s"   (fmt_pos p)
+  | Colon(p)        -> Printf.sprintf ":   (syn)       : %s"   (fmt_pos p)
+  | EqualEqual(p)   -> Printf.sprintf "==  (syn)       : %s"   (fmt_pos p)
+  | BangEqual(p)    -> Printf.sprintf "!=  (syn)       : %s"   (fmt_pos p)
+  | Equal(p)        -> Printf.sprintf "=   (syn)       : %s"   (fmt_pos p)
+  | LessEqual(p)    -> Printf.sprintf "<=  (syn)       : %s"   (fmt_pos p)
+  | Lesser(p)       -> Printf.sprintf "<   (syn)       : %s"   (fmt_pos p)
+  | GreatEqual(p)   -> Printf.sprintf "<=  (syn)       : %s"   (fmt_pos p)
+  | Greater(p)      -> Printf.sprintf ">   (syn)       : %s"   (fmt_pos p)
+  | Bang(p)         -> Printf.sprintf "!   (syn)       : %s"   (fmt_pos p)
+  | Semicolon(p)    -> Printf.sprintf ";   (syn)       : %s"   (fmt_pos p)
+  | TriEllipses(p)  -> Printf.sprintf "... (syn)       : %s"   (fmt_pos p)
+  | BiEllipses(p)   -> Printf.sprintf "..  (syn)       : %s"   (fmt_pos p)
+  | BarBar(p)       -> Printf.sprintf "||  (syn)       : %s"   (fmt_pos p)
+  | Bar(p)          -> Printf.sprintf "|   (syn)       : %s"   (fmt_pos p)
+  | AmpAmp(p)       -> Printf.sprintf "&&  (syn)       : %s"   (fmt_pos p)
+  | Plus(p)         -> Printf.sprintf "+   (syn)       : %s"   (fmt_pos p)
+  | Minus(p)        -> Printf.sprintf "-   (syn)       : %s"   (fmt_pos p)
+  | Star(p)         -> Printf.sprintf "*   (syn)       : %s"   (fmt_pos p)
+  | Slash(p)        -> Printf.sprintf "/   (syn)       : %s"   (fmt_pos p)
+  | Percent(p)      -> Printf.sprintf "%%  (syn)       : %s"   (fmt_pos p)
+  | Underscore(p)   -> Printf.sprintf "_   (syn)       : %s"   (fmt_pos p)
+  | LowIdent(p, s)  -> Printf.sprintf "%s (low-ident)  : %s" s (fmt_pos p)
+  | CapIdent(p, s)  -> Printf.sprintf "%s (cap-ident)  : %s" s (fmt_pos p)
+  | TickIdent(p, s) -> Printf.sprintf "%s (tick-ident) : %s" s (fmt_pos p)
+  | Float32(p, f)   -> Printf.sprintf "%f (float)      : %s" f (fmt_pos p)
+  | Float64(p, f)   -> Printf.sprintf "%f (float)      : %s" f (fmt_pos p)
+  | Float128(p, s)  -> Printf.sprintf "%s (float)      : %s" s (fmt_pos p)
+  | Float(p, f)     -> Printf.sprintf "%f (float)      : %s" f (fmt_pos p)
+  | Integer(p, i)   -> Printf.sprintf "%d (integer)    : %s" i (fmt_pos p)
+  | String(p, s)    -> Printf.sprintf "%s (string)     : %s" s (fmt_pos p)
 ;;
 
 
@@ -366,6 +366,11 @@ let tokenize buf =
         let tok = LowIdent(get_pos buf, lexeme) in
         _tokenize buf (tok :: tokens)
 
+    | ('`'), Star(id_continue) ->
+        let lexeme = Sedlexing.Latin1.lexeme buf in
+        let tok = TickIdent(get_pos buf, lexeme) in
+        _tokenize buf (tok :: tokens)
+
     (* 123.456f32 *)
     | float_reg, "f32" ->
         let lexeme = Sedlexing.Latin1.lexeme buf in
@@ -429,9 +434,6 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "->" ->
         let tok = Arrow(get_pos buf) in
-        _tokenize buf (tok :: tokens)
-    | "`" ->
-        let tok = Backtick(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | ".." ->
         let tok = DotDot(get_pos buf) in

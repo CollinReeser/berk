@@ -97,7 +97,9 @@ let rec berk_t_to_rast_t (t : berk_t) : rast_t =
 
   (* These types should have been eliminated during AST typechecking. *)
   | UnboundType(_, _)
+  | UnboundSize(_)
   | Unbound(_)
+  | SizeTemplatedArray(_, _)
   | Undecided ->
       failwith (
         Printf.sprintf "Error: Unexpected type during RAST lowering: %s"

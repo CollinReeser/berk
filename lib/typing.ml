@@ -40,6 +40,14 @@ type berk_t =
   (* A type variable, a la `t *)
   | Unbound of string
 
+  (* An Array, but the int size is not instantiated yet, with a template
+  variable instead. LHS is the type that this is an array of. RHS is an instance
+  of Unbound (and any other RHS is ill-formed). *)
+  | SizeTemplatedArray of berk_t * berk_t
+  (* A "type" used as the RHS of a size-templated type. Value is the size of the
+  type. This should only be used while instantiating templated types. *)
+  | UnboundSize of int
+
   | Undecided
 
 and v_ctor = {name: string; fields: v_ctor_field list}
@@ -107,6 +115,17 @@ and fmt_type ?(pretty_unbound=false) berk_type : string =
       if pretty_unbound
       then type_var
       else "<?unbound:" ^ type_var ^ "?>"
+
+  | UnboundSize (i) ->
+      if pretty_unbound
+      then Printf.sprintf "%d" i
+      else Printf.sprintf "<?unbound-size:%d?>" i
+
+  | SizeTemplatedArray (typ, size_var) ->
+      let typ_fmt = fmt_type ~pretty_unbound:pretty_unbound typ in
+      let sz_fmt = fmt_type ~pretty_unbound:pretty_unbound size_var in
+      "[" ^ typ_fmt ^ " x " ^ sz_fmt ^ "]"
+
   | Undecided -> "<?undecided?>"
 
 and fmt_v_ctor ?(pretty_unbound=false) {name; fields} : string =
@@ -184,8 +203,10 @@ let rec has_default_value t =
 
   | UnboundType(_, _)
   | Unbound(_)
+  | UnboundSize(_)
+  | SizeTemplatedArray (_, _)
   | Undecided ->
-      (* Placeholder/unresolved type variables cammpt jabe default values. *)
+      (* Placeholder/unresolved type variables cannot have default values. *)
       false
   end
 ;;
@@ -197,13 +218,19 @@ let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
   | (Undecided, Undecided) -> true
 
   | (Unbound(lhs_name), Unbound(rhs_name)) ->
-      if lhs_name = rhs_name then true else false
+      lhs_name = rhs_name
 
   | (UnboundType(lhs_name, lhs_ts), UnboundType(rhs_name, rhs_ts)) ->
-      if lhs_name = rhs_name then
-        List.for_all2 is_same_type lhs_ts rhs_ts
-      else
-        false
+      lhs_name = rhs_name && List.for_all2 is_same_type lhs_ts rhs_ts
+
+  | (UnboundSize(lhs_i), UnboundSize(rhs_i)) ->
+      lhs_i = rhs_i
+
+  | (
+      SizeTemplatedArray(lhs_t, lhs_size_var),
+      SizeTemplatedArray(rhs_t, rhs_size_var)
+    ) ->
+      is_same_type lhs_t rhs_t && is_same_type lhs_size_var rhs_size_var
 
   | (U64, U64)
   | (U32, U32)
@@ -261,6 +288,8 @@ let rec is_same_type (lhs : berk_t) (rhs : berk_t) : bool =
   | (Undecided, _)
   | (Unbound(_), _)
   | (UnboundType(_, _), _)
+  | (UnboundSize(_), _)
+  | (SizeTemplatedArray(_, _), _)
   | (U64, _)
   | (U32, _)
   | (U16, _)
@@ -362,13 +391,25 @@ let rec common_type_of_lr lhs rhs =
     | (String,             _) -> None
 
     | (Unbound(lhs_typevar), Unbound(rhs_typevar)) ->
-        if lhs_typevar = rhs_typevar then
-          Some(Unbound(lhs_typevar))
-        else
-          None
+        if lhs_typevar = rhs_typevar then Some(Unbound(lhs_typevar)) else None
 
     | (Unbound(_), _) -> Some(rhs)
     | (_, Unbound(_)) -> Some(lhs)
+
+    | (UnboundSize(lhs_i), UnboundSize(rhs_i)) ->
+        if lhs_i = rhs_i then Some(UnboundSize(lhs_i)) else None
+    | (UnboundSize(_), _) -> None
+
+    | (
+        SizeTemplatedArray(lhs_t, lhs_size_var),
+        SizeTemplatedArray(rhs_t, rhs_size_var)
+      ) ->
+        if is_same_type lhs_size_var rhs_size_var then
+          let common_t = common_type_of_lr lhs_t rhs_t in
+          Some(SizeTemplatedArray(common_t, lhs_size_var))
+        else
+          None
+    | (SizeTemplatedArray(_, _), _) -> None
 
     | (Tuple(lhs_typs), Tuple(rhs_typs)) ->
         let common_tup_typs = List.map2 common_type_of_lr lhs_typs rhs_typs in
@@ -921,6 +962,13 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
       let ts_concrete = List.map (concretify_unbound_types tvar_to_t) ts in
       UnboundType(name, ts_concrete)
 
+  | UnboundSize(i) ->
+      failwith (
+        Printf.sprintf
+          "Error: concretify_unbound_types called on UnboundSize(%d)"
+          i
+      )
+
   | Ref(refed_t) ->
       let refed_concretified_t =
         concretify_unbound_types tvar_to_t refed_t
@@ -938,6 +986,18 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
   | Array(arr_typ, sz) ->
       let arr_typ_concretified = concretify_unbound_types tvar_to_t arr_typ in
       Array(arr_typ_concretified, sz)
+
+  | SizeTemplatedArray(typ, Unbound(tvar)) ->
+      begin match (StrMap.find_opt tvar tvar_to_t) with
+      | Some(UnboundSize(i)) ->
+          Array(typ, i)
+
+      | _ -> Unbound(tvar)
+      end
+  | SizeTemplatedArray(typ, _) ->
+      failwith (
+        Printf.sprintf "Error: Ill-formed type: [[ %s ]]" (fmt_type typ)
+      )
 
   | Variant(v_name, v_ctors) ->
       let v_ctors_concretified =
@@ -975,6 +1035,8 @@ let rec is_concrete_type ?(verbose=false) typ =
   | Undecided  -> false
   | Unbound(_) -> false
   | UnboundType(_, _) -> false
+  | UnboundSize(_) -> false
+  | SizeTemplatedArray(_, _) -> false
 
   | U64  | U32 | U16 | U8
   | I64  | I32 | I16 | I8
@@ -1267,6 +1329,11 @@ let get_tvars typ =
     | UnboundType(_, ts) ->
         List.fold_left _get_tvars so_far ts
 
+    | UnboundSize(i) ->
+        failwith (
+          Printf.sprintf "Error: Called get_tvars on UnboundSize(%d)" i
+        )
+
     | U64  | U32 | U16 | U8
     | I64  | I32 | I16 | I8
     | F128 | F64 | F32
@@ -1283,6 +1350,11 @@ let get_tvars typ =
 
     | Array(typ, _) ->
         _get_tvars so_far typ
+
+    | SizeTemplatedArray(typ, size_var) ->
+        let so_far = _get_tvars so_far typ in
+        let so_far = _get_tvars so_far size_var in
+        so_far
 
     | Variant(_, ctors) ->
         List.fold_left _get_tvars_in_v_ctor so_far ctors

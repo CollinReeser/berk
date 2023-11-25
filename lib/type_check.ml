@@ -398,8 +398,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
   in
 
   match mod_decl with
-  | FuncExternDecl(f_decl_ast) ->
-      let {f_name; f_params; f_ret_t} = f_decl_ast in
+  | FuncExternDecl({f_name; f_params; f_template_params; f_ret_t}) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
@@ -407,20 +406,24 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
       (* If the return type is a user-defined type, bind it now. *)
       let f_ret_t = bind_type mod_ctxt f_ret_t in
-      let f_decl_ast = {f_name; f_params; f_ret_t} in
+      let f_decl_ast = {f_name; f_params; f_template_params; f_ret_t} in
 
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
       else
         let func_sigs_up = begin
-          StrMap.add f_name {f_name; f_params; f_ret_t} mod_ctxt.func_sigs
+          StrMap.add
+            f_name
+            {f_name; f_params; f_template_params; f_ret_t}
+            mod_ctxt.func_sigs
         end in
         let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
 
         (mod_ctxt_up, FuncExternDecl(f_decl_ast))
 
-  | FuncDef(f_ast) ->
-      let {f_decl = {f_name; f_params; f_ret_t}; f_stmts} = f_ast in
+  | FuncDef(
+      {f_decl = {f_name; f_params; f_template_params; f_ret_t}; f_stmts}
+    ) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
@@ -428,13 +431,19 @@ and type_check_mod_decl mod_ctxt mod_decl =
 
       (* If the return type is a user-defined type, bind it now. *)
       let f_ret_t = bind_type mod_ctxt f_ret_t in
-      let f_ast = {f_decl = {f_name; f_params; f_ret_t}; f_stmts} in
+      let f_ast = {
+        f_decl = {f_name; f_params; f_template_params; f_ret_t};
+        f_stmts
+      } in
 
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
       else
         let func_sigs_up = begin
-          StrMap.add f_name {f_name; f_params; f_ret_t} mod_ctxt.func_sigs
+          StrMap.add
+            f_name
+            {f_name; f_params; f_template_params; f_ret_t}
+            mod_ctxt.func_sigs
         end in
         let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
         let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
@@ -1256,9 +1265,11 @@ and type_check_expr
         end
 
     | UfcsCall(_, exp, f_name, underscore_pos, exprs) ->
-        let {f_name; f_params; f_ret_t} =
+        let {f_name; f_params; f_template_params; f_ret_t} =
           StrMap.find f_name tc_ctxt.mod_ctxt.func_sigs
         in
+
+        f_template_params |> ignore;
 
         (* For now, a UFCS call is simply a different syntax for a normal
         function call. Later, a UFCS call might also be a method call, where
@@ -2273,6 +2284,9 @@ and generate_value_patts t : pattern list =
   | Undecided -> failwith "Cannot generate values for undecided type"
   | Unbound(_) -> failwith "Cannot generate values for unbound typevar"
   | UnboundType(_, _) -> failwith "Cannot generate values for unbound type"
+  | UnboundSize(_) -> failwith "Cannot generate values for unbound size"
+  | SizeTemplatedArray(_, _) ->
+      failwith "Cannot generate values for templated array type"
   | VarArgSentinel -> failwith "Cannot generate values for var-arg sentinel"
 
   | Nil -> [PNil]
