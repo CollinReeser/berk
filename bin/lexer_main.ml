@@ -1859,7 +1859,7 @@ let () =
               let mir_ctxt = hfunc_decl_to_mir hfunc_decl_t in
 
               Printf.printf
-                "RAST-generated MIR:\n%s\n%!"
+                "HIR-generated MIR:\n%s\n%!"
                 (fmt_mir_ctxt mir_ctxt);
 
               Some(mir_ctxt)

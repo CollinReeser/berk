@@ -375,19 +375,19 @@ let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor =
 let rec type_check_mod_decls mod_decls =
   let mod_ctxt = default_mod_ctxt in
 
-  let rec _type_check_mod_decls ctxt decls =
+  let rec _type_check_mod_decls mod_ctxt decls =
     match decls with
-    | [] -> (ctxt, [], [])
+    | [] -> (mod_ctxt, [], [])
     | x::xs ->
       let (mod_ctxt_up, new_decls_first, decl_tced) =
-        type_check_mod_decl ctxt x
+        type_check_mod_decl mod_ctxt x
       in
       let (mod_ctxt_fin, new_decls_rest, decls_tced) =
         _type_check_mod_decls mod_ctxt_up xs
       in
       (mod_ctxt_fin, new_decls_first @ new_decls_rest, decl_tced :: decls_tced)
   in
-  let (_, new_decls, mod_decls_typechecked) =
+  let (mod_ctxt, new_decls, mod_decls_typechecked) =
     _type_check_mod_decls mod_ctxt mod_decls
   in
 
@@ -397,6 +397,26 @@ let rec type_check_mod_decls mod_decls =
     Printf.printf "%s\n" fmted;
     Printf.printf "]\n"
   end in
+
+  (* Keep processing new decls until there are no new ones. *)
+  let rec _type_check_mod_decls_exhaust mod_ctxt decls_rem decls_tced_so_far =
+    begin match decls_rem with
+    | [] -> (mod_ctxt, decls_tced_so_far)
+    | _ ->
+        let (mod_ctxt, new_decls, decls_tced) =
+          _type_check_mod_decls mod_ctxt decls_rem
+        in
+        (* NOTE: This ordering is important to ensure that called functions,
+        even template instantiations, are compiled first before the functions
+        that call them. *)
+        let decls_tced_so_far = decls_tced @ decls_tced_so_far in
+        _type_check_mod_decls_exhaust mod_ctxt new_decls decls_tced_so_far
+    end
+  in
+
+  let (_, mod_decls_typechecked) =
+    _type_check_mod_decls_exhaust mod_ctxt new_decls mod_decls_typechecked
+  in
 
   (* If we got here, then we don't need the template decls anymore. *)
   let mod_decls_typechecked_filtered =
