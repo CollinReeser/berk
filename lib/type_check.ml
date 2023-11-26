@@ -7,14 +7,14 @@ module StrMap = Map.Make(String)
 
 type module_context = {
   func_sigs: func_decl_t StrMap.t;
-  func_template_sigs: func_template_decl_t StrMap.t;
+  func_templates: module_decl StrMap.t;
   generator_sigs: generator_decl_t StrMap.t;
   variants: variant_decl_t StrMap.t;
 }
 
 let default_mod_ctxt = {
   func_sigs = StrMap.empty;
-  func_template_sigs = StrMap.empty;
+  func_templates = StrMap.empty;
   generator_sigs = StrMap.empty;
   variants = StrMap.empty;
 }
@@ -413,7 +413,7 @@ and type_check_mod_decl mod_ctxt mod_decl =
   | FuncExternTemplateDecl(
       {f_template_decl={f_name; f_params; _}; _} as f_extern_template_decl
     ) ->
-      let _ = match (StrMap.find_opt f_name mod_ctxt.func_template_sigs) with
+      let _ = match (StrMap.find_opt f_name mod_ctxt.func_templates) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
       in
@@ -421,14 +421,14 @@ and type_check_mod_decl mod_ctxt mod_decl =
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
       else
-        let func_template_sigs_up = begin
+        let func_templates_up = begin
           StrMap.add
             f_name
-            f_extern_template_decl
-            mod_ctxt.func_template_sigs
+            mod_decl
+            mod_ctxt.func_templates
         end in
         let mod_ctxt_up = {
-          mod_ctxt with func_template_sigs = func_template_sigs_up
+          mod_ctxt with func_templates = func_templates_up
         } in
 
         (mod_ctxt_up, FuncExternTemplateDecl(f_extern_template_decl))
@@ -626,6 +626,45 @@ and type_check_generator mod_ctxt generator_def =
         g_yield_t = resolved_yield_t;
     };
   }
+
+and instantiate_func_template mod_ctxt mod_decl typvars_to_ts func_arg_ts =
+  mod_ctxt |> ignore;
+  typvars_to_ts |> ignore;
+  func_arg_ts |> ignore;
+
+  begin match mod_decl with
+  | FuncExternTemplateDecl({f_template_decl={f_name; f_params; _}; _}) ->
+      f_params |> ignore;
+
+      failwith (
+        Printf.sprintf "Unimplemented: instantiate_func_template: %s\n" f_name
+      )
+
+  | FuncTemplateDef(
+      {
+        f_template_def_decl={
+          f_template_params;
+          f_template_decl={f_name; f_params; f_ret_t}
+        };
+        f_template_stmts
+      }
+    ) ->
+      f_template_params |> ignore;
+      f_params |> ignore;
+      f_ret_t |> ignore;
+      f_template_stmts |> ignore;
+
+      failwith (
+        Printf.sprintf "Unimplemented: instantiate_func_template: %s\n" f_name
+      )
+
+  | _ ->
+      failwith (
+        Printf.sprintf
+          "Unimplemented: instantiate_func_template: [[ %s ]]\n"
+          (fmt_mod_decl mod_decl)
+      )
+  end
 
 and update_vars_with_idents_quals vars_init idents_quals types =
   let idents_quals_types = List.combine idents_quals types in
