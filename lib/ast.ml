@@ -1214,8 +1214,8 @@ and fmt_stmt ?(print_typ = false) ind stmt =
         else ""
       in
       Printf.sprintf "%s%s%s;\n"
-        fmt_ignore
         ind
+        fmt_ignore
         (fmt_expr ~ind:ind ~print_typ:print_typ ex)
 
   | YieldStmt (ex) ->
