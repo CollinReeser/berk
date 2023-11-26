@@ -1978,16 +1978,16 @@ and type_check_expr
         in
         let matched_t = expr_type matched_expr_tc in
 
-        let typecheck_pattern_expr_pair (tc_ctxt, arms_tc_decls) (patt, exp) =
+        let typecheck_pattern_expr_pair arms_tc_decls (patt, exp) =
           let (tc_ctxt, patt_tc) = type_check_pattern tc_ctxt matched_t patt in
           let (arm_tc_decl, exp_tc) = type_check_expr tc_ctxt Undecided exp in
 
-          ((tc_ctxt, arms_tc_decls @ arm_tc_decl), (patt_tc, exp_tc))
+          ((arms_tc_decls @ arm_tc_decl), (patt_tc, exp_tc))
         in
 
-        let ((_, arms_tc_decls), pattern_expr_pairs_tc) =
+        let (arms_tc_decls, pattern_expr_pairs_tc) =
           List.fold_left_map
-            typecheck_pattern_expr_pair (tc_ctxt, []) pattern_expr_pairs
+            typecheck_pattern_expr_pair [] pattern_expr_pairs
         in
 
         let patts = List.map (fun (patt, _) -> patt) pattern_expr_pairs_tc in

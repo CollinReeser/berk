@@ -18,8 +18,9 @@ let () =
 
   let source_text = {|
     extern fn printf(fmt: string, ...): i32
+    extern fn getcwd(buf: ref [256]i8, size: u64): i32
     extern fn open(path: string, flags: i32): i32
-    extern fn read<`a>(fd: i32, buf: [`a]i8, count: u32): i32
+    extern fn read<`a>(fd: i32, buf: ref [`a]i8, count: u32): i32
     extern fn close(fd: i32): i32
     extern fn rand(): i32
     extern fn calloc(num: i64, size: i64): ref [2000000]i32
