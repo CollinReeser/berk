@@ -1137,6 +1137,41 @@ let rec merge_types lhs_orig_t rhs_orig_t : berk_t =
     | (Undecided, _) -> rhs_t
     | (_, Undecided) -> lhs_t
 
+    | (UnboundType(lhs_name, lhs_ts), UnboundType(rhs_name, rhs_ts)) ->
+        if lhs_name = rhs_name then
+          let merged_ts = List.map2 _merge_types lhs_ts rhs_ts in
+          UnboundType(lhs_name, merged_ts)
+        else
+          failwith (
+            Printf.sprintf
+              "Cannot merge user types: [%s] vs [%s]"
+              (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+          )
+
+    | (
+        SizeTemplatedArray(lhs_t, Unbound(lhs_tvar)),
+        SizeTemplatedArray(rhs_t, Unbound(rhs_tvar))
+      ) ->
+        if lhs_tvar = rhs_tvar then
+          let merged_t = _merge_types lhs_t rhs_t in
+          SizeTemplatedArray(merged_t, Unbound(lhs_tvar))
+        else
+          failwith (
+            Printf.sprintf
+              "Cannot merge size-templated array types: [%s] vs [%s]"
+              (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+          )
+
+    | (UnboundSize(lhs_i), UnboundSize(rhs_i)) ->
+        if lhs_i = rhs_i then
+          UnboundSize(lhs_i)
+        else
+          failwith (
+            Printf.sprintf
+              "Cannot merge unbound sizes: [%s] vs [%s]"
+              (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+          )
+
     (* Base cases. *)
     | (U64, U64)   -> U64
     | (U32, U32)   -> U32
@@ -1193,12 +1228,42 @@ let rec merge_types lhs_orig_t rhs_orig_t : berk_t =
           Variant(lhs_name, merged_v_ctors)
         end
 
-    | _ ->
+    | (Ref(lhs_refed_t), Ref(rhs_refed_t)) ->
+        let merged_t = _merge_types lhs_refed_t rhs_refed_t in
+        Ref(merged_t)
+
+    | (
+        (
+            U64 | U32 | U16 | U8
+          | I64 | I32 | I16 | I8
+          | F128 | F64 | F32
+          | Bool
+          | Nil
+          | String
+          | VarArgSentinel
+          | Tuple(_)
+          | Array(_, _)
+          | Function(_, _)
+          | Variant(_, _)
+          | Ref(_)
+          | UnboundType(_, _)
+          | SizeTemplatedArray(_, _)
+          | UnboundSize(_)
+        ),
+        _
+      ) ->
+        failwith (
+          Printf.sprintf
+            "Unimplemented: Merging unbound vs bound types: [%s] vs [%s]"
+            (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
+        )
+
+    (* | _ ->
         failwith (
           Printf.sprintf
             "Cannot merge types: [%s] vs [%s]"
             (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
-        )
+        ) *)
     end
   in
 
@@ -1235,6 +1300,48 @@ let map_tvars_to_types
           map_so_far
         else
           failwith "Types disagree on structural location of tvars"
+
+    | (UnboundType(lhs_name, lhs_ts), UnboundType(rhs_name, rhs_ts)) ->
+        if lhs_name = rhs_name then
+          List.fold_left2 _map_tvars_to_types map_so_far lhs_ts rhs_ts
+        else
+          failwith (
+            Printf.sprintf
+              "Called with non-structurally-identical types:  %s  vs  %s\n"
+              (fmt_type lhs_typ)
+              (fmt_type rhs_typ)
+          )
+
+    | (UnboundSize(lhs_i), UnboundSize(rhs_i)) ->
+        if lhs_i = rhs_i then
+          map_so_far
+        else
+          failwith (
+            Printf.sprintf
+              "Called with non-structurally-identical types:  %s  vs  %s\n"
+              (fmt_type lhs_typ)
+              (fmt_type rhs_typ)
+          )
+
+    | (
+        SizeTemplatedArray(lhs_arr_t, lhs_sz_t),
+        SizeTemplatedArray(rhs_arr_t, rhs_sz_t)
+      ) ->
+        let map_so_far = _map_tvars_to_types map_so_far lhs_arr_t rhs_arr_t in
+        let map_so_far = _map_tvars_to_types map_so_far lhs_sz_t rhs_sz_t in
+        map_so_far
+
+    | (
+        (
+          SizeTemplatedArray(lhs_arr_t, Unbound(tvar_sz)), Array(rhs_arr_t, sz)
+        ) |
+        (
+          Array(rhs_arr_t, sz), SizeTemplatedArray(lhs_arr_t, Unbound(tvar_sz))
+        )
+      ) ->
+        let map_so_far = _map_tvars_to_types map_so_far lhs_arr_t rhs_arr_t in
+        let map_so_far = StrMap.add tvar_sz (UnboundSize(sz)) map_so_far in
+        map_so_far
 
     | (Unbound(_), Undecided)
     | (Undecided, Unbound(_)) ->
@@ -1300,14 +1407,21 @@ let map_tvars_to_types
         List.fold_left2
           _map_tvars_to_types_in_v_ctor map_so_far lhs_ctors rhs_ctors
 
-    | _ ->
+    | (
+        (
+          U64 | U32 | U16 | U8 | I64 | I32 | I16 | I8 | F128 | F64 | F32
+          | Bool | String | Nil | VarArgSentinel
+          | Function(_, _) | Tuple(_) | Array(_, _) | Variant(_, _)
+          | UnboundType(_, _) | UnboundSize(_) | SizeTemplatedArray(_, _)
+        ),
+        _
+      ) ->
         let lhs_fmt = fmt_type lhs_typ in
         let rhs_fmt = fmt_type rhs_typ in
         failwith (
           "Called with non-structurally-identical types: [[ " ^
           lhs_fmt ^ " ]] vs [[ " ^ rhs_fmt ^ " ]]"
         )
-
   in
   _map_tvars_to_types init_map lhs_typ rhs_typ
 ;;

@@ -10,6 +10,7 @@ type module_context = {
   func_templates: module_decl StrMap.t;
   generator_sigs: generator_decl_t StrMap.t;
   variants: variant_decl_t StrMap.t;
+  template_decl_instances: module_decl list;
 }
 
 let default_mod_ctxt = {
@@ -17,6 +18,7 @@ let default_mod_ctxt = {
   func_templates = StrMap.empty;
   generator_sigs = StrMap.empty;
   variants = StrMap.empty;
+  template_decl_instances = [];
 }
 
 type typecheck_context = {
@@ -497,7 +499,11 @@ and type_check_mod_decl mod_ctxt mod_decl =
             mod_ctxt.func_sigs
         end in
         let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
-        let func_ast_typechecked = type_check_func mod_ctxt_up f_ast in
+        let (tc_ctxt, func_ast_typechecked) =
+          type_check_func mod_ctxt_up f_ast
+        in
+
+        tc_ctxt |> ignore;
 
         (mod_ctxt_up, FuncDef(func_ast_typechecked))
 
@@ -586,14 +592,17 @@ and type_check_func mod_ctxt func_def =
       mod_ctxt = mod_ctxt
   } in
 
-  let (_, f_stmts_typechecked, resolved_ret_t) =
+  let (tc_ctxt, f_stmts_typechecked, resolved_ret_t) =
     type_check_callable_body tc_ctxt_init f_stmts f_ret_t
   in
 
-  {
-    f_stmts = f_stmts_typechecked;
-    f_decl = {func_def.f_decl with f_ret_t = resolved_ret_t};
-  }
+  (
+    tc_ctxt,
+    {
+      f_stmts = f_stmts_typechecked;
+      f_decl = {func_def.f_decl with f_ret_t = resolved_ret_t};
+    }
+  )
 
 and type_check_generator mod_ctxt generator_def =
   let {g_decl = {g_params; g_yield_t; g_ret_t; _;}; g_stmts;} = generator_def in
@@ -627,18 +636,86 @@ and type_check_generator mod_ctxt generator_def =
     };
   }
 
-and instantiate_func_template mod_ctxt mod_decl typvars_to_ts func_arg_ts =
-  mod_ctxt |> ignore;
-  typvars_to_ts |> ignore;
-  func_arg_ts |> ignore;
+(* Attend to unify a templated extern fn declaration with the types of the
+arguments used to instantiate it. *)
+and instantiate_func_extern_template_decl
+  mod_ctxt
+  {f_template_decl={f_name; f_params; f_ret_t}; f_template_params}
+  (tvars_to_ts : berk_t StrMap.t)
+  func_arg_ts
+  : (module_context * func_decl_t)
+=
+  f_template_params |> ignore;
 
-  begin match mod_decl with
-  | FuncExternTemplateDecl({f_template_decl={f_name; f_params; _}; _}) ->
-      f_params |> ignore;
+  (* Attempt to acquire a mapping from type variables to types, given the
+  arguments to the function, and any tvars that might be in the templated
+  function signature. *)
+  let tvars_to_ts =
+    List.fold_left2 (
+      fun tvars_to_ts (_, _, param_t) arg_t ->
+        map_tvars_to_types ~init_map:tvars_to_ts param_t arg_t
+    ) tvars_to_ts f_params func_arg_ts
+  in
 
+  (* Attempt to fully instantiate the parameters of the templated signature. *)
+  let f_params =
+    List.map (
+      fun (name, qual, t) ->
+        let concrete_t = concretify_unbound_types tvars_to_ts t in
+
+        if (is_concrete_type ~verbose:true concrete_t) then
+          (name, qual, concrete_t)
+        else
+          failwith (
+            Printf.sprintf
+              "Error: instantiate_func_extern_template_decl: type %s\n"
+              (fmt_type t)
+          )
+
+    ) f_params
+  in
+
+  (* Attempt to fully instantiate the return type of the templated signature. *)
+  let f_ret_t = begin
+    let concrete_t = concretify_unbound_types tvars_to_ts f_ret_t in
+
+    if (is_concrete_type ~verbose:true concrete_t) then
+      concrete_t
+    else
       failwith (
-        Printf.sprintf "Unimplemented: instantiate_func_template: %s\n" f_name
+        Printf.sprintf
+          "Error: instantiate_func_extern_template_decl: type %s\n"
+          (fmt_type concrete_t)
       )
+  end in
+
+  (mod_ctxt, {f_name; f_params; f_ret_t})
+
+
+(* Given a templated module declaration, any pre-existing mappings from type
+variable to type, and the ordered list of the types of each of the function
+invocation arguments, attempt to fully monomorphize the templated invocation,
+returning a mod_ctxt populated with the monomorphized/instantiated function. *)
+and instantiate_func_template mod_ctxt mod_decl tvars_to_ts func_arg_ts =
+  begin match mod_decl with
+  | FuncExternTemplateDecl(
+      {f_template_decl={f_name; _}; _} as f_template_decl
+    ) ->
+      let (mod_ctxt, f_decl) =
+        instantiate_func_extern_template_decl
+          mod_ctxt f_template_decl tvars_to_ts func_arg_ts
+      in
+
+      let func_sigs = StrMap.add f_name f_decl mod_ctxt.func_sigs in
+      let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
+
+      let _ =
+        Printf.printf "instantiate_func_template: before [[ %s ]], after [[ %s ]]\n%!"
+          (fmt_mod_decl mod_decl)
+          (fmt_mod_decl (FuncExternDecl(f_decl)))
+      in
+
+      mod_ctxt
 
   | FuncTemplateDef(
       {
@@ -679,7 +756,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       (* If decl_t is an unbound type (some user-defined type we only have
       the name of), then bind it and shadow decl_t with our updated type. *)
       let decl_t = bind_type tc_ctxt.mod_ctxt decl_t in
-      let exp_typechecked = type_check_expr tc_ctxt decl_t exp in
+      let (tc_ctxt, exp_typechecked) = type_check_expr tc_ctxt decl_t exp in
       let exp_t = expr_type exp_typechecked in
       let resolved_t = match decl_t with
       | Undecided -> exp_t
@@ -718,9 +795,9 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
 
       let vars_up = StrMap.add ident (resolved_t, qual) tc_ctxt.vars in
-      let tc_ctxt_up = {tc_ctxt with vars = vars_up} in
+      let tc_ctxt = {tc_ctxt with vars = vars_up} in
 
-      (tc_ctxt_up, DeclStmt(ident, qual, resolved_t, exp_typechecked))
+      (tc_ctxt, DeclStmt(ident, qual, resolved_t, exp_typechecked))
 
   | DeclDefaultStmt((idents_quals_ts)) ->
       let tc_ctxt =
@@ -743,7 +820,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       (tc_ctxt, stmt)
 
   | DeclDeconStmt(idents_quals, decl_t, exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt decl_t exp in
+      let (tc_ctxt, exp_typechecked) = type_check_expr tc_ctxt decl_t exp in
       let exp_t = expr_type exp_typechecked in
 
       (* If the declared type is fully concrete, assume we can use that. Else,
@@ -785,25 +862,25 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         | _ -> failwith "Cannot deconstruct non-aggregate type in decl"
         end
       in
-      let tc_ctxt_up = {tc_ctxt with vars = vars_up} in
+      let tc_ctxt = {tc_ctxt with vars = vars_up} in
 
-      (tc_ctxt_up, DeclDeconStmt(idents_quals, resolved_t, exp_typechecked))
+      (tc_ctxt, DeclDeconStmt(idents_quals, resolved_t, exp_typechecked))
 
   | AssignStmt(ident, _, lval_idxs, exp) ->
       (* Typecheck the chain of indexing against the named LHS variable, if
       there is any, and yield the type of the resultant target for the
       assignment (as well as the typechecked index expressions). *)
-      let apply_index cur_t lval_idx =
+      let apply_index (tc_ctxt, cur_t) lval_idx =
         begin match lval_idx with
         | ALStaticIndex(_, i) ->
             let inner_t = unwrap_aggregate_indexable cur_t i in
             let lval_idx_tc = ALStaticIndex(inner_t, i) in
 
-            (inner_t, lval_idx_tc)
+            ((tc_ctxt, inner_t), lval_idx_tc)
 
         | ALIndex(_, idx_exp) ->
             (* Typecheck the indexing expression itself. *)
-            let idx_exp_tc =
+            let (tc_ctxt, idx_exp_tc) =
               type_check_expr tc_ctxt Undecided idx_exp
             in
 
@@ -818,23 +895,23 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
 
             let lval_idx_tc = ALIndex(inner_t, idx_exp_tc) in
 
-            (inner_t, lval_idx_tc)
+            ((tc_ctxt, inner_t), lval_idx_tc)
 
         | ALDeref(_) ->
             let inner_t = unwrap_ref cur_t in
             let lval_idx_tc = ALDeref(inner_t) in
 
-            (inner_t, lval_idx_tc)
+            ((tc_ctxt, inner_t), lval_idx_tc)
         end
       in
 
       let (var_t, {mut}) = StrMap.find ident tc_ctxt.vars in
 
-      let (lval_t, lval_idxs_typechecked) =
-        List.fold_left_map apply_index var_t lval_idxs
+      let ((tc_ctxt, lval_t), lval_idxs_typechecked) =
+        List.fold_left_map apply_index (tc_ctxt, var_t) lval_idxs
       in
 
-      let exp_typechecked = type_check_expr tc_ctxt lval_t exp in
+      let (tc_ctxt, exp_typechecked) = type_check_expr tc_ctxt lval_t exp in
       let exp_t = expr_type exp_typechecked in
 
       let _ =
@@ -857,7 +934,7 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
         )
 
   | ExprStmt(({ignore} as es_mod), exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt Undecided exp in
+      let (tc_ctxt, exp_typechecked) = type_check_expr tc_ctxt Undecided exp in
       let exp_t = expr_type exp_typechecked in
       let _ =
         begin match exp_t with
@@ -887,7 +964,9 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       (tc_ctxt, ExprStmt(es_mod, exp_typechecked))
 
   | YieldStmt(exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt tc_ctxt.yield_t exp in
+      let (tc_ctxt, exp_typechecked) =
+        type_check_expr tc_ctxt tc_ctxt.yield_t exp
+      in
       let exp_t = expr_type exp_typechecked in
       let yield_tuple = begin
         match tc_ctxt.yield_t with
@@ -907,7 +986,9 @@ and type_check_stmt (tc_ctxt) (stmt) : (typecheck_context * stmt) =
       yield_tuple
 
   | ReturnStmt(exp) ->
-      let exp_typechecked = type_check_expr tc_ctxt tc_ctxt.ret_t exp in
+      let (tc_ctxt, exp_typechecked) =
+        type_check_expr tc_ctxt tc_ctxt.ret_t exp
+      in
       let exp_t = expr_type exp_typechecked in
       let ret_tuple = begin match tc_ctxt.ret_t with
         | Undecided ->
@@ -938,19 +1019,20 @@ expression is the right type. However, in cases of eg variants/structs that
 might have type variables that the expression cannot infer, this information
 can provide the needed type info. *)
 and type_check_expr
-  (tc_ctxt : typecheck_context) (expected_t : berk_t) (exp : expr) : expr
+  (tc_ctxt : typecheck_context) (expected_t : berk_t) (exp : expr)
+  : (typecheck_context * expr)
 =
-  let rec _type_check_expr exp =
+  let rec _type_check_expr tc_ctxt exp : (typecheck_context * expr) =
     begin match exp with
-    | ValNil -> ValNil
+    | ValNil -> (tc_ctxt, ValNil)
 
-    | ValF128(str) -> ValF128(str)
-    | ValF64(f)    -> ValF64(f)
-    | ValF32(f)    -> ValF32(f)
+    | ValF128(str) -> (tc_ctxt, ValF128(str))
+    | ValF64(f)    -> (tc_ctxt, ValF64(f))
+    | ValF32(f)    -> (tc_ctxt, ValF32(f))
 
-    | ValBool(b) -> ValBool(b)
+    | ValBool(b) -> (tc_ctxt, ValBool(b))
 
-    | ValStr(s) -> ValStr(s)
+    | ValStr(s) -> (tc_ctxt, ValStr(s))
 
     (* If our generic int type is not yet _any_ inferred/default type, determine
     one now with the information we have. This may change later, if we have more
@@ -961,12 +1043,12 @@ and type_check_expr
     | ValInt(Undecided, i) ->
         begin match expected_t with
         (* Barring more specific information, default to reasonable int type. *)
-        | Undecided -> ValInt(I32, i)
+        | Undecided -> (tc_ctxt, ValInt(I32, i))
 
-        | I64 | I32 | I16 | I8 -> ValInt(expected_t, i)
+        | I64 | I32 | I16 | I8 -> (tc_ctxt, ValInt(expected_t, i))
         | U64 | U32 | U16 | U8 ->
             if i >= 0 then
-              ValInt(expected_t, i)
+              (tc_ctxt, ValInt(expected_t, i))
             else
               failwith (
                 Printf.sprintf
@@ -986,7 +1068,7 @@ and type_check_expr
 
     (* We have _a_ type for our generic int, so keep it. This may be changed
     later if we get more information leading to a better inference. *)
-    | ValInt(_, _) -> exp
+    | ValInt(_, _) -> (tc_ctxt, exp)
 
     | ValVar(_, id) ->
         let (var_t, _) =
@@ -994,7 +1076,7 @@ and type_check_expr
           with Not_found ->
             failwith (Printf.sprintf "No variable [%s] in scope" id)
         in
-        ValVar(var_t, id)
+        (tc_ctxt, ValVar(var_t, id))
 
     | ValFunc(_, func_name) ->
         let {f_params; f_ret_t; _} =
@@ -1003,7 +1085,7 @@ and type_check_expr
         let f_param_t_lst = List.map (fun (_, _, t) -> t) f_params in
         let func_t = Function(f_ret_t, f_param_t_lst) in
 
-        ValFunc(func_t, func_name)
+        (tc_ctxt, ValFunc(func_t, func_name))
 
     | ValName(_, name) ->
         (* "Generic variable" lookup first searches for actual in-scope named
@@ -1012,7 +1094,7 @@ and type_check_expr
         begin
           try
             let (var_t, _) = StrMap.find name tc_ctxt.vars in
-            ValVar(var_t, name)
+            (tc_ctxt, ValVar(var_t, name))
           with Not_found ->
           try
             begin
@@ -1021,31 +1103,31 @@ and type_check_expr
               in
               let f_param_t_lst = List.map (fun (_, _, t) -> t) f_params in
               let func_t = Function(f_ret_t, f_param_t_lst) in
-              ValFunc(func_t, name)
+              (tc_ctxt, ValFunc(func_t, name))
             end
           with Not_found ->
             failwith
               (Printf.sprintf "No variable or function [%s] in scope" name)
         end
 
-    | ValRawArray(t) -> ValRawArray(t)
+    | ValRawArray(t) -> (tc_ctxt, ValRawArray(t))
 
     | RefOf(_, exp) ->
-        let exp_typechecked = _type_check_expr exp in
+        let (tc_ctxt, exp_typechecked) = _type_check_expr tc_ctxt exp in
         let exp_t = expr_type exp_typechecked in
 
         (* This helper function ensures we don't double-wrap a reference type.
         *)
         let ref_exp_t = wrap_ref exp_t in
 
-        RefOf(ref_exp_t, exp_typechecked)
+        (tc_ctxt, RefOf(ref_exp_t, exp_typechecked))
 
     | DerefOf(_, exp) ->
-        let exp_typechecked = _type_check_expr exp in
+        let (tc_ctxt, exp_typechecked) = _type_check_expr tc_ctxt exp in
         let exp_t = expr_type exp_typechecked in
 
         begin match exp_t with
-        | Ref(inner_t) -> DerefOf(inner_t, exp_typechecked)
+        | Ref(inner_t) -> (tc_ctxt, DerefOf(inner_t, exp_typechecked))
         | _ ->
           failwith (
             Printf.sprintf "Cannot dereference non-reference type [%s] for [%s]"
@@ -1055,7 +1137,7 @@ and type_check_expr
         end
 
     | ValCast(target_t, op, exp) ->
-        let exp_typechecked = _type_check_expr exp in
+        let (tc_ctxt, exp_typechecked) = _type_check_expr tc_ctxt exp in
         let exp_t = expr_type exp_typechecked in
 
         let op_func_check =
@@ -1067,18 +1149,18 @@ and type_check_expr
         in
 
         if op_func_check exp_t target_t then
-          ValCast(target_t, op, exp_typechecked)
+          (tc_ctxt, ValCast(target_t, op, exp_typechecked))
         else
           failwith (
             Printf.sprintf "Cannot [%s] incompatible types" (fmt_cast_op op)
           )
 
     | UnOp(_, op, exp) ->
-        let exp_typechecked = _type_check_expr exp in
+        let (tc_ctxt, exp_typechecked) = _type_check_expr tc_ctxt exp in
         let exp_t = expr_type exp_typechecked in
 
         begin match (op, exp_t) with
-        | (LNot, Bool) -> UnOp(exp_t, op, exp_typechecked)
+        | (LNot, Bool) -> (tc_ctxt, UnOp(exp_t, op, exp_typechecked))
         | _ ->
             failwith (
               Printf.sprintf "Invalid combination of op/type for [%s]/[%s]"
@@ -1088,8 +1170,8 @@ and type_check_expr
         end
 
     | BinOp(_, op, lhs, rhs) ->
-        let lhs_typechecked = _type_check_expr lhs in
-        let rhs_typechecked = _type_check_expr rhs in
+        let (tc_ctxt, lhs_typechecked) = _type_check_expr tc_ctxt lhs in
+        let (tc_ctxt, rhs_typechecked) = _type_check_expr tc_ctxt rhs in
 
         (* In the event we have a concrete type for one side, but a generic type
         for the other (even one that we may have already assigned a tentative
@@ -1124,8 +1206,12 @@ and type_check_expr
         in
 
         (* Double check that we didn't just break assumptions. *)
-        let lhs_typechecked = _type_check_expr lhs_typechecked in
-        let rhs_typechecked = _type_check_expr rhs_typechecked in
+        let (tc_ctxt, lhs_typechecked) =
+          _type_check_expr tc_ctxt lhs_typechecked
+        in
+        let (tc_ctxt, rhs_typechecked) =
+          _type_check_expr tc_ctxt rhs_typechecked
+        in
 
         let lhs_t = expr_type lhs_typechecked in
         let rhs_t = expr_type rhs_typechecked in
@@ -1133,17 +1219,17 @@ and type_check_expr
         begin match op with
         | Add | Sub | Mul | Div | Mod ->
             let common_t = common_type_of_lr lhs_t rhs_t in
-            BinOp(common_t, op, lhs_typechecked, rhs_typechecked)
+            (tc_ctxt, BinOp(common_t, op, lhs_typechecked, rhs_typechecked))
 
         | Eq | Ne | Lt | Le | Gt | Ge ->
             (* TODO: There should be an additional check that these are actually
             comparable, as relevant. *)
-            BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
+            (tc_ctxt, BinOp(Bool, op, lhs_typechecked, rhs_typechecked))
 
         | LOr | LAnd ->
             begin match (lhs_t, rhs_t) with
             | (Bool, Bool) ->
-                BinOp(Bool, op, lhs_typechecked, rhs_typechecked)
+                (tc_ctxt, BinOp(Bool, op, lhs_typechecked, rhs_typechecked))
 
             | _ ->
                 failwith (
@@ -1155,15 +1241,17 @@ and type_check_expr
         end
 
     | BlockExpr(_, stmts, exp) ->
-        let (tc_ctxt_up, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
+        let (tc_ctxt, stmts_typechecked) = type_check_stmts tc_ctxt stmts in
 
-        let expr_typechecked = type_check_expr tc_ctxt_up expected_t exp in
+        let (tc_ctxt, expr_typechecked) =
+          type_check_expr tc_ctxt expected_t exp
+        in
         let expr_t = expr_type expr_typechecked in
 
-        BlockExpr(expr_t, stmts_typechecked, expr_typechecked)
+        (tc_ctxt, BlockExpr(expr_t, stmts_typechecked, expr_typechecked))
 
     | IfThenElseExpr(_, if_cond, then_expr, else_expr) ->
-        let if_cond_typechecked = _type_check_expr if_cond in
+        let (tc_ctxt, if_cond_typechecked) = _type_check_expr tc_ctxt if_cond in
         let if_cond_t = expr_type if_cond_typechecked in
 
         let _ = match if_cond_t with
@@ -1171,19 +1259,26 @@ and type_check_expr
         | _ -> failwith "if-expr condition must resolve to Bool"
         in
 
-        let then_expr_typechecked = _type_check_expr then_expr in
-        let else_expr_typechecked = _type_check_expr else_expr in
+        let (tc_ctxt, then_expr_typechecked) =
+          _type_check_expr tc_ctxt then_expr
+        in
+        let (tc_ctxt, else_expr_typechecked) =
+          _type_check_expr tc_ctxt else_expr
+        in
 
         let then_expr_t = expr_type then_expr_typechecked in
         let else_expr_t = expr_type else_expr_typechecked in
 
         let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
 
-        IfThenElseExpr(
-          then_else_agreement_t,
-          if_cond_typechecked,
-          then_expr_typechecked,
-          else_expr_typechecked
+        (
+          tc_ctxt,
+          IfThenElseExpr(
+            then_else_agreement_t,
+            if_cond_typechecked,
+            then_expr_typechecked,
+            else_expr_typechecked
+          )
         )
 
     | IfIsThenElseExpr(_, conds, then_expr, else_expr) ->
@@ -1194,7 +1289,7 @@ and type_check_expr
               | IfIsGeneral(inner_cond) ->
                   (* Normal boolean conditions should evaluate to bool. *)
 
-                  let inner_cond_typechecked =
+                  let (tc_ctxt, inner_cond_typechecked) =
                     type_check_expr tc_ctxt Undecided inner_cond
                   in
                   let inner_cond_t = expr_type inner_cond_typechecked in
@@ -1211,7 +1306,7 @@ and type_check_expr
                   the match pattern. The boolean conditional is implied by
                   whether or not the match actually succeeds. *)
 
-                  let matched_exp_typechecked =
+                  let (tc_ctxt, matched_exp_typechecked) =
                     type_check_expr tc_ctxt Undecided matched_exp
                   in
                   let matched_exp_t = expr_type matched_exp_typechecked in
@@ -1233,11 +1328,11 @@ and type_check_expr
         than the top-level one, as these bindings need to exist within the
         then-branch (but not the else-branch!) *)
 
-        let then_expr_typechecked =
+        let (tc_ctxt, then_expr_typechecked) =
           type_check_expr tc_ctxt expected_t then_expr
         in
-        let else_expr_typechecked =
-          _type_check_expr else_expr
+        let (tc_ctxt, else_expr_typechecked) =
+          _type_check_expr tc_ctxt else_expr
         in
 
         let then_expr_t = expr_type then_expr_typechecked in
@@ -1245,11 +1340,14 @@ and type_check_expr
 
         let then_else_agreement_t = common_type_of_lr then_expr_t else_expr_t in
 
-        IfIsThenElseExpr(
-          then_else_agreement_t,
-          conds_typechecked,
-          then_expr_typechecked,
-          else_expr_typechecked
+        (
+          tc_ctxt,
+          IfIsThenElseExpr(
+            then_else_agreement_t,
+            conds_typechecked,
+            then_expr_typechecked,
+            else_expr_typechecked
+          )
         )
 
     | WhileExpr(_, init_stmts, while_cond, then_stmts) ->
@@ -1264,7 +1362,7 @@ and type_check_expr
         because we want to use the tc_ctxt returned by typechecking the
         init-stmts, because we want visibility into any in-scope init-stmt vars.
         *)
-        let while_cond_typechecked =
+        let (tc_ctxt, while_cond_typechecked) =
           type_check_expr tc_ctxt expected_t while_cond
         in
         let while_cond_t = expr_type while_cond_typechecked in
@@ -1278,11 +1376,14 @@ and type_check_expr
         | _ -> failwith "if-expr condition must resolve to Bool"
         in
 
-        WhileExpr(
-          Nil,
-          init_stmts_typechecked,
-          while_cond_typechecked,
-          then_stmts_typechecked
+        (
+          tc_ctxt,
+          WhileExpr(
+            Nil,
+            init_stmts_typechecked,
+            while_cond_typechecked,
+            then_stmts_typechecked
+          )
         )
 
     | FuncCall(_, f_name, exprs) ->
@@ -1307,8 +1408,9 @@ and type_check_expr
               end
             in
 
-            let exprs_typechecked =
-              List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
+            let (tc_ctxt, exprs_typechecked) =
+              fold_left_map2
+                type_check_expr tc_ctxt params_t_lst_padded exprs
             in
             let exprs_t = List.map expr_type exprs_typechecked in
 
@@ -1337,7 +1439,7 @@ and type_check_expr
                 else failwith "Could not convert expr type to arg type"
             ) exprs_t_non_variadic params_non_variadic_t_lst in
 
-            FuncCall(f_ret_t, f_name, exprs_typechecked)
+            (tc_ctxt, FuncCall(f_ret_t, f_name, exprs_typechecked))
           end
 
         | None ->
@@ -1349,8 +1451,61 @@ and type_check_expr
                 g_yield_t |> ignore;
                 g_ret_t |> ignore;
                 failwith (Printf.sprintf "Unimplemented: generator %s" f_name)
+
             | None ->
-                failwith (Printf.sprintf "Error: no known function %s" f_name)
+                begin match (
+                  StrMap.find_opt f_name tc_ctxt.mod_ctxt.func_templates
+                ) with
+                | Some(
+                    FuncExternTemplateDecl(
+                      {f_template_decl={f_params; _}; _}
+                    ) as f_template_decl
+                  ) ->
+                    let (params_non_variadic_t_lst, _) =
+                      get_static_f_params f_params
+                    in
+
+                    let params_t_lst_padded = begin
+                        let len_diff =
+                          (List.length exprs) -
+                          (List.length params_non_variadic_t_lst)
+                        in
+                        if len_diff = 0 then
+                          params_non_variadic_t_lst
+                        else if len_diff > 0 then
+                          let padding =
+                            List.init len_diff (fun _ -> Undecided)
+                          in
+                          params_non_variadic_t_lst @ padding
+                        else
+                          failwith (
+                            "Unexpected shorter expr list than non-variadic " ^
+                            "params"
+                          )
+                      end
+                    in
+
+                    let (tc_ctxt, exprs_typechecked) =
+                      fold_left_map2
+                        type_check_expr tc_ctxt params_t_lst_padded exprs
+                    in
+                    let exprs_t = List.map expr_type exprs_typechecked in
+
+                    let mod_ctxt =
+                      instantiate_func_template
+                        tc_ctxt.mod_ctxt f_template_decl StrMap.empty exprs_t
+                    in
+                    let tc_ctxt = {tc_ctxt with mod_ctxt = mod_ctxt} in
+
+                    (* Recurse with what should now be a fully-instantiated
+                    version of the templated signature. *)
+                    type_check_expr tc_ctxt expected_t exp
+
+                | _ ->
+                    failwith (
+                      Printf.sprintf "Error: no known function %s" f_name
+                    )
+                end
             end
         end
 
@@ -1383,8 +1538,8 @@ and type_check_expr
           end
         in
 
-        let exprs_typechecked =
-          List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
+        let (tc_ctxt, exprs_typechecked) =
+          fold_left_map2 type_check_expr tc_ctxt params_t_lst_padded exprs
         in
         let exprs_t = List.map expr_type exprs_typechecked in
 
@@ -1420,7 +1575,9 @@ and type_check_expr
           tc_ctxt expected_t (FuncCall(f_ret_t, f_name, exprs_typechecked))
 
     | ExprInvoke(_, func_exp, exprs) ->
-        let func_exp_typechecked = _type_check_expr func_exp in
+        let (tc_ctxt, func_exp_typechecked) =
+          _type_check_expr tc_ctxt func_exp
+        in
         let func_t = expr_type func_exp_typechecked in
 
         let (ret_t, f_fake_params) = begin match func_t with
@@ -1450,8 +1607,8 @@ and type_check_expr
           end
         in
 
-        let exprs_typechecked =
-          List.map2 (type_check_expr tc_ctxt) params_t_lst_padded exprs
+        let (tc_ctxt, exprs_typechecked) =
+          fold_left_map2 type_check_expr tc_ctxt params_t_lst_padded exprs
         in
         let exprs_t = List.map expr_type exprs_typechecked in
 
@@ -1480,7 +1637,7 @@ and type_check_expr
             else failwith "Could not convert expr type to arg type"
         ) exprs_t_non_variadic params_non_variadic_t_lst in
 
-        ExprInvoke(ret_t, func_exp_typechecked, exprs_typechecked)
+        (tc_ctxt, ExprInvoke(ret_t, func_exp_typechecked, exprs_typechecked))
 
     | ArrayExpr(_, exprs) ->
         let elem_expected_t = begin match expected_t with
@@ -1489,18 +1646,22 @@ and type_check_expr
           | _ -> failwith "Unexpectedly expecting non-array type in array expr"
         end in
 
-        let exprs_typechecked =
-          List.map (type_check_expr tc_ctxt elem_expected_t) exprs
+        let (tc_ctxt, exprs_typechecked) =
+          List.fold_left_map (
+            fun tc_ctxt expr -> type_check_expr tc_ctxt elem_expected_t expr
+          ) tc_ctxt exprs
         in
         let expr_t_lst = List.map expr_type exprs_typechecked in
         let common_t = common_type_of_lst expr_t_lst in
         let arr_t = Array(common_t, List.length exprs) in
 
-        ArrayExpr(arr_t, exprs_typechecked)
+        (tc_ctxt, ArrayExpr(arr_t, exprs_typechecked))
 
     | IndexExpr(_, idx, arr) ->
-        let idx_typechecked = type_check_expr tc_ctxt Undecided idx in
-        let arr_typechecked = _type_check_expr arr in
+        let (tc_ctxt, idx_typechecked) =
+          type_check_expr tc_ctxt Undecided idx
+        in
+        let (tc_ctxt, arr_typechecked) = _type_check_expr tc_ctxt arr in
         let idx_t = expr_type idx_typechecked in
         let arr_t = expr_type arr_typechecked in
         if is_index_type idx_t && is_indexable_type arr_t
@@ -1523,15 +1684,21 @@ and type_check_expr
                 begin match idx_typechecked with
                 | ValInt(_, i) ->
                     begin if i < sz && i >= 0 then
-                      IndexExpr(
-                        yielded_t, idx_typechecked, arr_typechecked
+                      (
+                        tc_ctxt,
+                        IndexExpr(
+                          yielded_t, idx_typechecked, arr_typechecked
+                        )
                       )
                     else
                       failwith "Static out-of-bounds index into array"
                     end
                 | _ ->
-                    IndexExpr(
-                      yielded_t, idx_typechecked, arr_typechecked
+                    (
+                      tc_ctxt,
+                      IndexExpr(
+                        yielded_t, idx_typechecked, arr_typechecked
+                      )
                     )
                 end
 
@@ -1554,7 +1721,7 @@ and type_check_expr
             )
 
     | TupleIndexExpr(_, idx, agg) ->
-        let agg_typechecked = _type_check_expr agg in
+        let (tc_ctxt, agg_typechecked) = _type_check_expr tc_ctxt agg in
         let agg_t = expr_type agg_typechecked in
         let tuple_idx_typechecked = begin
           match agg_t with
@@ -1583,7 +1750,7 @@ and type_check_expr
               )
         end in
 
-        tuple_idx_typechecked
+        (tc_ctxt, tuple_idx_typechecked)
 
     | TupleExpr(_, exprs) ->
         let elem_expected_t_lst = begin match expected_t with
@@ -1598,13 +1765,13 @@ and type_check_expr
               )
         end in
 
-        let exprs_typechecked =
-          List.map2 (type_check_expr tc_ctxt) elem_expected_t_lst exprs
+        let (tc_ctxt, exprs_typechecked) =
+          fold_left_map2 type_check_expr tc_ctxt elem_expected_t_lst exprs
         in
         let exprs_t_lst = List.map expr_type exprs_typechecked in
         let tuple_t = Tuple(exprs_t_lst) in
 
-        TupleExpr(tuple_t, exprs_typechecked)
+        (tc_ctxt, TupleExpr(tuple_t, exprs_typechecked))
 
     | VariantCtorExpr(_, ctor_name, field_exprs) ->
         (* Get a symmetric list of expected types for each field in the variant
@@ -1694,8 +1861,8 @@ and type_check_expr
             ()
         in
 
-        let field_exprs_typechecked =
-          List.map2 (type_check_expr tc_ctxt) ctor_expected_ts field_exprs
+        let (tc_ctxt, field_exprs_typechecked) =
+          fold_left_map2 type_check_expr tc_ctxt ctor_expected_ts field_exprs
         in
         let field_exprs_ts = List.map expr_type field_exprs_typechecked in
 
@@ -1731,21 +1898,27 @@ and type_check_expr
           end
         in
 
-        VariantCtorExpr(inferred_v_t, ctor_name, field_exprs_typechecked)
+        (
+          tc_ctxt,
+          VariantCtorExpr(inferred_v_t, ctor_name, field_exprs_typechecked)
+        )
 
     | MatchExpr(_, matched_expr, pattern_expr_pairs) ->
-        let matched_expr_tc = _type_check_expr matched_expr in
+        let (tc_ctxt, matched_expr_tc) =
+          _type_check_expr tc_ctxt matched_expr
+        in
         let matched_t = expr_type matched_expr_tc in
 
-        let typecheck_pattern_expr_pair (patt, exp) =
+        let typecheck_pattern_expr_pair tc_ctxt (patt, exp) =
           let (tc_ctxt, patt_tc) = type_check_pattern tc_ctxt matched_t patt in
-          let exp_tc = type_check_expr tc_ctxt Undecided exp in
+          let (tc_ctxt, exp_tc) = type_check_expr tc_ctxt Undecided exp in
 
-          (patt_tc, exp_tc)
+          (tc_ctxt, (patt_tc, exp_tc))
         in
 
-        let pattern_expr_pairs_tc =
-          List.map typecheck_pattern_expr_pair pattern_expr_pairs
+        let (tc_ctxt, pattern_expr_pairs_tc) =
+          List.fold_left_map
+            typecheck_pattern_expr_pair tc_ctxt pattern_expr_pairs
         in
 
         let patts = List.map (fun (patt, _) -> patt) pattern_expr_pairs_tc in
@@ -1756,12 +1929,12 @@ and type_check_expr
           List.map (fun (_, exp) -> expr_type exp) pattern_expr_pairs_tc
         ) in
 
-        MatchExpr(common_t, matched_expr_tc, pattern_expr_pairs_tc)
+        (tc_ctxt, MatchExpr(common_t, matched_expr_tc, pattern_expr_pairs_tc))
     end
   in
 
   (* First, allow the typechecker to try to infer types as much as possible. *)
-  let exp_typechecked = _type_check_expr exp in
+  let (tc_ctxt, exp_typechecked) = _type_check_expr tc_ctxt exp in
   let exp_typechecked_t = expr_type exp_typechecked in
 
   (* If we were given an explicit type that the expression must match, then we
@@ -1834,7 +2007,7 @@ and type_check_expr
     inject_type_into_expr inject_t exp_typechecked
   in
 
-  exp_typechecked_injected
+  (tc_ctxt, exp_typechecked_injected)
 
 (* The infrastructure below to typecheck/exhaustion check/usefulness check match
 patterns is inefficient and does not adhere to modern developments in

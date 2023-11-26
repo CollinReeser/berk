@@ -1263,9 +1263,16 @@ and fmt_func_signature
   ?(print_typ = false) ?(f_template_params=[]) {f_name; f_params; f_ret_t;}
   : string
 =
+  let template_params_fmt =
+    if List.length f_template_params > 0 then
+      Printf.sprintf "[%s]"
+        (fmt_join_func_template_params "," f_template_params)
+    else
+      ""
+  in
   Printf.sprintf "fn %s%s(%s)%s"
     f_name
-    (fmt_join_func_template_params "," f_template_params)
+    template_params_fmt
     (fmt_join_func_params "," f_params)
     (fmt_ret_t ~print_typ:print_typ f_ret_t)
 
