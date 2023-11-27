@@ -155,7 +155,7 @@ let () =
       return;
     }
 
-    fn populate_array_with_random(mut arr: ref [8]i32) {
+    fn populate_array_with_random<`a, `b>(mut arr: ref [`a]`b) {
       while {let mut i = 0;} i < 8 {
         ignore printf("Pre-rand arr val : [%d]\n", arr.*[i]);
 
@@ -177,7 +177,7 @@ let () =
       return;
     }
 
-    fn sort_array_badly<`a>(mut arr: ref [`a]i32) {
+    fn sort_array_badly<`a, `b>(mut arr: ref [`a]`b) {
       while {let mut i = 0;} i < 8 {
         let mut ref_i_val = ref arr.*[i];
 
@@ -198,7 +198,7 @@ let () =
     }
 
     // Adapted from: https://rosettacode.org/wiki/Sorting_algorithms/Heapsort#C++
-    fn shift_down(mut heap: ref [2000000]i32, mut i: i32, max: i32) {
+    fn shift_down<`a, `b>(mut heap: ref [`a]`b, mut i: i32, max: i32) {
       while {
         let mut i_big: i32;
         let mut c1: i32;
@@ -227,7 +227,7 @@ let () =
     }
 
     // Adapted from: https://rosettacode.org/wiki/Sorting_algorithms/Heapsort#C++
-    fn to_heap(mut arr: ref [2000000]i32) {
+    fn to_heap<`a, `b>(mut arr: ref [`a]`b) {
         while {let mut i = (2000000 / 2) - 1;} i >= 0 {
             shift_down(arr, i, 2000000);
             i = i - 1;
@@ -235,7 +235,7 @@ let () =
     }
 
     // Adapted from: https://rosettacode.org/wiki/Sorting_algorithms/Heapsort#C++
-    fn heap_sort(mut arr: ref [2000000]i32) {
+    fn heap_sort<`a, `b>(mut arr: ref [`a]`b) {
         to_heap(arr);
 
         while {let mut end = 2000000 - 1;} end > 0 {
@@ -700,7 +700,7 @@ let () =
       return;
     }
 
-    fn largest_num(vals: ref [4]i32): ref i32 {
+    fn largest_num<`a, `b>(vals: ref [`a]`b): ref `b {
       let mut largest = 0;
       let mut idx_largest = 0;
 
