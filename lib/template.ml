@@ -150,16 +150,34 @@ let instantiate_func_extern_template_decl
 ;;
 
 
-let instantiate_patt tvars_to_ts exp : pattern =
-  tvars_to_ts |> ignore;
-  exp |> ignore;
-  failwith "Unimplemented"
+let rec instantiate_patt tvars_to_ts patt : pattern =
+  let _instantiate_patt p = instantiate_patt tvars_to_ts p in
+  let _concretify_unbound_types t = concretify_unbound_types tvars_to_ts t in
+
+  begin match patt with
+  | PNil
+  | PBool(_) -> patt
+
+  | Wild(t) -> Wild(_concretify_unbound_types t)
+  | RequireWild(t) -> RequireWild(_concretify_unbound_types t)
+  | VarBind(t, name) -> VarBind(_concretify_unbound_types t, name)
+  | PInt(t, range) -> PInt(_concretify_unbound_types t, range)
+
+  | PTuple(t, patts) ->
+      PTuple(_concretify_unbound_types t, List.map _instantiate_patt patts)
+
+  | Ctor(t, name, patts) ->
+      Ctor(_concretify_unbound_types t, name, List.map _instantiate_patt patts)
+
+  | PatternAs(t, patt, name) ->
+      PatternAs(_concretify_unbound_types t, _instantiate_patt patt, name)
+  end
 ;;
 
 
 let rec instantiate_expr tvars_to_ts exp : expr =
   let _instantiate_expr e = instantiate_expr tvars_to_ts e in
-  let _concretify_unbound_types e = concretify_unbound_types tvars_to_ts e in
+  let _concretify_unbound_types t = concretify_unbound_types tvars_to_ts t in
 
   begin match exp with
   | ValF128(_) | ValF64(_) | ValF32(_)
@@ -296,7 +314,7 @@ let rec instantiate_expr tvars_to_ts exp : expr =
 
 and instantiate_assign_idx_lval tvars_to_ts assign_idx_lval : assign_idx_lval =
   let _instantiate_expr e = instantiate_expr tvars_to_ts e in
-  let _concretify_unbound_types e = concretify_unbound_types tvars_to_ts e in
+  let _concretify_unbound_types t = concretify_unbound_types tvars_to_ts t in
 
   begin match assign_idx_lval with
   | ALStaticIndex(t, i) -> ALStaticIndex(_concretify_unbound_types t, i)

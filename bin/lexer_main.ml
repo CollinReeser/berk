@@ -716,9 +716,9 @@ let () =
       return ref vals.*[idx_largest];
     }
 
-    fn largest_num_alt(vals: ref [4]i32): ref i32 {
-      let mut largest = 0;
-      let mut maybe_ref_largest: Opt<ref i32> = None;
+    fn largest_num_alt<`a, `b>(vals: ref [`a]`b): ref `b {
+      let mut largest: `b;
+      let mut maybe_ref_largest: Opt<ref `b> = None;
 
       while {let mut i = 0;} i < 4 {
         if vals.*[i] > largest {
@@ -735,8 +735,8 @@ let () =
       };
     }
 
-    fn largest_num_alt_alt(vals: ref [4]i32): ref i32 {
-      let mut largest = 0;
+    fn largest_num_alt_alt<`a, `b>(vals: ref [`a]`b): ref `b {
+      let mut largest: `b;
       let mut ref_largest = ref vals.*[0];
 
       while {let mut i = 0;} i < 4 {
@@ -760,7 +760,14 @@ let () =
       buf[4] = 10;
 
       let largest_in_buf = largest_num(ref buf);
-      ignore printf("Largest in buf: [%d] (78)\n", largest_in_buf.*);
+      let largest_in_buf_alt = largest_num_alt(ref buf);
+      let largest_in_buf_alt_alt = largest_num_alt_alt(ref buf);
+      ignore printf(
+        "Largest in buf: [%d] [%d] [%d] (78)\n",
+        largest_in_buf.*,
+        largest_in_buf_alt.*,
+        largest_in_buf_alt_alt.*
+      );
 
       let mut buf_2: [5]f64;
       buf_2[0] = 37.5;
@@ -770,7 +777,14 @@ let () =
       buf_2[4] = 10.9;
 
       let largest_in_buf_2 = largest_num(ref buf_2);
-      ignore printf("Largest in buf_2: [%f] (~78.8)\n", largest_in_buf_2.*);
+      let largest_in_buf_2_alt = largest_num_alt(ref buf_2);
+      let largest_in_buf_2_alt_alt = largest_num_alt_alt(ref buf_2);
+      ignore printf(
+        "Largest in buf_2: [%f] [%f] [%f] (~78.8)\n",
+        largest_in_buf_2.*,
+        largest_in_buf_2_alt.*,
+        largest_in_buf_2_alt_alt.*
+      );
 
       return;
     }
