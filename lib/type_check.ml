@@ -1,6 +1,7 @@
 open Ast
-open Typing
 open Ir
+open Template
+open Typing
 open Utility
 
 module StrMap = Map.Make(String)
@@ -372,6 +373,54 @@ let variant_ctor_to_variant_type ?(disambiguator = "") mod_ctxt ctor =
 ;;
 
 
+(* Given a templated module declaration, any pre-existing mappings from type
+variable to type, and the ordered list of the types of each of the function
+invocation arguments, attempt to fully monomorphize the templated invocation,
+returning the monomorphized/instantiated func, and a mod_ctxt populated with
+the monomorphized/instantiated func. *)
+let instantiate_func_template
+  mod_ctxt mod_decl tvars_to_ts func_arg_ts
+  : (module_context * string * module_decl)
+=
+  begin match mod_decl with
+  | FuncExternTemplateDecl(
+      {f_template_decl={f_name; _}; _} as f_template_decl
+    ) ->
+      let f_decl =
+        instantiate_func_extern_template_decl
+          f_template_decl tvars_to_ts func_arg_ts
+      in
+
+      let func_sigs = StrMap.add f_name f_decl mod_ctxt.func_sigs in
+      let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
+
+      let func_extern_decl = FuncExternDecl(f_decl) in
+
+      (mod_ctxt, f_name, func_extern_decl)
+
+  | FuncTemplateDef(f_template_def) ->
+      let {f_decl={f_name=mangled_f_name; _} as f_decl; _} as f_def =
+        instantiate_func_template_def
+          f_template_def tvars_to_ts func_arg_ts
+      in
+
+      let func_sigs = StrMap.add mangled_f_name f_decl mod_ctxt.func_sigs in
+      let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
+
+      let func_extern_decl = FuncDef(f_def) in
+
+      (mod_ctxt, mangled_f_name, func_extern_decl)
+
+  | _ ->
+      failwith (
+        Printf.sprintf
+          "Unimplemented: instantiate_func_template: [[ %s ]]\n"
+          (fmt_mod_decl mod_decl)
+      )
+  end
+;;
+
+
 let rec type_check_mod_decls mod_decls =
   let mod_ctxt = default_mod_ctxt in
 
@@ -470,42 +519,58 @@ and type_check_mod_decl
 
   | FuncTemplateDef(
       {
-        f_template_def_decl={
-          f_template_params;
-          f_template_decl={f_name; f_params; f_ret_t}
-        };
-        f_template_stmts
-      }
+        f_template_def_decl={f_template_decl={f_name; f_params; _}; _}; _
+      } as f_template_def
     ) ->
-      f_template_params |> ignore;
-      f_name |> ignore;
-      f_params |> ignore;
-      f_ret_t |> ignore;
-      f_template_stmts |> ignore;
-      failwith "Unimplemented: FuncTemplateDef"
-
-  | FuncExternDecl({f_name; f_params; f_ret_t}) ->
-      let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
+      let _ = match (StrMap.find_opt f_name mod_ctxt.func_templates) with
         | None -> ()
         | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
       in
 
-      (* If the return type is a user-defined type, bind it now. *)
-      let f_ret_t = bind_type mod_ctxt f_ret_t in
-      let f_decl_ast = {f_name; f_params; f_ret_t} in
-
       if not (confirm_at_most_trailing_var_arg f_params)
       then failwith "Only zero-or-one trailing var-args permitted"
       else
-        let func_sigs_up = begin
+        let func_templates_up = begin
           StrMap.add
             f_name
-            {f_name; f_params; f_ret_t}
-            mod_ctxt.func_sigs
+            mod_decl
+            mod_ctxt.func_templates
         end in
-        let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
+        let mod_ctxt_up = {
+          mod_ctxt with func_templates = func_templates_up
+        } in
 
-        (mod_ctxt_up, [], FuncExternDecl(f_decl_ast))
+        (mod_ctxt_up, [], FuncTemplateDef(f_template_def))
+
+  | FuncExternDecl({f_name; f_params; f_ret_t}) ->
+      begin match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
+      | Some(f_decl) ->
+          let _ =
+            Printf.printf
+              "NOTE: Ignoring duplicate extern declaration [%s]\n"
+              f_name
+          in
+          (mod_ctxt, [], FuncExternDecl(f_decl))
+
+      | None ->
+          (* If the return type is a user-defined type, bind it now. *)
+          let f_ret_t = bind_type mod_ctxt f_ret_t in
+          let f_decl_ast = {f_name; f_params; f_ret_t} in
+
+          if not (confirm_at_most_trailing_var_arg f_params)
+          then failwith "Only zero-or-one trailing var-args permitted"
+          else
+            let func_sigs_up = begin
+              StrMap.add
+                f_name
+                {f_name; f_params; f_ret_t}
+                mod_ctxt.func_sigs
+            end in
+            let mod_ctxt_up = {mod_ctxt with func_sigs = func_sigs_up} in
+
+            (mod_ctxt_up, [], FuncExternDecl(f_decl_ast))
+      end
+
 
   | FuncDef(
       {f_decl = {f_name; f_params; f_ret_t}; f_stmts}
@@ -669,118 +734,6 @@ and type_check_generator mod_ctxt generator_def =
       };
     }
   )
-
-(* Attend to unify a templated extern fn declaration with the types of the
-arguments used to instantiate it. *)
-and instantiate_func_extern_template_decl
-  mod_ctxt
-  {f_template_decl={f_name; f_params; f_ret_t}; f_template_params}
-  (tvars_to_ts : berk_t StrMap.t)
-  func_arg_ts
-  : (module_context * func_decl_t)
-=
-  f_template_params |> ignore;
-
-  (* Attempt to acquire a mapping from type variables to types, given the
-  arguments to the function, and any tvars that might be in the templated
-  function signature. *)
-  let tvars_to_ts =
-    List.fold_left2 (
-      fun tvars_to_ts (_, _, param_t) arg_t ->
-        map_tvars_to_types ~init_map:tvars_to_ts param_t arg_t
-    ) tvars_to_ts f_params func_arg_ts
-  in
-
-  (* Attempt to fully instantiate the parameters of the templated signature. *)
-  let f_params =
-    List.map (
-      fun (name, qual, t) ->
-        let concrete_t = concretify_unbound_types tvars_to_ts t in
-
-        if (is_concrete_type ~verbose:true concrete_t) then
-          (name, qual, concrete_t)
-        else
-          failwith (
-            Printf.sprintf
-              "Error: instantiate_func_extern_template_decl: type %s\n"
-              (fmt_type t)
-          )
-
-    ) f_params
-  in
-
-  (* Attempt to fully instantiate the return type of the templated signature. *)
-  let f_ret_t = begin
-    let concrete_t = concretify_unbound_types tvars_to_ts f_ret_t in
-
-    if (is_concrete_type ~verbose:true concrete_t) then
-      concrete_t
-    else
-      failwith (
-        Printf.sprintf
-          "Error: instantiate_func_extern_template_decl: type %s\n"
-          (fmt_type concrete_t)
-      )
-  end in
-
-  (mod_ctxt, {f_name; f_params; f_ret_t})
-
-
-(* Given a templated module declaration, any pre-existing mappings from type
-variable to type, and the ordered list of the types of each of the function
-invocation arguments, attempt to fully monomorphize the templated invocation,
-returning the monomorphized/instantiated func, and a mod_ctxt populated with
-the monomorphized/instantiated func. *)
-and instantiate_func_template
-  mod_ctxt mod_decl tvars_to_ts func_arg_ts : (module_context * module_decl)
-=
-  begin match mod_decl with
-  | FuncExternTemplateDecl(
-      {f_template_decl={f_name; _}; _} as f_template_decl
-    ) ->
-      let (mod_ctxt, f_decl) =
-        instantiate_func_extern_template_decl
-          mod_ctxt f_template_decl tvars_to_ts func_arg_ts
-      in
-
-      let func_sigs = StrMap.add f_name f_decl mod_ctxt.func_sigs in
-      let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
-
-      let func_extern_decl = FuncExternDecl(f_decl) in
-
-      let _ =
-        Printf.printf "instantiate_func_template: before [[ %s ]], after [[ %s ]]\n%!"
-          (fmt_mod_decl mod_decl)
-          (fmt_mod_decl func_extern_decl)
-      in
-
-      (mod_ctxt, func_extern_decl)
-
-  | FuncTemplateDef(
-      {
-        f_template_def_decl={
-          f_template_params;
-          f_template_decl={f_name; f_params; f_ret_t}
-        };
-        f_template_stmts
-      }
-    ) ->
-      f_template_params |> ignore;
-      f_params |> ignore;
-      f_ret_t |> ignore;
-      f_template_stmts |> ignore;
-
-      failwith (
-        Printf.sprintf "Unimplemented: instantiate_func_template: %s\n" f_name
-      )
-
-  | _ ->
-      failwith (
-        Printf.sprintf
-          "Unimplemented: instantiate_func_template: [[ %s ]]\n"
-          (fmt_mod_decl mod_decl)
-      )
-  end
 
 and update_vars_with_idents_quals vars_init idents_quals types =
   let idents_quals_types = List.combine idents_quals types in
@@ -1110,7 +1063,9 @@ and type_check_expr
     | ValInt(Undecided, i) ->
         begin match expected_t with
         (* Barring more specific information, default to reasonable int type. *)
-        | Undecided -> ([], ValInt(I32, i))
+        | Undecided
+        | Unbound(_) ->
+            ([], ValInt(I32, i))
 
         | I64 | I32 | I16 | I8 -> ([], ValInt(expected_t, i))
         | U64 | U32 | U16 | U8 ->
@@ -1460,7 +1415,7 @@ and type_check_expr
           )
         )
 
-    | FuncCall(_, f_name, exprs) ->
+    | FuncCall(dummy_t, f_name, exprs) ->
         begin match (StrMap.find_opt f_name tc_ctxt.mod_ctxt.func_sigs) with
         | Some({f_params; f_ret_t; _}) ->
           begin
@@ -1526,53 +1481,82 @@ and type_check_expr
                 failwith (Printf.sprintf "Unimplemented: generator %s" f_name)
 
             | None ->
+                let get_exprs_t f_params =
+                  let (params_non_variadic_t_lst, is_var_arg) =
+                    get_static_f_params f_params
+                  in
+
+                  if is_var_arg then
+                    failwith "Unimplemented: VarArg FuncExternTemplateDecl"
+                  ;
+
+                  let params_t_lst_padded = begin
+                      let len_diff =
+                        (List.length exprs) -
+                        (List.length params_non_variadic_t_lst)
+                      in
+                      if len_diff = 0 then
+                        params_non_variadic_t_lst
+                      else if len_diff > 0 then
+                        let padding =
+                          List.init len_diff (fun _ -> Undecided)
+                        in
+                        params_non_variadic_t_lst @ padding
+                      else
+                        failwith (
+                          "Unexpected shorter expr list than non-variadic " ^
+                          "params"
+                        )
+                    end
+                  in
+
+                  let (tc_decls, exprs_typechecked) =
+                    _type_check_t_exp_zip tc_ctxt params_t_lst_padded exprs
+                  in
+
+                  let exprs_t = List.map expr_type exprs_typechecked in
+
+                  (tc_decls, exprs_t)
+                in
+
                 begin match (
                   StrMap.find_opt f_name tc_ctxt.mod_ctxt.func_templates
                 ) with
                 | Some(
-                    FuncExternTemplateDecl(
-                      {f_template_decl={f_params; _}; _}
-                    ) as f_template_decl
+                    (
+                      FuncExternTemplateDecl(
+                        {f_template_decl={f_params; _}; _}
+                      ) as f_template
+                    )
+                      |
+                    (
+                      FuncTemplateDef(
+                        {
+                          f_template_def_decl={
+                            f_template_decl={f_params; _}; _
+                          }; _
+                        }
+                      ) as f_template
+                    )
                   ) ->
-                    let (params_non_variadic_t_lst, _) =
-                      get_static_f_params f_params
-                    in
 
-                    let params_t_lst_padded = begin
-                        let len_diff =
-                          (List.length exprs) -
-                          (List.length params_non_variadic_t_lst)
-                        in
-                        if len_diff = 0 then
-                          params_non_variadic_t_lst
-                        else if len_diff > 0 then
-                          let padding =
-                            List.init len_diff (fun _ -> Undecided)
-                          in
-                          params_non_variadic_t_lst @ padding
-                        else
-                          failwith (
-                            "Unexpected shorter expr list than non-variadic " ^
-                            "params"
-                          )
-                      end
-                    in
+                    let (tc_decls, exprs_t) = get_exprs_t f_params in
 
-                    let (tc_decls, exprs_typechecked) =
-                      _type_check_t_exp_zip tc_ctxt params_t_lst_padded exprs
-                    in
-                    let exprs_t = List.map expr_type exprs_typechecked in
-
-                    let (mod_ctxt, new_mod_decl) =
+                    let (
+                      mod_ctxt, mangled_f_name, new_mod_decl
+                    ) =
                       instantiate_func_template
-                        tc_ctxt.mod_ctxt f_template_decl StrMap.empty exprs_t
+                        tc_ctxt.mod_ctxt f_template StrMap.empty exprs_t
                     in
                     let tc_ctxt = {tc_ctxt with mod_ctxt = mod_ctxt} in
 
                     (* Recurse with what should now be a fully-instantiated
                     version of the templated signature. *)
                     let (recurse_tc_decls, exp_typechecked) =
-                      type_check_expr tc_ctxt expected_t exp
+                      type_check_expr
+                        tc_ctxt
+                        expected_t
+                        (FuncCall(dummy_t, mangled_f_name, exprs))
                     in
 
                     (

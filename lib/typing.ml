@@ -990,7 +990,7 @@ let rec concretify_unbound_types (tvar_to_t : berk_t StrMap.t) typ =
   | SizeTemplatedArray(typ, Unbound(tvar)) ->
       begin match (StrMap.find_opt tvar tvar_to_t) with
       | Some(UnboundSize(i)) ->
-          Array(typ, i)
+          concretify_unbound_types tvar_to_t (Array(typ, i))
 
       | _ -> Unbound(tvar)
       end

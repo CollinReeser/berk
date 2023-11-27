@@ -25,6 +25,10 @@ let () =
     extern fn rand(): i32
     extern fn calloc(num: i64, size: i64): ref [2000000]i32
 
+    fn identity_template<`a>(x: `a): `a {
+      return x;
+    }
+
     fn get_2000000_ints(): ref [2000000]i32 {
       return calloc(2000000, 4);
     }
@@ -915,6 +919,20 @@ let () =
       return;
     }
 
+    fn test_identity_template() {
+      let a = identity_template(5);
+      let b = identity_template(5.0);
+      let c = identity_template(true);
+      let d = identity_template("hello!");
+
+      ignore printf(
+        "a: [%d] (5), b: [%f] (~5.0), c: [%d] (1), d: [%s] (hello!)\n",
+        a, b, c, d
+      );
+
+      return;
+    }
+
     fn main(): i8 {
       let dup_hello_1 = "Hello, world!";
       let dup_hello_2 = "Hello, world!";
@@ -1744,6 +1762,8 @@ let () =
       test_quad_args();
 
       test_variants_with_nil_instantiation();
+
+      test_identity_template();
 
       return 0;
     }
