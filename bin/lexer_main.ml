@@ -147,7 +147,7 @@ let () =
       return rand() % modulus;
     }
 
-    fn swap(mut ref_x: ref i32, mut ref_y: ref i32) {
+    fn swap<`a>(mut ref_x: ref `a, mut ref_y: ref `a) {
       let tmp = ref_x.*;
       ref_x.* = ref_y.*;
       ref_y.* = tmp;
@@ -177,7 +177,7 @@ let () =
       return;
     }
 
-    fn sort_array_badly(mut arr: ref [8]i32) {
+    fn sort_array_badly<`a>(mut arr: ref [`a]i32) {
       while {let mut i = 0;} i < 8 {
         let mut ref_i_val = ref arr.*[i];
 

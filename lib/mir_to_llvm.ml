@@ -640,13 +640,13 @@ let codegen_func_decl_mir mod_ctxt {f_name; f_params; f_ret_rt; _} =
   let func_sigs = StrMap.add f_name new_func mod_ctxt.func_sigs in
   let mod_ctxt = {mod_ctxt with func_sigs = func_sigs} in
 
-  (mod_ctxt, new_func)
+  mod_ctxt
 
 
 let codegen_func_mir
-  llvm_ctxt the_fpm builder mod_ctxt (mir_ctxt : mir_ctxt)
+  llvm_ctxt the_fpm builder mod_ctxt ({f_name; _} as mir_ctxt : mir_ctxt)
 =
-  let (mod_ctxt, new_func) = codegen_func_decl_mir mod_ctxt mir_ctxt in
+  let new_func = StrMap.find f_name mod_ctxt.func_sigs in
 
   (* Establish our function-specific codegen context given the above setup. *)
   let func_ctxt = {
@@ -698,20 +698,17 @@ let codegen_func_mirs
   (mod_gen_ctxt : module_gen_context)
   (mir_ctxts : mir_ctxt list)
 =
+  (* Pre-populate the mod_ctxt with LLVM function signatures, so that all
+  functions are available to call regardless of order that each function is
+  actually populated with instructions. *)
+  let mod_gen_ctxt =
+    List.fold_left codegen_func_decl_mir mod_gen_ctxt mir_ctxts
+  in
+
   let _ =
     List.fold_left (
       fun mod_gen_ctxt mir_ctxt ->
-        let ({bbs; _} : mir_ctxt) = mir_ctxt in
-        if StrMap.is_empty bbs then
-          let (mod_gen_ctxt, _) =
-            codegen_func_decl_mir mod_gen_ctxt mir_ctxt
-          in
-          mod_gen_ctxt
-        else
-          let mod_gen_ctxt =
-            codegen_func_mir llvm_ctxt the_fpm builder mod_gen_ctxt mir_ctxt
-          in
-          mod_gen_ctxt
+        codegen_func_mir llvm_ctxt the_fpm builder mod_gen_ctxt mir_ctxt
     ) mod_gen_ctxt mir_ctxts
   in
 
