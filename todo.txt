@@ -22,6 +22,8 @@ TODO:
     [X] - Support taking references to temporaries + temp lifetime extension
     [X] - Support passing references as function arguments
     [X] - Support variants containing references
+    [X] - Support basic function templates
+    [ ] - Expand function template support
     [ ] - Disallow redundant overlapping integer ranges in match expr
     [ ] - Support for variant field labels
     [ ] - Add parsing support for truncate/extend

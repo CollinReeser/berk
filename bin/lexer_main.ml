@@ -239,7 +239,7 @@ let () =
         to_heap(arr);
 
         while {let mut end = 2000000 - 1;} end > 0 {
-            swap(arr.*[0], arr.*[end]);
+            swap(ref arr.*[0], ref arr.*[end]);
 
             shift_down(arr, 0, end);
 

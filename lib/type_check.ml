@@ -5,6 +5,7 @@ open Typing
 open Utility
 
 module StrMap = Map.Make(String)
+module StrSet = Set.Make(String)
 
 type module_context = {
   func_sigs: func_decl_t StrMap.t;
@@ -447,8 +448,61 @@ let rec type_check_mod_decls mod_decls =
     Printf.printf "]\n"
   end in
 
-  (* Keep processing new decls until there are no new ones. *)
+  (* New decls come from template instantiations. Keep processing new decls
+  until there are no new ones. *)
   let rec _type_check_mod_decls_exhaust mod_ctxt decls_rem decls_tced_so_far =
+    let rec _filter_unique seen decls_so_far decls : module_decl list =
+      let filtered_decls_rev =
+        begin match decls with
+        | [] -> decls_so_far
+        | decl :: rest ->
+            let (unique, seen) =
+              begin match decl with
+              | FuncExternTemplateDecl({f_template_decl={f_name; _}; _})
+              | FuncTemplateDef(
+                  {f_template_def_decl={f_template_decl={f_name; _}; _}; _}
+                ) ->
+                  let unique =
+                    not (StrMap.mem f_name mod_ctxt.func_templates) &&
+                    not (StrSet.mem f_name seen)
+                  in
+                  let seen = StrSet.add f_name seen in
+                  (unique, seen)
+
+              | FuncExternDecl({f_name; _})
+              | FuncDef({f_decl={f_name; _}; _}) ->
+                  let unique =
+                    not (StrMap.mem f_name mod_ctxt.func_sigs) &&
+                    not (StrSet.mem f_name seen)
+                  in
+                  let seen = StrSet.add f_name seen in
+                  (unique, seen)
+
+              | GeneratorDef({g_decl={g_name; _}; _}) ->
+                  let unique =
+                    not (StrMap.mem g_name mod_ctxt.generator_sigs) &&
+                    not (StrSet.mem g_name seen)
+                  in
+                  let seen = StrSet.add g_name seen in
+                  (unique, seen)
+
+              | VariantDecl(_) -> (true, seen)
+              end
+            in
+            if unique then
+              _filter_unique seen (decl :: decls_so_far) rest
+            else
+              _filter_unique seen decls_so_far rest
+        end
+      in
+      List.rev filtered_decls_rev
+    in
+
+    (* Filter out any apparent duplicates, as we assume any "duplicates" are in
+    fact just templates that have been instantiated the same way more than once.
+    *)
+    let decls_rem = _filter_unique StrSet.empty [] decls_rem in
+
     begin match decls_rem with
     | [] -> (mod_ctxt, decls_tced_so_far)
     | _ ->
@@ -499,7 +553,7 @@ and type_check_mod_decl
     ) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_templates) with
         | None -> ()
-        | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
+        | Some(_) -> failwith ("Multiple declarations of func extern " ^ f_name)
       in
 
       if not (confirm_at_most_trailing_var_arg f_params)
@@ -524,7 +578,7 @@ and type_check_mod_decl
     ) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_templates) with
         | None -> ()
-        | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
+        | Some(_) -> failwith ("Multiple declarations of func template " ^ f_name)
       in
 
       if not (confirm_at_most_trailing_var_arg f_params)
@@ -577,7 +631,7 @@ and type_check_mod_decl
     ) ->
       let _ = match (StrMap.find_opt f_name mod_ctxt.func_sigs) with
         | None -> ()
-        | Some(_) -> failwith ("Multiple declarations of func " ^ f_name)
+        | Some(_) -> failwith ("Multiple declarations of func def " ^ f_name)
       in
 
       (* If the return type is a user-defined type, bind it now. *)
@@ -607,7 +661,7 @@ and type_check_mod_decl
       let {g_decl = {g_name; g_params; g_yield_t; g_ret_t}; g_stmts} = g_ast in
       let _ = match (StrMap.find_opt g_name mod_ctxt.generator_sigs) with
         | None -> ()
-        | Some(_) -> failwith ("Multiple declarations of func " ^ g_name)
+        | Some(_) -> failwith ("Multiple declarations of gen def " ^ g_name)
       in
 
       (* If the return type is a user-defined type, bind it now. *)

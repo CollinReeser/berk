@@ -1254,7 +1254,7 @@ let rec merge_types lhs_orig_t rhs_orig_t : berk_t =
       ) ->
         failwith (
           Printf.sprintf
-            "Unimplemented: Merging unbound vs bound types: [%s] vs [%s]"
+            "Unimplemented: Merging dissimilar types: [%s] vs [%s]"
             (fmt_type lhs_orig_t) (fmt_type rhs_orig_t)
         )
 
