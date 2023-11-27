@@ -701,7 +701,7 @@ let () =
     }
 
     fn largest_num<`a, `b>(vals: ref [`a]`b): ref `b {
-      let mut largest = 0;
+      let mut largest: `b;
       let mut idx_largest = 0;
 
       while {let mut i = 0;} i < 4 {
@@ -749,6 +749,30 @@ let () =
       }
 
       return ref_largest;
+    }
+
+    fn test_largest_num_impls() {
+      let mut buf: [5]i32;
+      buf[0] = 37;
+      buf[1] = 45;
+      buf[2] = 16;
+      buf[3] = 78;
+      buf[4] = 10;
+
+      let largest_in_buf = largest_num(ref buf);
+      ignore printf("Largest in buf: [%d] (78)\n", largest_in_buf.*);
+
+      let mut buf_2: [5]f64;
+      buf_2[0] = 37.5;
+      buf_2[1] = 45.6;
+      buf_2[2] = 16.7;
+      buf_2[3] = 78.8;
+      buf_2[4] = 10.9;
+
+      let largest_in_buf_2 = largest_num(ref buf_2);
+      ignore printf("Largest in buf_2: [%f] (~78.8)\n", largest_in_buf_2.*);
+
+      return;
     }
 
     fn if_is_expr_test() {
@@ -1764,6 +1788,8 @@ let () =
       test_variants_with_nil_instantiation();
 
       test_identity_template();
+
+      test_largest_num_impls();
 
       return 0;
     }
