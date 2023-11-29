@@ -266,6 +266,8 @@ and is_concrete_expr ?(verbose=false) expr =
             ) pattern_exp_pairs
           )
         )
+  | TemplateVar(_)
+  | TemplateMixinCall(_, _) -> false
   end in
 
   let _ = if verbose then
@@ -383,6 +385,10 @@ let instantiate_func_template
   mod_ctxt mod_decl tvars_to_ts func_arg_ts
   : (module_context * string * module_decl)
 =
+  let tvars_to_args =
+    update_tvars_to_args_with_tvars_to_ts StrMap.empty tvars_to_ts
+  in
+
   begin match mod_decl with
   | FuncExternTemplateDecl(
       {f_template_decl={f_name; _}; _} as f_template_decl
@@ -402,7 +408,7 @@ let instantiate_func_template
   | FuncTemplateDef(f_template_def) ->
       let {f_decl={f_name=mangled_f_name; _} as f_decl; _} as f_def =
         instantiate_func_template_def
-          f_template_def tvars_to_ts func_arg_ts
+          f_template_def tvars_to_args func_arg_ts
       in
 
       let func_sigs = StrMap.add mangled_f_name f_decl mod_ctxt.func_sigs in
@@ -2058,6 +2064,13 @@ and type_check_expr
         (
           (matched_tc_decls @ arms_tc_decls),
           MatchExpr(common_t, matched_expr_tc, pattern_expr_pairs_tc)
+        )
+
+    | TemplateVar(_)
+    | TemplateMixinCall(_, _) ->
+        failwith (
+          Printf.sprintf "Error: Cannot type_check_expr with %s\n"
+            (dump_expr_ast exp)
         )
     end
   in

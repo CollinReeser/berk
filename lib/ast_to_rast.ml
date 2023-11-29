@@ -267,6 +267,13 @@ let rec expr_to_rexpr ctxt expr : (a_to_r_ctxt * rexpr) =
         ) ctxt patts_to_exprs
       in
       (ctxt, RMatchExpr(rt, re_cond, rpatts_to_rexprs))
+
+  | TemplateVar(_)
+  | TemplateMixinCall(_, _) ->
+      failwith (
+        Printf.sprintf
+          "Error: Nonsense attempt to expr_to_rexpr of %s\n" (fmt_expr expr)
+      )
   end
 
 and pattern_to_rpattern patt : rpattern =

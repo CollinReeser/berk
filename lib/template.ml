@@ -77,6 +77,25 @@ let mangle_f_name f_name (arg_ts : berk_t list) ret_t : string =
 ;;
 
 
+let tvars_to_ts_from_tvars_to_args tvars_to_args =
+  List.fold_left (
+    fun tvars_to_ts (tvar, arg) ->
+      begin match arg with
+      | TemplateType(t) -> StrMap.add tvar t tvars_to_ts
+      | _ -> tvars_to_ts
+      end
+  ) StrMap.empty (StrMap.bindings tvars_to_args)
+;;
+
+
+let update_tvars_to_args_with_tvars_to_ts tvars_to_args tvars_to_ts =
+  List.fold_left (
+    fun tvars_to_args (tvar, t) ->
+      StrMap.add tvar (TemplateType(t)) tvars_to_args
+  ) tvars_to_args (StrMap.bindings tvars_to_ts)
+;;
+
+
 let instantiate_func_template_decl
   {f_name; f_params; f_ret_t}
   (tvars_to_ts : berk_t StrMap.t)
@@ -150,8 +169,14 @@ let instantiate_func_extern_template_decl
 ;;
 
 
-let rec instantiate_patt tvars_to_ts patt : pattern =
-  let _instantiate_patt p = instantiate_patt tvars_to_ts p in
+let rec instantiate_patt
+  (tvars_to_args : template_arg StrMap.t)
+  patt
+  : pattern
+=
+  let tvars_to_ts = tvars_to_ts_from_tvars_to_args tvars_to_args in
+
+  let _instantiate_patt p = instantiate_patt tvars_to_args p in
   let _concretify_unbound_types t = concretify_unbound_types tvars_to_ts t in
 
   begin match patt with
@@ -175,8 +200,14 @@ let rec instantiate_patt tvars_to_ts patt : pattern =
 ;;
 
 
-let rec instantiate_expr tvars_to_ts exp : expr =
-  let _instantiate_expr e = instantiate_expr tvars_to_ts e in
+let rec instantiate_expr
+  (tvars_to_args : template_arg StrMap.t)
+  exp
+  : expr
+=
+  let tvars_to_ts = tvars_to_ts_from_tvars_to_args tvars_to_args in
+
+  let _instantiate_expr e = instantiate_expr tvars_to_args e in
   let _concretify_unbound_types t = concretify_unbound_types tvars_to_ts t in
 
   begin match exp with
@@ -236,7 +267,7 @@ let rec instantiate_expr tvars_to_ts exp : expr =
             | IfIsGeneral(e) -> IfIsGeneral(_instantiate_expr e)
             | IfIsPattern(e, patt) ->
                 IfIsPattern(
-                  _instantiate_expr e, instantiate_patt tvars_to_ts patt
+                  _instantiate_expr e, instantiate_patt tvars_to_args patt
                 )
             end
         ) cond_es
@@ -252,16 +283,16 @@ let rec instantiate_expr tvars_to_ts exp : expr =
   | BlockExpr(t, stmts, e) ->
       BlockExpr(
         _concretify_unbound_types t,
-        instantiate_stmts tvars_to_ts stmts,
+        instantiate_stmts tvars_to_args stmts,
         _instantiate_expr e
       )
 
   | WhileExpr(t, init_stmts, cond_e, then_stmts) ->
       WhileExpr(
         _concretify_unbound_types t,
-        instantiate_stmts tvars_to_ts init_stmts,
+        instantiate_stmts tvars_to_args init_stmts,
         _instantiate_expr cond_e,
-        instantiate_stmts tvars_to_ts then_stmts
+        instantiate_stmts tvars_to_args then_stmts
       )
 
   | ArrayExpr(t, es) ->
@@ -300,7 +331,7 @@ let rec instantiate_expr tvars_to_ts exp : expr =
       let concrete_patt_e_pairs =
         List.map (
           fun (patt, e) ->
-            (instantiate_patt tvars_to_ts patt, _instantiate_expr e)
+            (instantiate_patt tvars_to_args patt, _instantiate_expr e)
         ) patt_e_pairs
       in
 
@@ -309,11 +340,89 @@ let rec instantiate_expr tvars_to_ts exp : expr =
         _instantiate_expr matched_e,
         concrete_patt_e_pairs
       )
+
+  | TemplateVar(tv) ->
+      let arg = StrMap.find tv tvars_to_args in
+      begin match arg with
+      | TemplateExpr(e) -> _instantiate_expr e
+      | _ ->
+          failwith (
+            Printf.sprintf "Error: Cannot instantiate TemplateVar with %s"
+              (dump_template_arg_ast arg)
+          )
+      end
+
+  | TemplateMixinCall(tv, arg_es) ->
+      let concrete_arg_es = List.map _instantiate_expr arg_es in
+
+      let arg = StrMap.find tv tvars_to_args in
+      begin match arg with
+      | TemplateMixin(params, body_e) ->
+          if List.length concrete_arg_es <> List.length params then
+            failwith (
+              Printf.sprintf
+                "Error: Mismatch in arguments to parameters in: %s of %s"
+                (fmt_expr exp)
+                (dump_template_arg_ast arg)
+            )
+          ;
+
+          (* TODO: This is pretty weak, but should do the job for now. *)
+          let uniq_params =
+            List.fold_left (
+              fun uniq_params param ->
+                StrMap.add param ("__" ^ param) uniq_params
+            ) StrMap.empty params
+          in
+
+          (* Create let bindings to create named variables that map to the
+          expression arguments the mixin was called with. *)
+          let bindings =
+            List.map2 (
+              fun param concrete_e ->
+                let uniq_param = StrMap.find param uniq_params in
+                DeclStmt(uniq_param, {mut=false}, Undecided, concrete_e)
+            ) params concrete_arg_es
+          in
+
+          (* Locally update the template variable mapping to include mappings
+          from the mixin parameters to their new named let-binding variables. *)
+          let tvars_to_args =
+            List.fold_left (
+              fun tvars_to_args param ->
+                let uniq_param = StrMap.find param uniq_params in
+                let t_e = TemplateExpr(ValVar(Undecided, uniq_param)) in
+                StrMap.add param t_e tvars_to_args
+            ) tvars_to_args params
+          in
+
+          (* Instantiate the body of the mixin with our _updated_ mapping of
+          tvars_to_args that includes the mapping from the mixin's params to
+          the named variables created from let bindings that bind variable names
+          to the mixin params. *)
+          let concrete_body_e = instantiate_expr tvars_to_args body_e in
+
+          BlockExpr(
+            Undecided,
+            bindings,
+            concrete_body_e
+          )
+
+      | _ ->
+          failwith (
+            Printf.sprintf "Error: Cannot instantiate TemplateMixinCall with %s"
+              (dump_template_arg_ast arg)
+          )
+      end
   end
 
 
-and instantiate_assign_idx_lval tvars_to_ts assign_idx_lval : assign_idx_lval =
-  let _instantiate_expr e = instantiate_expr tvars_to_ts e in
+and instantiate_assign_idx_lval
+  tvars_to_args assign_idx_lval : assign_idx_lval
+=
+  let tvars_to_ts = tvars_to_ts_from_tvars_to_args tvars_to_args in
+
+  let _instantiate_expr e = instantiate_expr tvars_to_args e in
   let _concretify_unbound_types t = concretify_unbound_types tvars_to_ts t in
 
   begin match assign_idx_lval with
@@ -323,9 +432,11 @@ and instantiate_assign_idx_lval tvars_to_ts assign_idx_lval : assign_idx_lval =
   end
 
 
-and instantiate_stmt tvars_to_ts stmt : stmt =
-  let _instantiate_expr e = instantiate_expr tvars_to_ts e in
-  let _concretify_unbound_types e = concretify_unbound_types tvars_to_ts e in
+and instantiate_stmt tvars_to_args stmt : stmt =
+  let tvars_to_ts = tvars_to_ts_from_tvars_to_args tvars_to_args in
+
+  let _instantiate_expr e = instantiate_expr tvars_to_args e in
+  let _concretify_unbound_types t = concretify_unbound_types tvars_to_ts t in
 
   begin match stmt with
   | YieldStmt(e) -> YieldStmt(_instantiate_expr e)
@@ -359,15 +470,19 @@ and instantiate_stmt tvars_to_ts stmt : stmt =
       AssignStmt(
         name,
         _concretify_unbound_types decl_t,
-        List.map (instantiate_assign_idx_lval tvars_to_ts) assign_idx_lvals,
+        List.map (instantiate_assign_idx_lval tvars_to_args) assign_idx_lvals,
         _instantiate_expr e
       )
 
   end
 
 
-and instantiate_stmts tvars_to_ts stmts : stmt list =
-  List.map (instantiate_stmt tvars_to_ts) stmts
+and instantiate_stmts
+  (tvars_to_args : template_arg StrMap.t)
+  stmts
+  : stmt list
+=
+  List.map (instantiate_stmt tvars_to_args) stmts
 ;;
 
 
@@ -378,18 +493,24 @@ let instantiate_func_template_def
     f_template_def_decl={f_template_params; f_template_decl=f_template_decl};
     f_template_stmts
   }
-  (tvars_to_ts : berk_t StrMap.t)
+  (tvars_to_args : template_arg StrMap.t)
   func_arg_ts
   : func_def_t
 =
   f_template_params |> ignore;
+
+  let tvars_to_ts = tvars_to_ts_from_tvars_to_args tvars_to_args in
 
   let (tvars_to_ts, {f_name; f_params; f_ret_t}) =
     instantiate_func_template_decl
       f_template_decl tvars_to_ts func_arg_ts
   in
 
-  let f_stmts = instantiate_stmts tvars_to_ts f_template_stmts in
+  let tvars_to_args =
+    update_tvars_to_args_with_tvars_to_ts tvars_to_args tvars_to_ts
+  in
+
+  let f_stmts = instantiate_stmts tvars_to_args f_template_stmts in
 
   let f_name_mangled =
     mangle_f_name f_name (List.map (fun (_, _, t) -> t) f_params) f_ret_t

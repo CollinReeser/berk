@@ -104,9 +104,35 @@ and expr =
   pairs of patterns and their resultant expressions *)
   | MatchExpr of berk_t * expr * (pattern * expr) list
 
+  (* Template variables/concepts that will be replaced during template
+  instantiation, and should not survive to actual typechecking. *)
+
+  (* e.g. simply "`a", which will be replaced by an rvalue expression. *)
+  | TemplateVar of string
+
+  (* e.g., "`cmp(x, 3, func(...))", an instantiation of a mixin provided as a
+  template argument. *)
+  | TemplateMixinCall of string * expr list
+
 and if_is_expr =
   | IfIsGeneral of expr
   | IfIsPattern of expr * pattern
+
+(* "Arguments" that a template type variable might refer to. *)
+and template_arg =
+  (* Used to instantiate a template variable used in defining a type. *)
+  | TemplateType of berk_t
+
+  (* Used to instantiate a template variable used in an expression position.
+  From source, this can only be a basic rval (an int value, float value, quoted string,
+  etc), but during compilation of some more complex template instantiations it
+  may still be a more complex expression (like a named variable). *)
+  | TemplateExpr of expr
+
+  (* Used to instantiate a template variable mixin invocation. The string list
+  is the list of template variable arguments to the mixin, and the expression is
+  what needs to be "instantiated". The expression is likely a BlockExpr. *)
+  | TemplateMixin of string list * expr
 
 and int_range =
   (* A specific integer. *)
@@ -474,6 +500,14 @@ let rec dump_expr_ast ?(ind="") expr =
         (dump_expr_ast ~ind:ind_next e_cond)
         dumped_patts_to_exps
         ind
+  | TemplateVar(tv) ->
+      sprintf "TemplateVar(%s)" tv
+  | TemplateMixinCall(tv, es) ->
+      let ind_next = ind ^ " " in
+      let dumped_es = List.map (dump_expr_ast ~ind:ind_next) es in
+      let dumped_es = List.map (sprintf "%s%s" ind) dumped_es in
+      let dumped_es = fmt_join_strs ",\n" dumped_es in
+      sprintf "TemplateMixinCall(%s,\n%s)" tv dumped_es
   end
 
 and dump_assign_idx_lval_ast ?(ind="") assign_idx_lval =
@@ -1028,6 +1062,14 @@ and fmt_expr ?(init_ind = false) ?(ind = "") ?(print_typ = false) ex : string =
         pattern_exprs_fmt
         ind
 
+  | TemplateVar(tv) -> tv
+
+  | TemplateMixinCall(tv, es) ->
+      Printf.sprintf "%s%s(%s)"
+        init_ind
+        tv
+        (fmt_join_exprs ~ind:ind ~print_typ:print_typ ", " es)
+
 and expr_type exp =
   match exp with
   | ValNil -> Nil
@@ -1059,6 +1101,13 @@ and expr_type exp =
   | TupleExpr(typ, _) -> typ
   | VariantCtorExpr(typ, _, _) -> typ
   | MatchExpr(typ, _, _) -> typ
+
+  | TemplateVar(_)
+  | TemplateMixinCall(_, _) ->
+      failwith (
+        Printf.sprintf
+          "Error: Nonsense attempt to expr_type of %s\n" (fmt_expr exp)
+      )
 
 and fmt_pattern ?(print_typ=false) ?(init_ind="") pattern =
   let open Printf in
@@ -1410,6 +1459,29 @@ let fmt_mod_decl
 
   | VariantDecl(v_ast) ->
       Printf.sprintf "%s"(fmt_variant_decl ~pretty_unbound:pretty_unbound v_ast)
+  end
+;;
+
+
+let dump_template_arg_ast ?(ind="") arg : string =
+  let open Printf in
+  begin match arg with
+  | TemplateType(t) -> sprintf "TemplateType(%s)" (fmt_type t)
+  | TemplateExpr(e) ->
+      let ind_next = ind ^ "  " in
+      sprintf "TemplateExpr(\n%s%s\n%s)"
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+
+  | TemplateMixin(params, e) ->
+      let ind_next = ind ^ "  " in
+      let params_fmt = fmt_join_strs ", " params in
+      sprintf "TemplateMixin(%s,\n%s%s\n%s)"
+        params_fmt
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
   end
 ;;
 
@@ -2421,6 +2493,13 @@ let rewrite_to_unique_varnames
           WhileExpr(
             t, init_stmts_rewritten, exp_cond_rewritten, then_stmts_rewritten
           )
+        )
+
+    | TemplateVar(_)
+    | TemplateMixinCall(_, _) ->
+        failwith (
+          Printf.sprintf
+            "Error: Nonsense attempt to _rewrite_exp of %s\n" (fmt_expr exp)
         )
 
     end
