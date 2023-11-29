@@ -731,7 +731,7 @@ let () =
       let mut largest: `b;
       let mut maybe_ref_largest: Opt<ref `b> = None;
 
-      while {let mut i = 0;} i < 4 {
+      while {let mut i = 0;} i < `a {
         if vals.*[i] > largest {
           largest = vals.*[i];
           maybe_ref_largest = Some(ref vals.*[i]);
@@ -750,7 +750,7 @@ let () =
       let mut largest: `b;
       let mut ref_largest = ref vals.*[0];
 
-      while {let mut i = 0;} i < 4 {
+      while {let mut i = 0;} i < `a {
         if vals.*[i] > largest {
           largest = vals.*[i];
           ref_largest = ref vals.*[i];
