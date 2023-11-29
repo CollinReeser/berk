@@ -345,6 +345,7 @@ let rec instantiate_expr
       let arg = StrMap.find tv tvars_to_args in
       begin match arg with
       | TemplateExpr(e) -> _instantiate_expr e
+      | TemplateType(UnboundSize(sz)) -> ValInt(Undecided, sz)
       | _ ->
           failwith (
             Printf.sprintf "Error: Cannot instantiate TemplateVar with %s"

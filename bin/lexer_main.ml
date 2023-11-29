@@ -147,6 +147,17 @@ let () =
       return rand() % modulus;
     }
 
+    fn print_array_i<`a, `b>(arr: ref [`a]`b) {
+      ignore printf("Printing arr of size [%d]:\n", `a);
+
+      while {let mut i = 0;} i < `a {
+        ignore printf("  [%d] -> %d\n", i, arr.*[i]);
+        i = i + 1;
+      }
+
+      return;
+    }
+
     fn swap<`a>(mut ref_x: ref `a, mut ref_y: ref `a) {
       let tmp = ref_x.*;
       ref_x.* = ref_y.*;
@@ -156,19 +167,19 @@ let () =
     }
 
     fn populate_array_with_random<`a, `b>(mut arr: ref [`a]`b) {
-      while {let mut i = 0;} i < 8 {
+      while {let mut i = 0;} i < `a {
         ignore printf("Pre-rand arr val : [%d]\n", arr.*[i]);
 
         i = i + 1;
       }
 
-      while {let mut i = 0;} i < 8 {
+      while {let mut i = 0;} i < `a {
         arr.*[i] = get_random_number(1000);
 
         i = i + 1;
       }
 
-      while {let mut i = 0;} i < 8 {
+      while {let mut i = 0;} i < `a {
         ignore printf("Post-rand arr val: [%d]\n", arr.*[i]);
 
         i = i + 1;
@@ -178,10 +189,10 @@ let () =
     }
 
     fn sort_array_badly<`a, `b>(mut arr: ref [`a]`b) {
-      while {let mut i = 0;} i < 8 {
+      while {let mut i = 0;} i < `a {
         let mut ref_i_val = ref arr.*[i];
 
-        while {let mut j = i + 1;} j < 8 {
+        while {let mut j = i + 1;} j < `a {
           let mut ref_j_val = ref arr.*[j];
 
           if ref_i_val.* > ref_j_val.* {
@@ -228,8 +239,8 @@ let () =
 
     // Adapted from: https://rosettacode.org/wiki/Sorting_algorithms/Heapsort#C++
     fn to_heap<`a, `b>(mut arr: ref [`a]`b) {
-        while {let mut i = (2000000 / 2) - 1;} i >= 0 {
-            shift_down(arr, i, 2000000);
+        while {let mut i = (`a / 2) - 1;} i >= 0 {
+            shift_down(arr, i, `a);
             i = i - 1;
         }
     }
@@ -238,7 +249,7 @@ let () =
     fn heap_sort<`a, `b>(mut arr: ref [`a]`b) {
         to_heap(arr);
 
-        while {let mut end = 2000000 - 1;} end > 0 {
+        while {let mut end = `a - 1;} end > 0 {
             swap(ref arr.*[0], ref arr.*[end]);
 
             shift_down(arr, 0, end);
@@ -704,7 +715,7 @@ let () =
       let mut largest: `b;
       let mut idx_largest = 0;
 
-      while {let mut i = 0;} i < 4 {
+      while {let mut i = 0;} i < `a {
         if vals.*[i] > largest {
           largest = vals.*[i];
           idx_largest = i;
@@ -752,18 +763,15 @@ let () =
     }
 
     fn test_largest_num_impls() {
-      let mut buf: [5]i32;
-      buf[0] = 37;
-      buf[1] = 45;
-      buf[2] = 16;
-      buf[3] = 78;
-      buf[4] = 10;
+      let mut buf: [8]i32;
+      populate_array_with_random(ref buf);
+      print_array_i(ref buf);
 
       let largest_in_buf = largest_num(ref buf);
       let largest_in_buf_alt = largest_num_alt(ref buf);
       let largest_in_buf_alt_alt = largest_num_alt_alt(ref buf);
       ignore printf(
-        "Largest in buf: [%d] [%d] [%d] (78)\n",
+        "Largest in buf: [%d] [%d] [%d]\n",
         largest_in_buf.*,
         largest_in_buf_alt.*,
         largest_in_buf_alt_alt.*

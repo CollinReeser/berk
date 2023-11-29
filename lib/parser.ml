@@ -2142,6 +2142,7 @@ and parse_expr_atom ?(ind="") tokens : (token list * expr) =
   | Integer(_, num) :: rest -> (rest, ValInt(Undecided, num))
   | String(_, str) :: rest -> (rest, ValStr(str))
   | LowIdent(_, name) :: rest -> (rest, ValName(Undecided, name))
+  | TickIdent(_, name) :: rest -> (rest, TemplateVar(name))
 
   | _ -> raise Backtrack
   end
