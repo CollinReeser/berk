@@ -233,7 +233,7 @@ type variant_decl_t = {
 
 type f_param = (ident_t * var_qual * berk_t)
 
-type f_template_param = ident_t
+type f_template_param = (ident_t * template_arg option)
 
 and func_decl_t = {
   f_name: string;
@@ -636,6 +636,34 @@ and _dump_params_ast ind params =
     "[]"
   end
 
+and dump_template_arg_ast ?(ind="") arg : string =
+  let open Printf in
+  begin match arg with
+  | TemplateType(t) -> sprintf "TemplateType(%s)" (fmt_type t)
+  | TemplateExpr(e) ->
+      let ind_next = ind ^ "  " in
+      sprintf "TemplateExpr(\n%s%s\n%s)"
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+
+  | TemplateMixin(params, e) ->
+      let ind_next = ind ^ "  " in
+      let params_fmt = fmt_join_strs ", " params in
+      sprintf "TemplateMixin(%s,\n%s%s\n%s)"
+        params_fmt
+        ind_next
+        (dump_expr_ast ~ind:ind_next e)
+        ind
+  end
+
+and dump_template_param_ast (name, maybe_arg) =
+  match maybe_arg with
+  | Some(arg) ->
+      Printf.sprintf "f_template_param(%s=%s)" name (dump_template_arg_ast arg)
+  | None ->
+      Printf.sprintf "f_template_param(%s)" name
+
 and dump_func_decl_t_ast
   ?(ind="") {f_name; f_params; f_ret_t}
 =
@@ -652,7 +680,9 @@ and dump_func_template_decl_t_ast
 =
   let open Printf in
   let dumped_f_params = _dump_params_ast ind f_params in
-  let dumped_f_template_params = fmt_join_strs "; " f_template_params in
+  let dumped_f_template_params =
+    fmt_join_strs "; " (List.map dump_template_param_ast f_template_params)
+  in
   sprintf
     (
       "func_template_decl_t{" ^^
@@ -1360,7 +1390,7 @@ and fmt_join_func_params delim params : string =
         (fmt_join_func_params delim xs)
 
 and fmt_join_func_template_params delim params : string =
-  fmt_join_strs delim params
+  fmt_join_strs delim (List.map dump_template_param_ast params)
 ;;
 
 let fmt_stmts ?(print_typ = false) stmts : string =
@@ -1459,29 +1489,6 @@ let fmt_mod_decl
 
   | VariantDecl(v_ast) ->
       Printf.sprintf "%s"(fmt_variant_decl ~pretty_unbound:pretty_unbound v_ast)
-  end
-;;
-
-
-let dump_template_arg_ast ?(ind="") arg : string =
-  let open Printf in
-  begin match arg with
-  | TemplateType(t) -> sprintf "TemplateType(%s)" (fmt_type t)
-  | TemplateExpr(e) ->
-      let ind_next = ind ^ "  " in
-      sprintf "TemplateExpr(\n%s%s\n%s)"
-        ind_next
-        (dump_expr_ast ~ind:ind_next e)
-        ind
-
-  | TemplateMixin(params, e) ->
-      let ind_next = ind ^ "  " in
-      let params_fmt = fmt_join_strs ", " params in
-      sprintf "TemplateMixin(%s,\n%s%s\n%s)"
-        params_fmt
-        ind_next
-        (dump_expr_ast ~ind:ind_next e)
-        ind
   end
 ;;
 

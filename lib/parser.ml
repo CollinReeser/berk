@@ -465,7 +465,11 @@ and parse_func_params ?(ind="") tokens : (token list * f_param list) =
   _parse_func_params ~ind:ind_next tokens []
 
 
-and parse_func_template_params ?(ind="") tokens : (token list * ident_t list) =
+(* This function assumes a `<` lesser was consumed already, and then proceeds
+to consume any/all template parameters, followed by the closing `>` greater. *)
+and parse_func_template_params
+  ?(ind="") tokens : (token list * f_template_param list)
+=
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
   let parse_func_template_param ?(ind="") tokens template_params_so_far =
@@ -473,7 +477,7 @@ and parse_func_template_params ?(ind="") tokens : (token list * ident_t list) =
 
     begin match tokens with
     | TickIdent(_, name) :: rest ->
-        (rest, (template_params_so_far @ [name]))
+        (rest, (template_params_so_far @ [(name, None)]))
 
     | _ :: _ ->
         (tokens, template_params_so_far)
