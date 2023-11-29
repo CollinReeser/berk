@@ -258,6 +258,38 @@ let () =
         }
     }
 
+    // Yields index of found value in sorted array, or -1.
+    fn binary_search<`a, `b>(arr: ref [`a]`b, val: `b): i32 {
+      let mut low = 0;
+      let mut high = `a;
+      let mut checks = 0;
+
+      while low <= high {
+        let mid = (low + high) / 2;
+
+        checks = checks + 1;
+
+        ignore printf(
+          "Check [%d]: index [%d] ([%d] <-> [%d]) for [%d] (%d)\n",
+          checks, mid, high, low, val, arr.*[mid]
+        );
+
+        if arr.*[mid] == val {
+          ignore printf("Found after [%d] checks.\n", checks);
+          return mid;
+        }
+        if arr.*[mid] > val {
+          high = mid - 1;
+        }
+        else {
+          low = mid + 1;
+        }
+      }
+
+      ignore printf("Not found after [%d] checks.\n", checks);
+      return -1;
+    }
+
     fn mess_with_memory() {
       let mut memory = get_2000000_ints();
 
@@ -1812,6 +1844,19 @@ let () =
       test_identity_template();
 
       test_largest_num_impls();
+
+      {
+        let search_buf: [16]i32;
+        populate_array_with_random(ref search_buf);
+        heap_sort(ref search_buf);
+        let search_value = 538;
+        print_array_i(ref search_buf);
+        ignore printf(
+          "Index of target value [%d]: [%d]\n",
+          search_value,
+          binary_search(ref search_buf, search_value)
+        );
+      }
 
       return 0;
     }
