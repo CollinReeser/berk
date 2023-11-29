@@ -143,6 +143,52 @@ let () =
       return;
     }
 
+    fn return_trivial_variant(): BinaryNoFields {
+      return Left;
+    }
+
+    fn return_same_field_variant(): BinarySameFields {
+      return North(10);
+    }
+
+    fn return_asymmetric_variant(): Binary {
+      return True(true);
+    }
+
+    fn return_multi_fields_variant(): MultipleFields {
+      return MultiTwo(false, One);
+    }
+
+    fn return_templated_variant(): Opt<bool> {
+      return Some(true);
+    }
+
+    fn return_templated_variant_templated<`a, `b>(arr: ref [`a]`b): Opt<i32> {
+      return Some(10);
+    }
+
+    fn templated_return_templated_variant_templated<`a, `b>(
+      arr: ref [`a]`b
+    ): Opt<`b> {
+      return Some(arr.*[0]);
+    }
+
+    fn test_return_variant() {
+      ignore return_trivial_variant();
+      ignore return_same_field_variant();
+      ignore return_asymmetric_variant();
+      ignore return_multi_fields_variant();
+      ignore return_templated_variant();
+
+      // TODO: Add support for these cases.
+
+//      let buf: [8]i32;
+//      ignore return_templated_variant_templated(ref buf);
+//      ignore templated_return_templated_variant_templated(ref buf);
+
+      return;
+    }
+
     fn get_random_number(modulus: i32): i32 {
       return rand() % modulus;
     }

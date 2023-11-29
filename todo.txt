@@ -25,6 +25,7 @@ TODO:
     [X] - Support basic function templates
     [ ] - Expand function template support
     [ ] - Disallow redundant overlapping integer ranges in match expr
+    [ ] - Support returning variants from templated functions
     [ ] - Support basic stmt-if-else-if-else
     [ ] - Support for variant field labels
     [ ] - Add parsing support for truncate/extend
