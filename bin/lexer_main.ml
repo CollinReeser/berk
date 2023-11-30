@@ -234,14 +234,16 @@ let () =
       return;
     }
 
-    fn sort_array_badly<`a, `b>(mut arr: ref [`a]`b) {
+    fn sort_array_badly<
+      `a, `b, `cmp = mixin(x, y){x > y}
+    >(mut arr: ref [`a]`b) {
       while {let mut i = 0;} i < `a {
         let mut ref_i_val = ref arr.*[i];
 
         while {let mut j = i + 1;} j < `a {
           let mut ref_j_val = ref arr.*[j];
 
-          if ref_i_val.* > ref_j_val.* {
+          if `cmp(ref_i_val.*, ref_j_val.*) {
             swap(ref_i_val, ref_j_val);
           }
 

@@ -382,12 +382,10 @@ invocation arguments, attempt to fully monomorphize the templated invocation,
 returning the monomorphized/instantiated func, and a mod_ctxt populated with
 the monomorphized/instantiated func. *)
 let instantiate_func_template
-  mod_ctxt mod_decl tvars_to_ts func_arg_ts
+  mod_ctxt mod_decl tvars_to_args func_arg_ts
   : (module_context * string * module_decl)
 =
-  let tvars_to_args =
-    update_tvars_to_args_with_tvars_to_ts StrMap.empty tvars_to_ts
-  in
+  let tvars_to_ts = tvars_to_ts_from_tvars_to_args tvars_to_args in
 
   begin match mod_decl with
   | FuncExternTemplateDecl(
@@ -1585,7 +1583,7 @@ and type_check_expr
                 | Some(
                     (
                       FuncExternTemplateDecl(
-                        {f_template_decl={f_params; _}; _}
+                        {f_template_decl={f_params; _}; f_template_params}
                       ) as f_template
                     )
                       |
@@ -1593,7 +1591,8 @@ and type_check_expr
                       FuncTemplateDef(
                         {
                           f_template_def_decl={
-                            f_template_decl={f_params; _}; _
+                            f_template_decl={f_params; _};
+                            f_template_params
                           }; _
                         }
                       ) as f_template
@@ -1602,11 +1601,21 @@ and type_check_expr
 
                     let (tc_decls, exprs_t) = get_exprs_t f_params in
 
+                    let tvars_to_args =
+                      List.fold_left (
+                        fun tvars_to_args (name, maybe_arg) ->
+                          begin match maybe_arg with
+                          | Some(arg) -> StrMap.add name arg tvars_to_args
+                          | None -> tvars_to_args
+                          end
+                      ) StrMap.empty f_template_params
+                    in
+
                     let (
                       mod_ctxt, mangled_f_name, new_mod_decl
                     ) =
                       instantiate_func_template
-                        tc_ctxt.mod_ctxt f_template StrMap.empty exprs_t
+                        tc_ctxt.mod_ctxt f_template tvars_to_args exprs_t
                     in
                     let tc_ctxt = {tc_ctxt with mod_ctxt = mod_ctxt} in
 

@@ -369,10 +369,13 @@ let rec instantiate_expr
           ;
 
           (* TODO: This is pretty weak, but should do the job for now. *)
+          (* FIXME: We need to update the body of the mixin to reflect using the
+          uniquified args. *)
           let uniq_params =
             List.fold_left (
               fun uniq_params param ->
-                StrMap.add param ("__" ^ param) uniq_params
+                (* StrMap.add param ("__" ^ param) uniq_params *)
+                StrMap.add param param uniq_params
             ) StrMap.empty params
           in
 

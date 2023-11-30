@@ -20,6 +20,7 @@ type token =
 | KWMatch of position
 | KWAs of position
 | KWIs of position
+| KWMixin of position
 | KWi8 of position
 | KWi16 of position
 | KWi32 of position
@@ -136,6 +137,7 @@ let fmt_token tok =
   | KWMatch(p)      -> Printf.sprintf "match  (kw)     : %s"   (fmt_pos p)
   | KWAs(p)         -> Printf.sprintf "as     (kw)     : %s"   (fmt_pos p)
   | KWIs(p)         -> Printf.sprintf "is     (kw)     : %s"   (fmt_pos p)
+  | KWMixin(p)      -> Printf.sprintf "mixin  (kw)     : %s"   (fmt_pos p)
   | KWi8(p)         -> Printf.sprintf "i8     (kw)     : %s"   (fmt_pos p)
   | KWi16(p)        -> Printf.sprintf "i16    (kw)     : %s"   (fmt_pos p)
   | KWi32(p)        -> Printf.sprintf "i32    (kw)     : %s"   (fmt_pos p)
@@ -307,6 +309,9 @@ let tokenize buf =
         _tokenize buf (tok :: tokens)
     | "is" ->
         let tok = KWIs(get_pos buf) in
+        _tokenize buf (tok :: tokens)
+    | "mixin" ->
+        let tok = KWMixin(get_pos buf) in
         _tokenize buf (tok :: tokens)
     | "i8" ->
         let tok = KWi8(get_pos buf) in

@@ -472,10 +472,46 @@ and parse_func_template_params
 =
   let ind_next = print_trace ind __FUNCTION__ tokens in
 
-  let parse_func_template_param ?(ind="") tokens template_params_so_far =
+  (* Parse mixin args after the opening paren, e.g. "x, y, z)" *)
+  let _parse_func_template_param ?(ind="") tokens template_params_so_far =
     let _ = print_trace ind __FUNCTION__ tokens in
 
+    let rec _parse_mixin_args tokens args_so_far =
+      begin match tokens with
+      | LowIdent(_, name) :: Comma(_) :: rest ->
+          let args_so_far = args_so_far @ [name] in
+          _parse_mixin_args rest args_so_far
+
+      | LowIdent(_, name) :: RParen(_) :: rest ->
+          let args_so_far = args_so_far @ [name] in
+          (rest, args_so_far)
+
+      | RParen(_) :: rest ->
+          (rest, args_so_far)
+
+      | tok :: _ ->
+          let fmted = fmt_token tok in
+          failwith (
+            Printf.sprintf
+              "Unexpected token [%s], expected lc-identifer" fmted
+          )
+
+      | [] ->
+          failwith
+            "Unexpected EOF while parsing `mixin` template param default arg"
+      end
+    in
+
     begin match tokens with
+    (* A template variable with a mixin as a default argument. *)
+    | TickIdent(_, name) :: Equal(_) :: KWMixin(_) :: LParen(_) :: rest ->
+        let (rest, mixin_args) = _parse_mixin_args rest [] in
+        let (rest, mixin_body) = parse_expr_block rest in
+        let template_mixin = TemplateMixin(mixin_args, mixin_body) in
+        (rest, (template_params_so_far @ [(name, Some(template_mixin))]))
+
+    (* A template variable (e.g., "`a"), with no associated default type/value.
+    *)
     | TickIdent(_, name) :: rest ->
         (rest, (template_params_so_far @ [(name, None)]))
 
@@ -491,7 +527,7 @@ and parse_func_template_params
     let ind_next = print_trace ind __FUNCTION__ tokens in
 
     let (rest, template_params_so_far) =
-      parse_func_template_param ~ind:ind_next tokens template_params_so_far
+      _parse_func_template_param ~ind:ind_next tokens template_params_so_far
     in
 
     begin match rest with
@@ -1350,6 +1386,8 @@ and parse_value ?(ind="") tokens : (token list * expr) =
     with Backtrack ->
     try parse_func_call ~ind:ind_next tokens
     with Backtrack ->
+    try parse_template_mixin_call ~ind:ind_next tokens
+    with Backtrack ->
     try parse_variant_ctor ~ind:ind_next tokens
     with Backtrack ->
     (* try *)
@@ -1434,6 +1472,21 @@ and parse_func_call ?(ind="") tokens : (token list * expr) =
   | LowIdent(_, f_name) :: LParen(_) :: rest ->
       let (rest, exps) = parse_func_call_args ~ind:ind_next rest in
       (rest, FuncCall(Undecided, f_name, exps))
+
+  | _ -> raise Backtrack
+  end
+
+
+and parse_template_mixin_call ?(ind="") tokens : (token list * expr) =
+  let ind_next = print_trace ind __FUNCTION__ tokens in
+
+  begin match tokens with
+  | TickIdent(_, tvar) :: LParen(_) :: RParen(_) :: rest ->
+      (rest, TemplateMixinCall(tvar, []))
+
+  | TickIdent(_, tvar) :: LParen(_) :: rest ->
+      let (rest, exps) = parse_func_call_args ~ind:ind_next rest in
+      (rest, TemplateMixinCall(tvar, exps))
 
   | _ -> raise Backtrack
   end
