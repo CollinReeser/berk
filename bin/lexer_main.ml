@@ -399,6 +399,11 @@ let () =
       return rand() % modulus;
     }
 
+    fn print_template_string<`a = mixin(){"hello, world!"}>() {
+      ignore printf("Given string: [%s]\n", `a());
+      return;
+    }
+
     fn print_array_i<`a, `b>(arr: ref [`a]`b) {
       ignore printf("Printing arr of size [%d]:\n", `a);
 
@@ -442,7 +447,9 @@ let () =
 
     fn sort_array_badly<
       `a, `b, `cmp = mixin(x, y){x > y}
-    >(mut arr: ref [`a]`b) {
+    >(
+      mut arr: ref [`a]`b
+    ) {
       while {let mut i = 0;} i < `a {
         let mut ref_i_val = ref arr.*[i];
 
@@ -2111,6 +2118,8 @@ let () =
           binary_search(ref search_buf, search_value)
         );
       }
+
+      print_template_string();
 
       test_bf()
 
