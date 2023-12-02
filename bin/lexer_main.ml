@@ -20,13 +20,219 @@ let () =
     extern fn printf(fmt: string, ...): i32
     extern fn getcwd(buf: ref [256]i8, size: u64): i32
     extern fn open(path: string, flags: i32): i32
-    extern fn read<`a>(fd: i32, buf: ref [`a]i8, count: u32): i32
+    extern fn read(fd: i32, buf: ref [65535]i8, count: u32): i32
     extern fn close(fd: i32): i32
+    extern fn getchar(): i8
+    extern fn putchar(ch: i8): i8
     extern fn rand(): i32
     extern fn calloc(num: i64, size: i64): ref [2000000]i32
 
     fn identity_template<`a>(x: `a): `a {
       return x;
+    }
+
+    fn copy_bytes<`a, `b, `c>(
+      from: ref [`a]`c, mut to: ref [`b]`c, to_start: i32, count: i32
+    ): bool {
+      if `a > `b || count > `a || to_start + count > `b {
+        ignore printf(
+          "Error: copy_bytes: `a: [%d], `b: [%d], to_start: [%d], count: [%d]\n",
+          `a, `b, to_start, count
+        );
+
+        return false;
+      }
+
+      while {let mut i = 0;} i < count {
+        to.*[to_start + i] = from.*[i];
+
+        i = i + 1;
+      }
+
+      return true;
+    }
+
+    fn read_file<`a>(
+      filepath: string, mut buf: ref [`a]i8, mut len: ref i32
+    ): bool {
+      let mut read_buf: [65535]i8;
+      let mut buf_idx = 0;
+
+      let o_rdonly = 0;
+      let fd = open(filepath, o_rdonly);
+      if fd == -1 {
+        return false;
+      }
+
+      while {let mut done_reading = false;} !done_reading {
+        let read_bytes = read(fd, ref read_buf, 65535);
+
+        if read_bytes == -1 {
+          ignore close(fd);
+          return false;
+        }
+        if read_bytes == 0 {
+          buf.*[buf_idx] = 0;
+          done_reading = true;
+        }
+        if read_bytes > 0 {
+          if !copy_bytes(ref read_buf, buf, buf_idx, read_bytes) {
+            ignore printf(
+              "Failed to copy bytes: [%d], [%d]\n", buf_idx, read_bytes
+            );
+          }
+
+          buf_idx = buf_idx + read_bytes;
+
+          if buf_idx + 65535 > `a {
+            ignore printf("read_file: About to read past end of buffer.\n");
+            return false;
+          }
+        }
+      }
+
+      ignore close(fd);
+
+      ignore printf("Total read: [%d]\n", buf_idx);
+
+      len.* = buf_idx;
+
+      return true;
+    }
+
+    fn bf_skip_loop_forward<`a>(instrs: ref [`a]i8, mut inst_ptr: i32): i32 {
+      inst_ptr = inst_ptr + 1;
+
+      while {let mut skip_count = 1;} skip_count > 0 {
+        // '['
+        if instrs.*[inst_ptr] == 91 {
+          skip_count = skip_count + 1;
+        }
+        // ']'
+        if instrs.*[inst_ptr] == 93 {
+          skip_count = skip_count - 1;
+        }
+
+        inst_ptr = inst_ptr + 1;
+      }
+
+      return inst_ptr;
+    }
+
+    fn bf_skip_loop_backward<`a>(instrs: ref [`a]i8, mut inst_ptr: i32): i32 {
+      inst_ptr = inst_ptr - 1;
+
+      while {let mut skip_count = 1;} skip_count > 0 {
+        // '['
+        if instrs.*[inst_ptr] == 91 {
+          skip_count = skip_count - 1;
+        }
+        // ']'
+        if instrs.*[inst_ptr] == 93 {
+          skip_count = skip_count + 1;
+        }
+
+        inst_ptr = inst_ptr - 1;
+      }
+
+      inst_ptr = inst_ptr + 1;
+
+      return inst_ptr;
+    }
+
+    fn bf_interpret<`a>(instrs: ref [`a]i8, instrs_end: i32) {
+      let mut data: [30000]i8;
+      //=
+      let mut inst_ptr = 0;
+      let mut data_ptr = 0;
+
+      while inst_ptr < instrs_end {
+        match instrs.*[inst_ptr] {
+        // '>'
+        | 62 -> {
+            data_ptr = data_ptr + 1;
+            inst_ptr = inst_ptr + 1;
+          }
+
+        // '<'
+        | 60 -> {
+            data_ptr = data_ptr - 1;
+            inst_ptr = inst_ptr + 1;
+          }
+
+        // '+'
+        | 43 -> {
+            data[data_ptr] = data[data_ptr] + 1;
+            inst_ptr = inst_ptr + 1;
+          }
+
+        // '-'
+        | 45 -> {
+            data[data_ptr] = data[data_ptr] - 1;
+            inst_ptr = inst_ptr + 1;
+          }
+
+        // '.'
+        | 46 -> {
+            ignore putchar(data[data_ptr]);
+            inst_ptr = inst_ptr + 1;
+          }
+
+        // ','
+        | 44 -> {
+            data[data_ptr] = getchar();
+            inst_ptr = inst_ptr + 1;
+          }
+
+        // '['
+        | 91 -> {
+            inst_ptr = if data[data_ptr] == 0 {
+              bf_skip_loop_forward(instrs, inst_ptr)
+            }
+            else {
+              inst_ptr + 1
+            };
+          }
+
+        // ']'
+        | 93 -> {
+            inst_ptr = if data[data_ptr] != 0 {
+              bf_skip_loop_backward(instrs, inst_ptr)
+            }
+            else {
+              inst_ptr + 1
+            };
+          }
+
+        // Comment character.
+        | _ -> { inst_ptr = inst_ptr + 1; }
+        }
+      }
+
+      return;
+    }
+
+    fn test_bf(): i8 {
+      // 4 MB instr buffer
+      let mut lost_instr: [4194304]i8;
+      // =
+      let mut len: i32;
+      // =
+      if !read_file("artifacts/hello.b", ref lost_instr, ref len) {
+        ignore printf("Failed to read Hello program!\n");
+
+        return 1;
+      }
+
+//      if !read_file("artifacts/cat.b", ref lost_instr, ref len) {
+//        ignore printf("Failed to read cat program!\n");
+//
+//        return 1;
+//      }
+
+      bf_interpret(ref lost_instr, len);
+
+      return 0;
     }
 
     fn get_2000000_ints(): ref [2000000]i32 {
@@ -1905,6 +2111,8 @@ let () =
           binary_search(ref search_buf, search_value)
         );
       }
+
+      test_bf()
 
       return 0;
     }
