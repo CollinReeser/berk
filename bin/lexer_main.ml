@@ -235,6 +235,115 @@ let () =
       return 0;
     }
 
+
+//    extern fn assert(test: bool)
+//    extern fn exit(code: i32)
+//    extern fn read(fd: i32, buf: *i8, count: u32): i32
+//
+//    fn cstd_read<`a>(fd: i32, mut buf: ref [`a]i8, count: u32): i32 {
+//      if count >= `a {
+//        ignore printf("Log err: cstd_read: %d >= %d\n", count, `a);
+//
+//        exit(127);
+//      }
+//
+//      let bytes_read = {
+//        let buf_ptr = ptr_cast!<*i8>(buf);
+//
+//        read(fd, buf_ptr, count)
+//      };
+//
+//      buf.*[bytes_read] = 0;
+//
+//      return bytes_read;
+//    }
+//
+//    extern fn malloc(num: u64): *i8
+//    fn cstd_malloc<`t, `num>(): ref [`num]`t {
+//      let mut mem = malloc(`num);
+//
+//      if mem == 0 {
+//        ignore printf("Dyn err: cstd_malloc: alloc failed\n");
+//
+//        exit(127);
+//      }
+//
+//      let mut mem_safe = ref_cast!<ref [`num]`t>(mem);
+//
+//      return mem_safe;
+//    }
+//
+//    extern fn free(ptr: *i8)
+//    fn cstd_free<`t, `num>(buf: ref [`num]`t) {
+//      let buf_ptr = ptr_cast!<*i8>(buf);
+//
+//      free(buf_ptr);
+//
+//      return;
+//    }
+//
+//    fn sort<`cmp = fn(a, b) {a > b}>
+//    fn sort<`cmp = {|a, b| a > b}>
+//    fn sort<`cmp = |a, b| a > b>
+//    fn sort<`cmp = |a, b| {a > b}>
+//    fn sort<`cmp = \{.a > .b}>
+//
+//    fn sort(`t, `cmp = fn(a, b){a > b})(mut arr: ref `t)
+//    fn sort|`t, `cmp = fn(a, b){a > b}|(mut arr: ref `t)
+//    fn sort[`t, `cmp = fn(a, b){a > b}](mut arr: ref `t)
+//
+//    fn sort<`t, `cmp = fn(a, b){a > b}>(mut arr: ref `t) {
+//      let sorter = `cmp;
+//    }
+
+
+
+//    fn test_files() {
+//      ignore printf("Hello, world!\n");
+//
+//      let mut cwd: [128]i8;
+//      // =
+//      if getcwd(ref cwd, 128) != 0 {
+//        ignore printf("CWD: [%s]\n", ref cwd);
+//      }
+//      else {
+//        ignore printf("Failed to invoke getcwd()!\n");
+//      }
+//
+//      let o_rdonly = 0;
+//      let fd = open("bin/lexer_main.ml", o_rdonly);
+//
+//      if fd != -1 {
+//        ignore printf("Successfully opened file!\n");
+//      }
+//      else {
+//        ignore printf("Failed to open file!\n");
+//      }
+//
+//      let mut buf: [64]i8;
+//      // =
+//      ignore printf("File: [[\n");
+//      while {let mut read_bytes = read(fd, ref buf, 63);} read_bytes > 0 {
+//        buf[read_bytes] = 0;
+//        ignore printf("%s", ref buf);
+//        // read_bytes = read(fd, ref buf, 63);
+//        read_bytes = 0;
+//      }
+//      ignore printf("\n]]: EOF\n");
+//
+//      ignore close(fd);
+//
+//      return;
+//    }
+//
+//    fn main(): i8 {
+//      test_files();
+//
+//      return 0;
+//    }
+//
+//
+//
     fn get_2000000_ints(): ref [2000000]i32 {
       return calloc(2000000, 4);
     }
